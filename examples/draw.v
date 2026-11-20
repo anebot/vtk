@@ -33,6 +33,8 @@ enum Action {
 	grid
 	help
 	hex_color
+	pencil
+	eraser
 }
 
 struct Point {
@@ -44,6 +46,7 @@ struct Stroke {
 	rgb   int
 	shape PencilShape
 	size  int
+	erase bool
 mut:
 	points []Point
 }
@@ -57,21 +60,24 @@ struct DrawingFile {
 @[heap]
 struct Drawing {
 mut:
-	strokes []Stroke
-	undone  []Stroke
-	saved   []Stroke
-	path    string
-	rgb     int = 0x59adff
-	shape   PencilShape
-	size    int  = 2
-	grid    bool = true
-	active  bool
-	window  &vtk.Ctl = unsafe { nil }
-	canvas  &vtk.Ctl = unsafe { nil }
-	pencil  &vtk.Ctl = unsafe { nil }
-	width   &vtk.Ctl = unsafe { nil }
-	color   &vtk.Ctl = unsafe { nil }
-	status  &vtk.Ctl = unsafe { nil }
+	strokes    []Stroke
+	undone     []Stroke
+	saved      []Stroke
+	path       string
+	rgb        int = 0x59adff
+	shape      PencilShape
+	size       int = 1
+	erase      bool
+	grid       bool = true
+	active     bool
+	window     &vtk.Ctl = unsafe { nil }
+	canvas     &vtk.Ctl = unsafe { nil }
+	pencil     &vtk.Ctl = unsafe { nil }
+	width      &vtk.Ctl = unsafe { nil }
+	color      &vtk.Ctl = unsafe { nil }
+	paint_tool &vtk.Ctl = unsafe { nil }
+	eraser     &vtk.Ctl = unsafe { nil }
+	status     &vtk.Ctl = unsafe { nil }
 }
 
 fn rgb_color(rgb int) int {
@@ -91,13 +97,30 @@ fn pencil_cell(shape PencilShape, size int, x int, y int) bool {
 
 fn abs(n int) int { return if n < 0 { -n } else { n } }
 
+fn erase_cell(mut screen vtk.Screen, c &vtk.Ctl, x int, y int) {
+	drawing := unsafe { &Drawing(c.user) }
+	glyph := if drawing.grid && y % 3 == 0 {
+		`─`
+	} else if drawing.grid && x % 5 == 0 {
+		`│`
+	} else {
+		` `
+	}
+	fg := if glyph == ` ` { vtk.white } else { vtk.gray }
+	screen.put(c.x + x, c.y + y, glyph, fg, vtk.color_rgb(13, 15, 20), 0)
+}
+
 fn stamp(mut screen vtk.Screen, c &vtk.Ctl, stroke Stroke, x int, y int) {
 	r := stroke.size - 1
 	color := rgb_color(stroke.rgb)
 	for dy in -r .. r + 1 {
 		for dx in -r .. r + 1 {
 			if pencil_cell(stroke.shape, stroke.size, dx, dy) {
-				screen.put(c.x + x + dx, c.y + y + dy, `█`, color, color, 0)
+				if stroke.erase {
+					erase_cell(mut screen, c, x + dx, y + dy)
+				} else {
+					screen.put(c.x + x + dx, c.y + y + dy, `█`, color, color, 0)
+				}
 			}
 		}
 	}
@@ -175,7 +198,13 @@ fn update(mut drawing Drawing) {
 	drawing.pencil.value = int(drawing.shape)
 	drawing.width.value = drawing.size
 	drawing.color.text = '#${drawing.rgb:06x}'
-	drawing.status.text = '${pencil_names[int(drawing.shape)]} ${drawing.size} | #${drawing.rgb:06x} | ${drawing.strokes.len} strokes | Drag to paint; F10 menus'
+	drawing.paint_tool.value = int(!drawing.erase)
+	drawing.eraser.value = int(drawing.erase)
+	tool := if drawing.erase { 'Eraser' } else { pencil_names[int(drawing.shape)] }
+	span := drawing.size * 2 - 1
+	w := if !drawing.erase && drawing.shape == .vertical { 1 } else { span }
+	h := if !drawing.erase && drawing.shape == .horizontal { 1 } else { span }
+	drawing.status.text = '${tool} ${w}x${h} | #${drawing.rgb:06x} | ${drawing.strokes.len} strokes | P: paint E: erase; F10 menus'
 }
 
 fn mouse(mut c vtk.Ctl, e vtk.Event, mut app vtk.App) bool {
@@ -185,7 +214,12 @@ fn mouse(mut c vtk.Ctl, e vtk.Event, mut app vtk.App) bool {
 		return false
 	}
 	if !e.motion || !drawing.active {
-		drawing.strokes << Stroke{ rgb: drawing.rgb, shape: drawing.shape, size: drawing.size }
+		drawing.strokes << Stroke{
+			rgb:   drawing.rgb
+			shape: if drawing.erase { .square } else { drawing.shape }
+			size:  drawing.size
+			erase: drawing.erase
+		}
 		drawing.undone.clear()
 	}
 	drawing.active = true
@@ -216,6 +250,7 @@ fn palette_mouse(mut c vtk.Ctl, e vtk.Event, mut app vtk.App) bool {
 fn pencil_changed(mut c vtk.Ctl, mut app vtk.App) {
 	mut drawing := unsafe { &Drawing(c.user) }
 	drawing.active = false
+	if c.kind != .spin { drawing.erase = false }
 	drawing.shape = unsafe { PencilShape(drawing.pencil.value) }
 	drawing.size = drawing.width.value
 	update(mut drawing)
@@ -237,15 +272,17 @@ fn pick_color(mut c vtk.Ctl, mut app vtk.App) {
 }
 
 fn encode_drawing(strokes []Stroke) string {
-	return json2.encode(DrawingFile{ format: 'vtk-drawing', version: 1, strokes: strokes },
+	// Version 1 remains readable; eraser operations require version 2 readers.
+	version := if strokes.any(it.erase) { 2 } else { 1 }
+	return json2.encode(DrawingFile{ format: 'vtk-drawing', version: version, strokes: strokes },
 		prettify: true
 	)
 }
 
 fn decode_drawing(text string) ![]Stroke {
 	file := json2.decode[DrawingFile](text)!
-	if file.format != 'vtk-drawing' || file.version != 1 {
-		return error('Not a supported VTK drawing (expected version 1).')
+	if file.format != 'vtk-drawing' || file.version !in [1, 2] {
+		return error('Not a supported VTK drawing (expected version 1 or 2).')
 	}
 	for stroke in file.strokes {
 		if stroke.rgb < 0 || stroke.rgb > 0xffffff || stroke.size < 1 || stroke.size > 5 || stroke.points.len == 0 {
@@ -373,8 +410,10 @@ fn action(mut c vtk.Ctl, mut app vtk.App) {
 			}
 		}
 		.grid { drawing.grid = !drawing.grid }
+		.pencil { drawing.erase = false }
+		.eraser { drawing.erase = true }
 		.help {
-			app.msgbox_for(drawing.window, 'Drawing help', 'Drag the left mouse button to paint.\nChoose a pencil shape and size (1-5).\nClick a palette swatch or RGB... for a custom color.\nClick the #RRGGBB button to enter an exact color.\nFile saves editable .vtkdraw drawings.\nCtrl-N/O/S: New / Open / Save; Ctrl-Shift-S: Save as.\nCtrl-Z/Y: Undo / Redo stroke; Ctrl-Q: Quit.\nF10 opens menus; arrows and Enter select items.\nView toggles the grid; resize/maximize for more space.')
+			app.msgbox_for(drawing.window, 'Drawing help', 'Drag the left mouse button to paint or erase.\nP: Paint; E: Eraser (also on the toolbar/Pencil menu).\nChoose a shape and size (1-5); size 1 is one cell.\nClick a palette swatch or RGB... for a custom color.\nClick the #RRGGBB button to enter an exact color.\nFile saves editable .vtkdraw drawings, including erasing.\nCtrl-N/O/S: New / Open / Save; Ctrl-Shift-S: Save as.\nCtrl-Z/Y: Undo / Redo stroke; Ctrl-Q: Quit.\nF10 opens menus; arrows and Enter select items.\nView toggles the grid; resize/maximize for more space.')
 		}
 	}
 	update(mut drawing)
@@ -383,13 +422,19 @@ fn action(mut c vtk.Ctl, mut app vtk.App) {
 }
 
 fn key(mut c vtk.Ctl, e vtk.Event, mut app vtk.App) bool {
+	code := if e.key >= int(`A`) && e.key <= int(`Z`) { e.key + 32 } else { e.key }
+	if !e.ctrl && !e.alt && code in [int(`p`), int(`e`)] {
+		id := if code == int(`e`) { Action.eraser } else { Action.pencil }
+		mut trigger := vtk.Ctl{ user: c.user, data: i64(id) }
+		action(mut trigger, mut app)
+		return true
+	}
 	if e.key == int(vtk.Key.f1) {
 		mut trigger := vtk.Ctl{ user: c.user, data: i64(Action.help) }
 		action(mut trigger, mut app)
 		return true
 	}
 	if !e.ctrl { return false }
-	code := if e.key >= int(`A`) && e.key <= int(`Z`) { e.key + 32 } else { e.key }
 	id := match code {
 		int(`n`) { Action.new_drawing }
 		int(`o`) { Action.open }
@@ -439,6 +484,9 @@ fn new_drawing(mut app vtk.App) &Drawing {
 		item.user = drawing
 		item.data = i
 	}
+	pencil.menu_separator()
+	menu_item(mut pencil, drawing, 'Paint    P', .pencil)
+	menu_item(mut pencil, drawing, 'Eraser   E', .eraser)
 	mut color := drawing.window.add_menu('Color')
 	menu_item(mut color, drawing, 'RGB picker...', .color)
 	menu_item(mut color, drawing, 'RGB hex...', .hex_color)
@@ -462,6 +510,18 @@ fn new_drawing(mut app vtk.App) &Drawing {
 		button.data = i
 		bar.add(mut button)
 	}
+	drawing.paint_tool = vtk.toolbutton('Paint')
+	drawing.paint_tool.user = drawing
+	drawing.paint_tool.changed = action
+	drawing.paint_tool.keyfn = key
+	drawing.paint_tool.data = i64(Action.pencil)
+	bar.add(mut drawing.paint_tool)
+	drawing.eraser = vtk.toolbutton('Eraser')
+	drawing.eraser.user = drawing
+	drawing.eraser.changed = action
+	drawing.eraser.keyfn = key
+	drawing.eraser.data = i64(Action.eraser)
+	bar.add(mut drawing.eraser)
 	body.add(mut bar)
 	mut tools := vtk.toolbar()
 	mut pencil_label := vtk.label('Pencil:')
