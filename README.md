@@ -101,6 +101,49 @@ edits, `submit` handles Enter, and `user`/`data` hold application state.
 `closing` callback can veto closing or application quit; `destroy` is called
 by `app.destroy_ctl`. Controls use V-managed memory.
 
+## Mouse cursor and hover
+
+VTK requests xterm any-event mouse tracking (1003) with SGR coordinates (1006),
+so compatible terminals report movement even when no button is held. Hover
+tracking is enabled by default; the optional software cursor is independent
+of the keyboard caret:
+
+```v
+app.set_mouse_cursor(vtk.MouseCursor{
+    enabled: true
+    glyph: `█`
+    fg: vtk.bright_white
+    bg: vtk.black
+})
+button.mouse_enter = on_hover
+button.mouse_leave = on_hover
+```
+
+Both callbacks have the usual `fn (mut vtk.Ctl, mut vtk.App)` signature.
+`control.hovered` is already updated when they run. Enter and leave fire once
+per transition on the deepest eligible control, without bubbling to parents
+or changing keyboard focus. Existing `mousefn` callbacks receive movement
+events too; these have `motion == true`, `button == .none`, and `pressed == false`
+when no button is held. `app.hovered_ctl()` returns the hovered control or nil,
+and `app.mouse_position()` returns zero-based terminal cells.
+
+The cursor supports a single-cell glyph, foreground/background colors and
+`attr`; `set_mouse_cursor` returns false for a wide, combining or control glyph.
+ASCII themes translate its glyph using the normal fallback. Disable it with
+`app.set_mouse_cursor(vtk.MouseCursor{})`. `app.set_mouse_motion(false)` restores
+button/drag-only reporting when the software cursor is disabled. These settings
+can change while the app runs. The widgets demo enables the block cursor and
+shows hover feedback in its status bar.
+
+Hover respects clipping, window stacking, modality and overlays, and is
+rechecked after layout changes. Closing, minimizing or destroying a hovered
+control clears its hover state. Terminal focus loss clears hover and hides
+the pointer until the next mouse report. Coordinates are limited to cells
+inside the terminal; this does not move or hide the operating system pointer.
+Terminals without motion reporting cannot provide idle movement or hover,
+and the protocol has no portable pointer-exit notification: leaving the
+terminal while it retains focus can leave the last pointer position visible.
+
 ## Windows, desktop and dialogs
 
 Windows drag by their title, resize from the frame and support minimize,

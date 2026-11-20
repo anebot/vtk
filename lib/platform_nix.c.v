@@ -35,10 +35,11 @@ struct SignalRestore {
 @[heap]
 struct Driver {
 mut:
-	saved   termios.Termios
-	active  bool
-	eof     bool
-	signals []SignalRestore
+	saved        termios.Termios
+	active       bool
+	mouse_motion bool
+	eof          bool
+	signals      []SignalRestore
 }
 
 fn terminal_on_signal(signal os.Signal) { terminal_signal = int(signal) }
@@ -71,13 +72,14 @@ fn (mut d Driver) start() ! {
 		previous := os.signal_opt(signal, terminal_on_signal) or { continue }
 		d.signals << SignalRestore{signal, previous}
 	}
-	print('\x1b[?1049h\x1b[?25l\x1b[?1002h\x1b[?1006h\x1b[?2004h\x1b[2J')
+	d.mouse_motion = false
+	print('\x1b[?1049h\x1b[?25l\x1b[?1002h\x1b[?1004h\x1b[?1006h\x1b[?2004h\x1b[2J')
 	flush_stdout()
 }
 
 fn (mut d Driver) stop() {
 	if !d.active { return }
-	print('\x1b[0m\x1b[?2004l\x1b[?1006l\x1b[?1002l\x1b[0 q\x1b[?25h\x1b[?1049l')
+	print('\x1b[0m\x1b[?2004l\x1b[?1006l\x1b[?1004l\x1b[?1003l\x1b[?1002l\x1b[0 q\x1b[?25h\x1b[?1049l')
 	flush_stdout()
 	termios.tcsetattr(0, C.TCSAFLUSH, mut d.saved)
 	d.active = false

@@ -89,6 +89,7 @@ pub fn (mut app App) close(mut w Ctl) bool {
 		}
 	}
 	w.closed = true
+	app.clear_hover_within(&w)
 	app.close_terminals(mut w)
 	app.close_popups()
 	if !isnil(app.focus) && app.focus.owner_window() == &w {
@@ -101,6 +102,8 @@ pub fn (mut app App) close(mut w Ctl) bool {
 
 pub fn (mut app App) destroy_ctl(mut c Ctl) {
 	if c.kind == .window && !app.close(mut c) { return }
+	c.closed = true
+	app.clear_hover_within(&c)
 	for mut child in c.kids.clone() { app.destroy_ctl(mut child) }
 	if !isnil(c.term) { c.term.close() }
 	if f := c.destroy { f(mut c, mut app) }
@@ -130,6 +133,7 @@ pub fn (mut app App) quit() {
 pub fn (mut app App) minimize(mut w Ctl) {
 	if !isnil(app.blocker(&w)) { return }
 	w.minimized = true
+	app.clear_hover_within(&w)
 	app.focus = unsafe { nil }
 	app.focus_first(app.top_window())
 	app.dirty = true

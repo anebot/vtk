@@ -58,13 +58,21 @@ fn (mut app App) draw_bar() {
 	}
 }
 
-fn (mut app App) draw_notices() {
-	t := app.theme
+fn (mut app App) layout_notices() {
 	mut y := app.height - app.bar_height() - 3
 	for mut notice in app.notices {
 		if notice.closed { continue }
 		w := min(max(20, text_width(notice.text) + 7), max(1, app.width - 2))
 		notice.rect = Rect{max(0, app.width - w - 1), y, w, 3}
+		y -= 4
+	}
+}
+
+fn (mut app App) draw_notices() {
+	t := app.theme
+	for notice in app.notices {
+		if notice.closed { continue }
+		y, w := notice.rect.y, notice.rect.w
 		if y >= 0 {
 			app.screen.fill(notice.rect, ` `, t.fg, t.bg)
 			app.screen.frame(notice.rect, false, t.frame, t.bg)
@@ -73,7 +81,6 @@ fn (mut app App) draw_notices() {
 			app.screen.restore_clip(old)
 			app.screen.text(notice.rect.x + w - 4, y + 1, '[x]', t.btn_bg, t.bg, 0)
 		}
-		y -= 4
 	}
 }
 

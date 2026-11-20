@@ -8,8 +8,15 @@ fn table_cell(_ &vtk.Ctl, row int, col int) string {
 
 fn changed(mut c vtk.Ctl, mut app vtk.App) { app.notify('${c.kind}: ${c.value}', 1200) }
 
+fn hover_status(mut c vtk.Ctl, mut app vtk.App) {
+	mut status := unsafe { &vtk.Ctl(c.user) }
+	status.set_text(if c.hovered { 'Mouse over ${c.kind}' } else { 'Tab cycles controls | F10 menus | Ctrl-C quits' })
+	app.dirty = true
+}
+
 fn main() {
 	mut app := vtk.new_app()
+	app.set_mouse_cursor(vtk.MouseCursor{ enabled: true })
 	mut w := app.window('VTK widgets', 74, 24)
 	mut body := vtk.box(true)
 	mut controls := vtk.flow()
@@ -58,6 +65,12 @@ fn main() {
 	tabs.add_tab('Radio', mut radio)
 	body.add(mut tabs)
 	mut status := vtk.statusbar('Tab cycles controls | F10 menus | Ctrl-C quits')
+	mut hovered_controls := [check, switch, combo, slider, spin, table, tree, radio]
+	for mut ctl in hovered_controls {
+		ctl.user = status
+		ctl.mouse_enter = hover_status
+		ctl.mouse_leave = hover_status
+	}
 	body.add(mut status)
 	w.add(mut body)
 	app.run() or { eprintln(err) }

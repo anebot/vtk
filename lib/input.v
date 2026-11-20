@@ -39,6 +39,8 @@ pub enum EventKind {
 	mouse
 	paste
 	resize
+	focus_in
+	focus_out
 }
 
 pub enum MouseButton {
@@ -220,7 +222,7 @@ pub fn (mut input Input) feed(bytes string) []Event {
 								else { MouseButton.none }
 							}
 						}
-						events << Event{ kind: .mouse, x: max(0, parts[1].int() - 1), y: max(0, parts[2].int() - 1), button: mouse_button, pressed: seq.ends_with('M'), motion: code & 32 != 0, shift: code & 4 != 0, alt: code & 8 != 0, ctrl: code & 16 != 0 }
+						events << Event{ kind: .mouse, x: max(0, parts[1].int() - 1), y: max(0, parts[2].int() - 1), button: mouse_button, pressed: seq.ends_with('M') && mouse_button != .none, motion: code & 32 != 0, shift: code & 4 != 0, alt: code & 8 != 0, ctrl: code & 16 != 0 }
 					}
 				} else {
 					if event := parse_escape(seq) { events << event }
@@ -266,6 +268,8 @@ fn utf8_char_len(b u8) int {
 }
 
 fn parse_escape(seq string) ?Event {
+	if seq == 'I' { return Event{ kind: .focus_in } }
+	if seq == 'O' { return Event{ kind: .focus_out } }
 	if seq == 'Z' { return Event{ key: int(Key.tab), shift: true } }
 	last := seq[seq.len - 1]
 	parts := seq[..seq.len - 1].split(';')

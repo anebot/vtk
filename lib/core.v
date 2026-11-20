@@ -88,6 +88,9 @@ pub mut:
 	cellfn        ?CellCallback
 	paint         ?PaintCallback
 	mousefn       ?KeyCallback
+	mouse_enter   ?Callback
+	mouse_leave   ?Callback
+	hovered       bool
 	user          voidptr
 	data          i64
 	value         int
@@ -258,6 +261,8 @@ pub mut:
 	ctrl_c           CtrlC
 	ctrl_c_handler   ?fn (mut App)
 	native_clipboard bool
+	mouse_motion     bool = true
+	mouse_cursor     MouseCursor
 	move_key         Binding = Binding{ key: int(Key.f7), alt: true }
 	resize_key       Binding = Binding{ key: int(Key.f8), alt: true }
 mut:
@@ -284,6 +289,10 @@ mut:
 	placement_start  Rect
 	settings_path    string
 	bar_offset       int
+	mouse_x          int = -1
+	mouse_y          int = -1
+	hover            &Ctl = unsafe { nil }
+	updating_hover   bool
 }
 
 pub fn new_app() &App {

@@ -10,11 +10,14 @@ pub fn (mut app App) init() ! {
 	app.width, app.height = app.driver.size()
 	app.touch_titles = os.getenv('TERMUX_VERSION') != ''
 	if app.desktop { app.settings_load() or {} }
+	app.sync_mouse_motion()
+	app.clear_mouse()
 	app.screen.resize(app.width, app.height)
 	app.dirty = true
 }
 
 pub fn (mut app App) fini() {
+	app.clear_mouse()
 	for mut w in app.windows { app.close_terminals(mut w) }
 	app.driver.stop()
 	app.started = false
@@ -30,6 +33,7 @@ pub fn (mut app App) run() ! {
 pub fn (mut app App) step(timeout_ms int) bool {
 	if !app.running { return false }
 	if app.started {
+		app.sync_mouse_motion()
 		width, height := app.driver.size()
 		if width != app.width || height != app.height {
 			app.dispatch(Event{ kind: .resize, width: width, height: height })
@@ -78,6 +82,11 @@ pub fn (mut app App) redraw() {
 		}
 		w.measure()
 		w.layout(w.rect())
+	}
+	app.layout_notices()
+	app.update_hover()
+	for mut w in app.windows {
+		if w.closed || w.minimized || w.hidden { continue }
 		if app.window_shadow {
 			for y in max(0, w.y + 1) .. min(app.height, w.y + w.h + 1) {
 				for x in max(0, w.x + 2) .. min(app.width, w.x + w.w + 2) {
@@ -100,9 +109,18 @@ pub fn (mut app App) redraw() {
 	if app.popups.len > 0 || (!isnil(app.focus) && app.focus.owner_window() != app.top_window()) {
 		app.screen.cursor_x = -1
 	}
+	app.draw_mouse_cursor()
 }
 
 pub fn (mut app App) dispatch(e Event) {
+	if e.kind in [.focus_in, .focus_out] {
+		if e.kind == .focus_out {
+			app.clear_mouse()
+			app.drag = unsafe { nil }
+			app.scroll_drag = unsafe { nil }
+		}
+		return
+	}
 	if e.kind == .resize {
 		app.width = max(1, e.width)
 		app.height = max(1, e.height)
@@ -111,7 +129,11 @@ pub fn (mut app App) dispatch(e Event) {
 		return
 	}
 	if e.kind == .mouse {
+		app.mouse_x = e.x
+		app.mouse_y = e.y
+		app.update_hover()
 		app.mouse(e)
+		app.update_hover()
 		return
 	}
 	if e.kind == .paste {
@@ -451,6 +473,7 @@ fn (mut app App) mouse(e Event) {
 		return
 	}
 	for mut n in app.notices {
+		if n.closed { continue }
 		if n.rect.contains(e.x, e.y) {
 			if e.pressed && e.button == .left && e.x >= n.rect.x + n.rect.w - 4 { n.closed = true }
 			return
@@ -460,7 +483,7 @@ fn (mut app App) mouse(e Event) {
 	mut w := &Ctl(unsafe { nil })
 	for i := app.windows.len - 1; i >= 0; i-- {
 		candidate := app.windows[i]
-		if !candidate.closed && !candidate.minimized && candidate.rect().contains(e.x, e.y) {
+		if !candidate.closed && !candidate.minimized && !candidate.hidden && candidate.rect().contains(e.x, e.y) {
 			w = candidate
 			break
 		}
@@ -471,7 +494,7 @@ fn (mut app App) mouse(e Event) {
 	}
 	mut blocked := app.blocker(w)
 	if !isnil(blocked) {
-		app.raise(mut blocked)
+		if e.pressed && !e.motion { app.raise(mut blocked) }
 		return
 	}
 	if e.pressed && !e.motion { app.raise(mut w) }

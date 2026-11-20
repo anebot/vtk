@@ -361,6 +361,7 @@ pub fn (mut c Ctl) tree_add(parent &Ctl, text string) &Ctl {
 
 pub fn (c &Ctl) hit(x int, y int) &Ctl {
 	if c.hidden || c.closed || c.minimized || !c.rect().contains(x, y) { return unsafe { nil } }
+	if c.kind == .scroll && c.scrollbar && x == c.x + c.w - 1 { return unsafe { c } }
 	for i := c.kids.len - 1; i >= 0; i-- {
 		child := c.kids[i]
 		if child.kind in [.menu, .item, .treenode, .menuitem] { continue }
