@@ -52,6 +52,7 @@ fn (mut app App) push_menu(owner &Ctl, x int, y int) {
 
 pub fn (mut app App) close_popups() {
 	app.popups.clear()
+	app.app_popup = unsafe { nil }
 	app.dirty = true
 }
 

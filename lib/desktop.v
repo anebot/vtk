@@ -107,6 +107,12 @@ fn desktop_action(mut c Ctl, mut app App) {
 
 pub fn (mut app App) app_menu(x int, y int) {
 	if !app.desktop || !isnil(app.blocker(unsafe { nil })) { return }
+	anchored := x == 0 && y == app.height - 1 && app.bar_height() > 0
+	if anchored && !isnil(app.app_popup) {
+		app.close_popups()
+		return
+	}
+	if anchored && app.height < 4 { return }
 	mut menu := context_menu()
 	for i, launcher in app.launchers {
 		mut item := menu.menu_item(launcher.name, launcher_action)
@@ -120,6 +126,11 @@ pub fn (mut app App) app_menu(x int, y int) {
 	mut quit := menu.menu_item('Quit', desktop_action)
 	quit.data = 2
 	app.open_menu(menu, x, y)
+	if anchored && app.popups.len > 0 {
+		app.app_popup = app.popups[0]
+		app.app_popup.h = min(app.app_popup.h, app.height - 1)
+		app.app_popup.y = app.height - 1 - app.app_popup.h
+	}
 }
 
 fn (mut app App) bar_mouse(e Event) bool {

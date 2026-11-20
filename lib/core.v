@@ -298,6 +298,7 @@ mut:
 	placement_start  Rect
 	settings_path    string
 	bar_offset       int
+	app_popup        &Ctl = unsafe { nil }
 	mouse_x          int = -1
 	mouse_y          int = -1
 	hover            &Ctl = unsafe { nil }
