@@ -132,8 +132,9 @@ The cursor supports a single-cell glyph, foreground/background colors and
 ASCII themes translate its glyph using the normal fallback. Disable it with
 `app.set_mouse_cursor(vtk.MouseCursor{})`. `app.set_mouse_motion(false)` restores
 button/drag-only reporting when the software cursor is disabled. These settings
-can change while the app runs. The widgets demo enables the block cursor and
-shows hover feedback in its status bar.
+can change while the app runs. Settings includes a **Block mouse cursor**
+checkbox: Apply changes visibility, Save persists it, and Reset disables it.
+The widgets demo shows the block cursor and hover feedback in its status bar.
 
 Hover respects clipping, window stacking, modality and overlays, and is
 rechecked after layout changes. Closing, minimizing or destroying a hovered
@@ -171,8 +172,9 @@ application modality. Results live in each dialog. `prompt`, `msgbox` and
 
 Settings use **`~/vtk.ini`**, with a `[vtk]` section. `app.settings_file(path)`
 overrides the location. Settings persist theme colors, the bar and clock,
-shadows, inactive dimming, Vim mode, and move/resize bindings. Theme presets
-are Borland, Light Borland, Dark, Light, Teal, Modern and Serial. `app.theme`
+shadows, inactive dimming, mouse cursor visibility, Vim mode, and move/resize
+bindings. Theme presets are Borland, Light Borland, Dark, Light, Teal, Modern
+and Serial. `app.theme`
 can be edited directly. `color_rgb` and `color_256` provide extended colors;
 Serial uses basic ANSI colors and ASCII fallbacks.
 

@@ -182,6 +182,7 @@ pub fn (mut app App) settings_load() ! {
 			'bar_clock' { app.bar_clock = value == '1' }
 			'window_shadow' { app.window_shadow = value == '1' }
 			'dim_inactive' { app.dim_inactive = value == '1' }
+			'mouse_cursor' { app.set_mouse_cursor(MouseCursor{ ...app.mouse_cursor, enabled: value == '1' }) }
 			'vim_mode' { app.vim_set(value == '1') }
 			'ascii' { app.theme.ascii = value == '1' }
 			else { app.load_theme_field(key, value.int()) }
@@ -205,6 +206,7 @@ pub fn (app &App) settings_save() ! {
 	mut lines := ['[vtk]', 'move_key = ${app.move_key}', 'resize_key = ${app.resize_key}',
 		'bar_always = ${int(app.bar_always)}', 'bar_clock = ${int(app.bar_clock)}',
 		'window_shadow = ${int(app.window_shadow)}', 'dim_inactive = ${int(app.dim_inactive)}',
+		'mouse_cursor = ${int(app.mouse_cursor.enabled)}',
 		'vim_mode = ${int(app.vim_mode)}', 'ascii = ${int(app.theme.ascii)}']
 	$for field in Theme.fields {
 		$if field.typ is int {
@@ -221,6 +223,7 @@ pub fn (mut app App) settings_reset() ! {
 	app.bar_clock = true
 	app.window_shadow = true
 	app.dim_inactive = true
+	app.set_mouse_cursor(MouseCursor{ ...app.mouse_cursor, enabled: false })
 	app.move_key = Binding{ key: int(Key.f7), alt: true }
 	app.resize_key = Binding{ key: int(Key.f8), alt: true }
 	app.vim_set(false)
@@ -231,14 +234,15 @@ pub fn (mut app App) settings_reset() ! {
 @[heap]
 struct Settings {
 mut:
-	theme  &Ctl = unsafe { nil }
-	bar    &Ctl = unsafe { nil }
-	clock  &Ctl = unsafe { nil }
-	shadow &Ctl = unsafe { nil }
-	dim    &Ctl = unsafe { nil }
-	vim    &Ctl = unsafe { nil }
-	move   &Ctl = unsafe { nil }
-	resize &Ctl = unsafe { nil }
+	theme        &Ctl = unsafe { nil }
+	bar          &Ctl = unsafe { nil }
+	clock        &Ctl = unsafe { nil }
+	shadow       &Ctl = unsafe { nil }
+	dim          &Ctl = unsafe { nil }
+	mouse_cursor &Ctl = unsafe { nil }
+	vim          &Ctl = unsafe { nil }
+	move         &Ctl = unsafe { nil }
+	resize       &Ctl = unsafe { nil }
 }
 
 fn settings_apply(mut c Ctl, mut app App) {
@@ -250,6 +254,7 @@ fn settings_apply(mut c Ctl, mut app App) {
 		s.clock.value = int(app.bar_clock)
 		s.shadow.value = int(app.window_shadow)
 		s.dim.value = int(app.dim_inactive)
+		s.mouse_cursor.value = int(app.mouse_cursor.enabled)
 		s.vim.value = int(app.vim_mode)
 		s.move.set_text(app.move_key.str())
 		s.resize.set_text(app.resize_key.str())
@@ -272,6 +277,7 @@ fn settings_apply(mut c Ctl, mut app App) {
 	app.bar_clock = s.clock.value != 0
 	app.window_shadow = s.shadow.value != 0
 	app.dim_inactive = s.dim.value != 0
+	app.set_mouse_cursor(MouseCursor{ ...app.mouse_cursor, enabled: s.mouse_cursor.value != 0 })
 	app.vim_set(s.vim.value != 0)
 	if c.data == 1 {
 		app.settings_save() or {
@@ -291,16 +297,23 @@ pub fn (mut app App) settings_dialog() {
 	}
 	s.theme.value = 0
 	for i in 0 .. 7 { if app.theme == theme_preset(unsafe { Preset(i) }) { s.theme.value = i } }
+	mut theme_row := box(false)
+	mut theme_label := label('Theme:')
+	theme_row.add(mut theme_label)
+	s.theme.expand = true
+	theme_row.add(mut s.theme)
+	body.add(mut theme_row)
 	s.bar = checkbox('Always show window bar', app.bar_always)
 	s.clock = checkbox('Clock', app.bar_clock)
 	s.shadow = checkbox('Window shadows', app.window_shadow)
 	s.dim = checkbox('Dim inactive windows', app.dim_inactive)
+	s.mouse_cursor = checkbox('Block mouse cursor', app.mouse_cursor.enabled)
 	s.vim = checkbox('Vim mode', app.vim_mode)
 	s.move = entry(app.move_key.str(), 0)
 	s.move.expand = false
 	s.resize = entry(app.resize_key.str(), 0)
 	s.resize.expand = false
-	mut controls := [s.theme, s.bar, s.clock, s.shadow, s.dim, s.vim]
+	mut controls := [s.bar, s.clock, s.shadow, s.dim, s.mouse_cursor, s.vim]
 	for mut ctl in controls { body.add(mut ctl) }
 	mut move_label := label('Move shortcut')
 	body.add(mut move_label)
