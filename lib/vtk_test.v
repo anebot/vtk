@@ -114,6 +114,60 @@ fn test_screen_unicode_clipping_and_diff() {
 	assert !screen.cells[2].continuation
 	screen.text(0, 2, 'x\x1b[2J', white, black, 0)
 	assert !screen.cells[16].glyph.contains('\x1b')
+	clip := screen.set_clip(Rect{1, 2, 1, 1})
+	screen.put(1, 2, `\u0301`, white, black, 0)
+	assert screen.cells[16].glyph == 'x'
+	screen.text(1, 2, 'e\u0301', white, black, 0)
+	assert screen.cells[17].glyph == 'e\u0301'
+	screen.restore_clip(clip)
+}
+
+fn test_combo_text_alignment_clipping_and_popup_choices() {
+	mut app := new_app()
+	app.screen.resize(20, 8)
+	mut c := combo()
+	c.add_item('Two')
+	c.add_item('Longer')
+	c.value = 0
+	c.layout(Rect{1, 1, 10, 1})
+	for i, align in [TextAlign.left, .center, .right] {
+		c.text_align = align
+		app.screen.fill(Rect{0, 0, 20, 8}, `.`, white, black)
+		app.draw_ctl(mut c)
+		row := app.screen.cells[21..31].map(it.glyph).join('')
+		assert row == ['Two      ▼', '   Two   ▼', '      Two▼'][i]
+		assert app.screen.cells[20].glyph == '.' && app.screen.cells[31].glyph == '.'
+	}
+	c.kids[0].set_text('界界e\u0301')
+	app.screen.fill(Rect{0, 0, 20, 8}, `.`, white, black)
+	app.draw_ctl(mut c)
+	assert app.screen.cells[25].glyph == '界' && app.screen.cells[26].continuation
+	assert app.screen.cells[27].glyph == '界' && app.screen.cells[28].continuation
+	assert app.screen.cells[29].glyph == 'e\u0301' && app.screen.cells[30].glyph == '▼'
+	app.screen.ascii = true
+	app.draw_ctl(mut c)
+	assert app.screen.cells[21..31].map(it.glyph).join('') == '     ??e?v'
+	app.screen.ascii = false
+	c.kids[0].set_text('123456789abcdef')
+	app.draw_ctl(mut c)
+	assert app.screen.cells[21..31].map(it.glyph).join('') == '123456789▼'
+	assert app.screen.cells[31].glyph == '.'
+	c.text_align = .center
+	c.kids[0].set_text('A\nlong second line')
+	app.draw_ctl(mut c)
+	assert app.screen.cells[21..31].map(it.glyph).join('') == '    A    ▼'
+	c.w = 1
+	app.draw_ctl(mut c)
+	assert app.screen.cells[21].glyph == '▼'
+	c.kids[0].set_text('Two')
+	for i, align in [TextAlign.left, .center, .right] {
+		c.text_align = align
+		app.open_menu(c, 1, 3)
+		app.draw_popups()
+		p := app.popups.last()
+		at := (p.y + 1) * app.screen.width + p.x
+		assert app.screen.cells[at + 1..at + p.w - 1].map(it.glyph).join('') == [' Two    ', '  Two   ', '    Two '][i]
+	}
 }
 
 fn test_markdown_tasks_source_mapping_and_readonly() {

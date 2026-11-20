@@ -137,7 +137,11 @@ fn (mut app App) draw_popups() {
 				` `
 			}, fg, bg)
 			if item.kind != .separator {
-				app.screen.text(p.x + 2, y, item.text, fg, bg, 0)
+				if p.link.kind == .combo {
+					app.screen.aligned_text(p.x + 2, y, p.w - 4, item.text, p.link.text_align, fg, bg, 0)
+				} else {
+					app.screen.text(p.x + 2, y, item.text, fg, bg, 0)
+				}
 				if item.kind == .menu { app.screen.text(p.x + p.w - 2, y, '▸', fg, bg, 0) }
 			}
 		}

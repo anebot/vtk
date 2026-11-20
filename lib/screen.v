@@ -83,18 +83,19 @@ fn ascii_glyph(r rune) rune {
 }
 
 pub fn (mut s Screen) put(x int, y int, r rune, fg int, bg int, attr int) {
-	if y < 0 || y >= s.height || x < 0 || x >= s.width || !s.clip.contains(x, y) { return }
+	if y < 0 || y >= s.height || x < 0 || x > s.width { return }
 	if r < 32 || (r >= 0x7f && r < 0xa0) { return }
 	actual := if s.ascii { ascii_glyph(r) } else { r }
 	width := rune_width(actual)
 	if width == 0 {
-		if x > 0 {
+		if x > 0 && s.clip.contains(x - 1, y) {
 			mut at := y * s.width + x - 1
 			if s.cells[at].continuation && x > 1 { at-- }
-			s.cells[at].glyph += actual.str()
+			if s.clip.contains(at % s.width, y) { s.cells[at].glyph += actual.str() }
 		}
 		return
 	}
+	if x >= s.width || !s.clip.contains(x, y) { return }
 	if width == 2 && (!s.clip.contains(x + 1, y) || x + 1 >= s.width) { return }
 	at := y * s.width + x
 	// Overwriting either half of a wide character clears its partner.
@@ -111,6 +112,25 @@ pub fn (mut s Screen) text(x int, y int, text string, fg int, bg int, attr int) 
 		s.put(at, y, r, fg, bg, attr)
 		at += if s.ascii { 1 } else { rune_width(r) }
 	}
+}
+
+// Align inside a clipped content row, using the same cell widths as text().
+fn (mut s Screen) aligned_text(x int, y int, width int, text string, align TextAlign, fg int, bg int, attr int) {
+	if width <= 0 { return }
+	mut columns := 0
+	for r in text.runes() {
+		if r == `\n` || r == `\r` { break }
+		columns += if s.ascii { 1 } else { rune_width(r) }
+	}
+	spare := max(0, width - columns)
+	offset := match align {
+		.left { 0 }
+		.center { spare / 2 }
+		.right { spare }
+	}
+	clip := s.set_clip(Rect{x, y, width, 1})
+	s.text(x + offset, y, text, fg, bg, attr)
+	s.restore_clip(clip)
 }
 
 pub fn (mut s Screen) fill(r Rect, glyph rune, fg int, bg int) {

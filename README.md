@@ -95,6 +95,12 @@ are right-aligned and bottom-docked. A split's `value` in `1..999` specifies
 the first pane's share in thousandths; zero uses its preferred size. Layout
 and hit testing exclude hidden controls and inactive tab pages.
 
+Comboboxes support `control.text_align = .left`, `.center`, or `.right` for
+the selected value and dropdown choices; left is the default. Alignment uses
+terminal cell widths and keeps the dropdown arrow fixed at the right edge.
+Overlong text is clipped to the content area. The Theme selector in Settings
+uses centered text.
+
 Callbacks receive `mut Ctl` and `mut App`. `changed` handles activation and
 edits, `submit` handles Enter, and `user`/`data` hold application state.
 `keyfn`, `mousefn` and `scrollfn` return true to consume an event. A window's

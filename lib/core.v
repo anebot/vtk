@@ -53,6 +53,12 @@ pub enum CursorShape {
 	bar
 }
 
+pub enum TextAlign {
+	left
+	center
+	right
+}
+
 pub const window_menu = 1
 pub const window_minimize = 2
 pub const window_maximize = 4
@@ -79,6 +85,7 @@ pub mut:
 	modal         bool
 	modal_owner   &Ctl = unsafe { nil }
 	text          string
+	text_align    TextAlign
 	changed       ?Callback
 	submit        ?Callback
 	keyfn         ?KeyCallback

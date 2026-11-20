@@ -292,6 +292,7 @@ pub fn (mut app App) settings_dialog() {
 	mut s := &Settings{}
 	mut body := box(true)
 	s.theme = combo()
+	s.theme.text_align = .center
 	for name in ['Borland', 'Light Borland', 'Dark', 'Light', 'Teal', 'Modern', 'Serial'] {
 		s.theme.add_item(name)
 	}

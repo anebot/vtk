@@ -167,7 +167,7 @@ fn (mut app App) draw_ctl(mut c Ctl) {
 		.combo {
 			app.screen.fill(c.rect(), ` `, t.field_fg, if focused { t.focus_bg } else { t.field_bg })
 			if c.value >= 0 && c.value < c.kids.len {
-				app.screen.text(c.x, c.y, c.kids[c.value].text, t.field_fg, t.field_bg, 0)
+				app.screen.aligned_text(c.x, c.y, c.w - 1, c.kids[c.value].text, c.text_align, t.field_fg, t.field_bg, 0)
 			}
 			app.screen.text(c.x + c.w - 1, c.y, '▼', t.field_fg, t.field_bg, 0)
 		}
