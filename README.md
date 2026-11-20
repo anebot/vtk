@@ -1,4 +1,4 @@
-# lib/vtk — Vorland TermKit
+# VTK — Vorland TermKit
 
 A standalone V port of [AholyC's HTK](https://github.com/trufae/aholyc), the Borland-style terminal widget
 toolkit. The original HolyC library is retained separately. VTK uses V's
@@ -7,21 +7,37 @@ HolyC-generated code, or depend on `lib/term`.
 
 <center><img border=0 alt=screenshot width="400px" src=vtk.jpg></img></center>
 
-From the repository root:
+Install the library with V's package manager:
 
 ```sh
-v run lib/vtk/examples/htk.v
-v run lib/vtk/examples/word.v examples/word.md
-v run lib/vtk/examples/vim.v README.md
-v run lib/vtk/examples/draw.v
-v run lib/vtk/examples/widgets.v
-v run lib/vtk/examples/terminal.v
-v test lib/vtk
+v install https://github.com/trufae/vtk
 ```
 
-Alternatively, `cd lib/vtk && make` builds all six examples in `build/`.
+Then use `import vtk` in your application. Library sources and tests live in
+`lib/`; the root `v.mod` selects that directory with `base_url: 'lib'`.
+
+From a checkout's root directory:
+
+```sh
+make
+make test
+./build/draw
+```
+
+`make` builds all six examples in `build/`. You can also run them directly:
+
+```sh
+v run examples/htk.v
+v run examples/word.v README.md
+v run examples/vim.v README.md
+v run examples/draw.v
+v run examples/widgets.v
+v run examples/terminal.v
+v test .
+```
+
 V 0.5.2 and a C compiler are sufficient. There are no VPM dependencies.
-The module can also be copied to a V module search path and imported as `vtk`.
+Copying the entire checkout into a V module search path as `vtk` works too.
 
 ```v
 import vtk

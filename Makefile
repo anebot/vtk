@@ -2,7 +2,7 @@ V ?= v
 BUILD_DIR ?= build
 EXAMPLES = htk word vim draw widgets terminal
 BINARIES = $(addprefix $(BUILD_DIR)/,$(EXAMPLES))
-SOURCES = $(wildcard *.v examples/support/*.v) v.mod
+SOURCES = $(wildcard lib/*.v examples/support/*.v) v.mod
 
 all: $(BINARIES)
 
