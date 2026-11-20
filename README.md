@@ -170,6 +170,7 @@ terminal while it retains focus can leave the last pointer position visible.
 
 Windows drag by their title, resize from the frame and support minimize,
 maximize, restore, tile, cascade, size limits and always-on-top ordering.
+The minimum window size is 16 columns by 3 rows, including the frame.
 The title controls are selected with `window_menu`, `window_minimize`,
 `window_maximize`, `window_close`, or their bitwise combination.
 

@@ -1,5 +1,8 @@
 module vtk
 
+const minimum_window_width = 16
+const minimum_window_height = 3
+
 pub enum TileSide {
 	left
 	right
@@ -9,7 +12,7 @@ pub enum TileSide {
 
 pub fn (mut app App) window(title string, width int, height int) &Ctl {
 	offset := (app.windows.len * 2) % 10
-	mut w := &Ctl{ kind: .window, text: title, x: 2 + offset, y: 1 + offset / 2, w: max(12, width), h: max(4, height), min_w: 12, min_h: 4 }
+	mut w := &Ctl{ kind: .window, text: title, x: 2 + offset, y: 1 + offset / 2, w: max(minimum_window_width, width), h: max(minimum_window_height, height), min_w: minimum_window_width, min_h: minimum_window_height }
 	app.windows << w
 	app.raise(mut w)
 	return w
@@ -168,16 +171,16 @@ pub fn (mut app App) always_on_top(mut w Ctl, enabled bool) {
 }
 
 pub fn (mut c Ctl) set_size_limits(min_w int, min_h int, max_w int, max_h int) {
-	c.min_w = max(12, min_w)
-	c.min_h = max(4, min_h)
+	c.min_w = max(minimum_window_width, min_w)
+	c.min_h = max(minimum_window_height, min_h)
 	c.max_w = if max_w > 0 { max(c.min_w, max_w) } else { 0 }
 	c.max_h = if max_h > 0 { max(c.min_h, max_h) } else { 0 }
 	c.bound_size()
 }
 
 fn (mut c Ctl) bound_size() {
-	c.w = max(max(12, c.min_w), c.w)
-	c.h = max(max(4, c.min_h), c.h)
+	c.w = max(max(minimum_window_width, c.min_w), c.w)
+	c.h = max(max(minimum_window_height, c.min_h), c.h)
 	if c.max_w > 0 { c.w = min(c.w, c.max_w) }
 	if c.max_h > 0 { c.h = min(c.h, c.max_h) }
 }
@@ -237,8 +240,9 @@ pub fn (mut app App) cascade() {
 		w.maximized = false
 		w.x = (i * 3) % max(1, app.width / 3)
 		w.y = i % max(1, app.height / 3)
-		w.w = max(12, app.width * 2 / 3)
-		w.h = max(4, (app.height - app.bar_height()) * 2 / 3)
+		w.w = app.width * 2 / 3
+		w.h = (app.height - app.bar_height()) * 2 / 3
+		w.bound_size()
 	}
 	app.dirty = true
 }

@@ -314,7 +314,7 @@ fn test_frame_resize_preserves_opposite_edge_and_side_height() {
 	right, top, height := w.x + w.w, w.y, w.h
 	app.mouse(Event{ kind: .mouse, x: w.x, y: w.y + 3, button: .left, pressed: true })
 	app.mouse(Event{ kind: .mouse, x: right + 10, y: top + 6, button: .left, pressed: true, motion: true })
-	assert w.w == 12 && w.x + w.w == right
+	assert w.w == 16 && w.x + w.w == right
 	assert w.y == top && w.h == height
 	app.mouse(Event{ kind: .mouse, button: .left })
 	app.mouse(Event{ kind: .mouse, x: w.x + w.w - 1, y: w.y, button: .left, pressed: true })
