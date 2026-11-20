@@ -1,0 +1,8 @@
+/build/
+/examples/htk
+/examples/word
+/examples/vim
+/examples/draw
+/examples/widgets
+/examples/terminal
+/examples/*.exe
