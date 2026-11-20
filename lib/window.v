@@ -250,17 +250,23 @@ fn (mut app App) draw_window(mut w Ctl) {
 	app.screen.fill(w.rect(), ` `, t.fg, t.bg)
 	app.screen.frame(w.rect(), true, frame, t.bg)
 	if w.controls & window_menu != 0 { app.screen.text(w.x + 1, w.y, '[=]', frame, t.bg, 0) }
-	app.screen.text(w.x + 5, w.y, ' ${w.text} ', t.title, t.bg, bold)
+	mut title_end := w.x + w.w - 1
 	mut x := w.x + w.w - 4
 	if w.controls & window_close != 0 {
 		app.screen.text(x, w.y, '[■]', frame, t.bg, 0)
+		title_end = x
 		x -= 3
 	}
 	if w.controls & window_maximize != 0 {
 		app.screen.text(x, w.y, if w.maximized { '[▣]' } else { '[□]' }, frame, t.bg, 0)
+		title_end = x
 		x -= 3
 	}
-	if w.controls & window_minimize != 0 { app.screen.text(x, w.y, '[_]', frame, t.bg, 0) }
+	if w.controls & window_minimize != 0 {
+		app.screen.text(x, w.y, '[_]', frame, t.bg, 0)
+		title_end = x
+	}
+	app.screen.aligned_text(w.x + 5, w.y, max(0, title_end - w.x - 5), ' ${w.text} ', .left, t.title, t.bg, bold)
 	inside := app.screen.set_clip(Rect{w.x + 1, w.y + 1, w.w - 2, w.h - 2})
 	for mut menu in w.kids {
 		if menu.kind == .menu && !menu.hidden {
