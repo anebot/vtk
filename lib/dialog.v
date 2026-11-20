@@ -28,6 +28,11 @@ pub fn (mut app App) dialog(title string, mut body Ctl) &Ctl {
 }
 
 pub fn (mut app App) modal_for(mut dialog Ctl, owner &Ctl) int {
+	app.close_popups()
+	app.drag = unsafe { nil }
+	app.scroll_drag = unsafe { nil }
+	if !isnil(app.placement) { app.placement_key(Event{ key: int(Key.escape) }) }
+	dialog.modal_parent = app.blocker(owner)
 	dialog.modal_owner = owner
 	dialog.modal = true
 	dialog.dismissable = true
@@ -38,6 +43,7 @@ pub fn (mut app App) modal_for(mut dialog Ctl, owner &Ctl) int {
 	for app.running && !dialog.closed { app.step(20) }
 	dialog.modal = false
 	dialog.modal_owner = unsafe { nil }
+	dialog.modal_parent = unsafe { nil }
 	dialog.always_on_top = top
 	if !isnil(old_focus) && old_focus.visible() { app.set_focus(old_focus) }
 	app.dirty = true

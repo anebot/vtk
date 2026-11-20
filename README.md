@@ -190,6 +190,7 @@ a dismissable notification; zero leaves it visible until closed.
 dialogs. Explicit owners provide window modality; a nil owner provides
 application modality. Results live in each dialog. `prompt`, `msgbox` and
 `confirm_quit` provide common shortcuts. File picking never changes cwd.
+Settings is application-modal and blocks both existing and newly opened windows.
 
 Settings use **`~/vtk.ini`**, with a `[vtk]` section. `app.settings_file(path)`
 overrides the location. Settings persist theme colors, the bar and clock,

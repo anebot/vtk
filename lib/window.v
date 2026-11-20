@@ -39,7 +39,7 @@ fn (app &App) blocker(w &Ctl) &Ctl {
 				descendant = true
 				break
 			}
-			ancestor = ancestor.modal_owner
+			ancestor = if !isnil(ancestor.modal_parent) { ancestor.modal_parent } else { ancestor.modal_owner }
 		}
 		if descendant { continue }
 		if isnil(d.modal_owner) || d.modal_owner == w { return d }
@@ -84,7 +84,7 @@ pub fn (mut app App) close(mut w Ctl) bool {
 	}
 	// Owned modal dialogs close with their owner.
 	for mut dialog in app.windows.clone() {
-		if dialog.modal_owner == &w && !dialog.closed {
+		if (dialog.modal_owner == &w || dialog.modal_parent == &w) && !dialog.closed {
 			if !app.close(mut dialog) { return false }
 		}
 	}
@@ -131,7 +131,7 @@ pub fn (mut app App) quit() {
 }
 
 pub fn (mut app App) minimize(mut w Ctl) {
-	if !isnil(app.blocker(&w)) { return }
+	if w.modal || !isnil(app.blocker(&w)) { return }
 	w.minimized = true
 	app.clear_hover_within(&w)
 	app.focus = unsafe { nil }
@@ -291,10 +291,26 @@ fn focusable(c &Ctl, mut found []&Ctl) {
 }
 
 fn (mut app App) focus_first(w &Ctl) {
-	if isnil(w) { return }
+	if isnil(w) || !w.visible() || !isnil(app.blocker(w)) { return }
 	mut found := []&Ctl{}
 	focusable(w, mut found)
 	if found.len > 0 { app.focus = found[0] }
+}
+
+fn (mut app App) enforce_modal_input() {
+	if !isnil(app.drag) && (!app.drag.visible() || !isnil(app.blocker(app.drag.owner_window()))) {
+		app.drag = unsafe { nil }
+	}
+	if !isnil(app.scroll_drag) && (!app.scroll_drag.visible() || !isnil(app.blocker(app.scroll_drag.owner_window()))) {
+		app.scroll_drag = unsafe { nil }
+	}
+	if !isnil(app.placement) && !isnil(app.blocker(app.placement)) {
+		app.placement_key(Event{ key: int(Key.escape) })
+	}
+	if !isnil(app.focus) && !app.focus.visible() { app.focus = unsafe { nil } }
+	mut blocked := app.blocker(if isnil(app.focus) { app.top_window() } else { app.focus.owner_window() })
+	if !isnil(blocked) { app.raise(mut blocked) }
+	if isnil(app.focus) { app.focus_first(app.top_window()) }
 }
 
 fn (mut app App) focus_next(back bool) {

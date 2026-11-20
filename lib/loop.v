@@ -137,6 +137,7 @@ pub fn (mut app App) dispatch(e Event) {
 		app.dirty = true
 		return
 	}
+	app.enforce_modal_input()
 	if e.kind == .mouse {
 		app.mouse_x = e.x
 		app.mouse_y = e.y

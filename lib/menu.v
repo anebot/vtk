@@ -20,6 +20,8 @@ pub fn (mut c Ctl) menu_separator() {
 }
 
 pub fn (mut app App) open_menu(owner &Ctl, x int, y int) {
+	w := owner.owner_window()
+	if !isnil(w) && !isnil(app.blocker(w)) { return }
 	app.close_popups()
 	app.push_menu(owner, x, y)
 }
@@ -169,6 +171,7 @@ fn window_menu_action(mut item Ctl, mut app App) {
 }
 
 pub fn (mut app App) window_menu(mut w Ctl, x int, y int) {
+	if !w.visible() || !isnil(app.blocker(&w)) { return }
 	mut menu := context_menu()
 	names := ['Minimize', if w.maximized { 'Restore' } else { 'Maximize' }, 'Move', 'Resize',
 		(if w.always_on_top { '[x] ' } else { '[ ] ' }) + 'Always on top', 'Close', 'Tile left',

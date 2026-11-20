@@ -106,7 +106,7 @@ fn desktop_action(mut c Ctl, mut app App) {
 }
 
 pub fn (mut app App) app_menu(x int, y int) {
-	if !app.desktop { return }
+	if !app.desktop || !isnil(app.blocker(unsafe { nil })) { return }
 	mut menu := context_menu()
 	for i, launcher in app.launchers {
 		mut item := menu.menu_item(launcher.name, launcher_action)
@@ -334,14 +334,6 @@ pub fn (mut app App) settings_dialog() {
 	row.add(mut close)
 	body.add(mut row)
 	mut w := app.dialog('Settings', mut body)
-	app.modal_for(mut w, app.top_window_except(w))
+	app.modal_for(mut w, unsafe { nil })
 	app.destroy_ctl(mut w)
-}
-
-fn (app &App) top_window_except(except &Ctl) &Ctl {
-	for i := app.windows.len - 1; i >= 0; i-- {
-		w := app.windows[i]
-		if w != except && !w.closed && !w.minimized { return w }
-	}
-	return unsafe { nil }
 }

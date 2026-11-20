@@ -146,6 +146,8 @@ pub mut:
 	md            Markdown
 	vim           Vim
 	term          &Terminal = unsafe { nil }
+mut:
+	modal_parent  &Ctl = unsafe { nil }
 }
 
 pub struct Rect {
