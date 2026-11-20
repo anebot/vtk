@@ -5,6 +5,8 @@ toolkit. The original HolyC library is retained separately. VTK uses V's
 standard library and native OS bindings; it does not invoke aholyc, link
 HolyC-generated code, or depend on `lib/term`.
 
+<center><img border=0 alt=screenshot width="400px" src=vtk.jpg></img></center>
+
 From the repository root:
 
 ```sh
