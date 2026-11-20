@@ -38,6 +38,7 @@ mut:
 	saved        termios.Termios
 	active       bool
 	mouse_motion bool
+	pointer      MousePointer
 	eof          bool
 	signals      []SignalRestore
 }
@@ -73,13 +74,14 @@ fn (mut d Driver) start() ! {
 		d.signals << SignalRestore{signal, previous}
 	}
 	d.mouse_motion = false
+	d.pointer = MousePointer{}
 	print('\x1b[?1049h\x1b[?25l\x1b[?1002h\x1b[?1004h\x1b[?1006h\x1b[?2004h\x1b[2J')
 	flush_stdout()
 }
 
 fn (mut d Driver) stop() {
 	if !d.active { return }
-	print('\x1b[0m\x1b[?2004l\x1b[?1006l\x1b[?1004l\x1b[?1003l\x1b[?1002l\x1b[0 q\x1b[?25h\x1b[?1049l')
+	print(d.pointer.restore() + '\x1b[0m\x1b[?2004l\x1b[?1006l\x1b[?1004l\x1b[?1003l\x1b[?1002l\x1b[0 q\x1b[?25h\x1b[?1049l')
 	flush_stdout()
 	termios.tcsetattr(0, C.TCSAFLUSH, mut d.saved)
 	d.active = false

@@ -8,10 +8,11 @@ pub fn (mut app App) init() ! {
 	app.driver.start()!
 	app.started = true
 	app.width, app.height = app.driver.size()
+	app.terminal_focused = true
+	app.clear_mouse()
 	app.touch_titles = os.getenv('TERMUX_VERSION') != ''
 	if app.desktop { app.settings_load() or {} }
 	app.sync_mouse_motion()
-	app.clear_mouse()
 	app.screen.resize(app.width, app.height)
 	app.dirty = true
 }
@@ -113,18 +114,26 @@ pub fn (mut app App) redraw() {
 }
 
 pub fn (mut app App) dispatch(e Event) {
+	if e.kind == .pointer_shape {
+		app.driver.pointer.reply(e.text, time.ticks())
+		app.sync_mouse_pointer()
+		return
+	}
 	if e.kind in [.focus_in, .focus_out] {
+		app.terminal_focused = e.kind == .focus_in
 		if e.kind == .focus_out {
 			app.clear_mouse()
 			app.drag = unsafe { nil }
 			app.scroll_drag = unsafe { nil }
 		}
+		app.sync_mouse_pointer()
 		return
 	}
 	if e.kind == .resize {
 		app.width = max(1, e.width)
 		app.height = max(1, e.height)
 		app.screen.resize(app.width, app.height)
+		app.sync_mouse_pointer()
 		app.dirty = true
 		return
 	}
@@ -134,6 +143,7 @@ pub fn (mut app App) dispatch(e Event) {
 		app.update_hover()
 		app.mouse(e)
 		app.update_hover()
+		app.sync_mouse_pointer()
 		return
 	}
 	if e.kind == .paste {

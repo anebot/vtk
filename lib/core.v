@@ -293,6 +293,7 @@ mut:
 	mouse_y          int = -1
 	hover            &Ctl = unsafe { nil }
 	updating_hover   bool
+	terminal_focused bool = true
 }
 
 pub fn new_app() &App {

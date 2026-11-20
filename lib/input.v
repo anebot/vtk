@@ -41,6 +41,7 @@ pub enum EventKind {
 	resize
 	focus_in
 	focus_out
+	pointer_shape
 }
 
 pub enum MouseButton {
@@ -166,10 +167,11 @@ pub fn (mut app App) set_keys(move Binding, resize Binding) bool {
 // Escape is emitted after a short timeout; bracketed paste is one event.
 pub struct Input {
 mut:
-	buffer    string
-	escape_at i64
-	pasting   bool
-	paste     string
+	buffer      string
+	escape_at   i64
+	pasting     bool
+	paste       string
+	osc_discard bool
 }
 
 pub fn (mut input Input) feed(bytes string) []Event {
@@ -196,6 +198,46 @@ pub fn (mut input Input) feed(bytes string) []Event {
 				if time.ticks() - input.escape_at < 30 { break }
 				events << Event{ key: int(Key.escape) }
 				input.buffer = ''
+				input.escape_at = 0
+				continue
+			}
+			if b[1] == `]` {
+				// Terminal replies are control strings, never keyboard input.
+				mut end := 2
+				mut terminator := 0
+				mut aborted := false
+				for end < b.len {
+					if b[end] == 7 || b[end] in [u8(0x18), 0x1a] {
+						terminator = 1
+						aborted = b[end] != 7
+						break
+					}
+					if b[end] == 27 {
+						if end + 1 == b.len { break }
+						if b[end + 1] == `\\` {
+							terminator = 2
+						} else {
+							aborted = true
+						}
+						break
+					}
+					end++
+				}
+				if terminator == 0 && !aborted {
+					if b.len > 256 {
+						input.osc_discard = true
+						input.buffer = '\x1b]' + if b.ends_with('\x1b') { '\x1b' } else { '' }
+					}
+					break
+				}
+				if !aborted && !input.osc_discard && end <= 256 {
+					payload := b[2..end]
+					if payload.starts_with('22;') {
+						events << Event{ kind: .pointer_shape, text: payload[3..] }
+					}
+				}
+				input.osc_discard = false
+				input.buffer = b[end + terminator..]
 				input.escape_at = 0
 				continue
 			}

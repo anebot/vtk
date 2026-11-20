@@ -4,11 +4,12 @@ module vtk
 // glyph must occupy one terminal cell. ASCII themes use the usual fallback.
 pub struct MouseCursor {
 pub mut:
-	enabled bool
-	glyph   rune = `█`
-	fg      int  = bright_white
-	bg      int  = black
-	attr    int
+	enabled      bool
+	hide_pointer bool = true
+	glyph        rune = `█`
+	fg           int  = bright_white
+	bg           int  = black
+	attr         int
 }
 
 // set_mouse_cursor rejects zero-width, wide and control glyphs.
@@ -37,6 +38,7 @@ pub fn (app &App) hovered_ctl() &Ctl { return app.hover }
 
 fn (mut app App) sync_mouse_motion() {
 	app.driver.set_mouse_motion(app.mouse_motion || app.mouse_cursor.enabled)
+	app.sync_mouse_pointer()
 }
 
 fn (mut d Driver) set_mouse_motion(enabled bool) {

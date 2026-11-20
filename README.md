@@ -136,11 +136,26 @@ can change while the app runs. Settings includes a **Block mouse cursor**
 checkbox: Apply changes visibility, Save persists it, and Reset disables it.
 The widgets demo shows the block cursor and hover feedback in its status bar.
 
+`MouseCursor.hide_pointer` defaults to true: VTK asks the terminal whether
+OSC 22 supports a `none` pointer shape. After an affirmative reply, it hides
+the desktop pointer while the block cursor is visible. Disabling the block
+cursor, losing terminal focus, moving outside the viewport or exiting VTK
+restores the previous pointer shape with OSC 22 push/pop. Set
+`hide_pointer: false` to keep the desktop pointer. Unsupported terminals and
+terminals that do not answer the query keep their normal pointer;
+`app.mouse_pointer_supported()` exposes the detected capability. Detection
+runs asynchronously and does not delay startup.
+
+SwiftTerm 1.99.3 keeps the native pointer visible. Support for the queried
+`none` extension on macOS is proposed in
+[SwiftTerm PR #855](https://github.com/migueldeicaza/SwiftTerm/pull/855).
+Once the host application includes that change, VTK can detect and use it.
+
 Hover respects clipping, window stacking, modality and overlays, and is
 rechecked after layout changes. Closing, minimizing or destroying a hovered
 control clears its hover state. Terminal focus loss clears hover and hides
 the pointer until the next mouse report. Coordinates are limited to cells
-inside the terminal; this does not move or hide the operating system pointer.
+inside the terminal; native pointer hiding requires the capability above.
 Terminals without motion reporting cannot provide idle movement or hover,
 and the protocol has no portable pointer-exit notification: leaving the
 terminal while it retains focus can leave the last pointer position visible.
