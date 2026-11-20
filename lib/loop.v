@@ -85,6 +85,7 @@ pub fn (mut app App) redraw() {
 		w.layout(w.rect())
 	}
 	app.layout_notices()
+	app.layout_popups()
 	app.update_hover()
 	for mut w in app.windows {
 		if w.closed || w.minimized || w.hidden { continue }
@@ -133,6 +134,7 @@ pub fn (mut app App) dispatch(e Event) {
 		app.width = max(1, e.width)
 		app.height = max(1, e.height)
 		app.screen.resize(app.width, app.height)
+		app.layout_popups()
 		app.sync_mouse_pointer()
 		app.dirty = true
 		return

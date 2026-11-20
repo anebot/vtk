@@ -56,6 +56,39 @@ pub fn (mut app App) close_popups() {
 	app.dirty = true
 }
 
+fn (mut app App) layout_popups() {
+	anchored := !isnil(app.app_popup)
+	if anchored && (!app.desktop || app.bar_height() == 0 || app.height < 4 || app.width < 5) {
+		app.close_popups()
+		return
+	}
+	height := max(1, app.height - int(anchored))
+	for i, mut p in app.popups {
+		mut width := 8
+		for item in p.link.kids { width = max(width, text_width(item.text) + 4) }
+		p.w = min(app.width, width)
+		p.h = min(height, p.link.kids.len + 2)
+		if i == 0 && anchored {
+			p.x = 0
+			p.y = height - p.h
+		} else if i > 0 {
+			parent := app.popups[i - 1]
+			p.x = if parent.x + parent.w - 1 + p.w <= app.width {
+				parent.x + parent.w - 1
+			} else {
+				parent.x - p.w + 1
+			}
+			p.y = parent.y + parent.value - parent.top
+		}
+		p.x = clamp(p.x, 0, app.width - p.w)
+		p.y = clamp(p.y, 0, height - p.h)
+		view := max(1, p.h - 2)
+		p.value = clamp(p.value, 0, p.link.kids.len - 1)
+		p.top = clamp(p.top, 0, p.link.kids.len - view)
+		p.scroll_into_view(p.value, view)
+	}
+}
+
 fn (mut app App) choose_popup() {
 	if app.popups.len == 0 { return }
 	p := app.popups.last()

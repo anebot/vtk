@@ -112,7 +112,7 @@ pub fn (mut app App) app_menu(x int, y int) {
 		app.close_popups()
 		return
 	}
-	if anchored && app.height < 4 { return }
+	if anchored && (app.height < 4 || app.width < 5) { return }
 	mut menu := context_menu()
 	for i, launcher in app.launchers {
 		mut item := menu.menu_item(launcher.name, launcher_action)
@@ -128,8 +128,7 @@ pub fn (mut app App) app_menu(x int, y int) {
 	app.open_menu(menu, x, y)
 	if anchored && app.popups.len > 0 {
 		app.app_popup = app.popups[0]
-		app.app_popup.h = min(app.app_popup.h, app.height - 1)
-		app.app_popup.y = app.height - 1 - app.app_popup.h
+		app.layout_popups()
 	}
 }
 
