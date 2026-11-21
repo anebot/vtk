@@ -275,6 +275,7 @@ fn test_settings_roundtrip_and_manual_scroll_ownership() {
 	app.settings_file(path)
 	app.theme = theme_preset(.modern)
 	app.bar_always = false
+	app.bar_top = true
 	app.set_mouse_cursor(MouseCursor{ enabled: true })
 	app.vim_set(true)
 	app.settings_save() or { panic(err) }
@@ -283,8 +284,11 @@ fn test_settings_roundtrip_and_manual_scroll_ownership() {
 	loaded.settings_load() or { panic(err) }
 	assert loaded.theme == app.theme
 	assert !loaded.bar_always && loaded.vim_mode
+	assert loaded.bar_top
 	assert loaded.mouse_cursor.enabled
 	assert loaded.move_key == app.move_key
+	loaded.settings_reset() or { panic(err) }
+	assert !loaded.bar_top
 	mut parent := scroll()
 	mut child := multiline('row\n'.repeat(20))
 	parent.add(mut child)

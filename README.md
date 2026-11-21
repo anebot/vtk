@@ -194,7 +194,10 @@ application modality. Results live in each dialog. `prompt`, `msgbox` and
 Settings is application-modal and blocks both existing and newly opened windows.
 
 Settings use **`~/vtk.ini`**, with a `[vtk]` section. `app.settings_file(path)`
-overrides the location. Settings persist theme colors, the bar and clock,
+overrides the location. Enable **Window bar at top** to place the `[App]` bar
+on the first screen line, with its menus opening downward. The default is the
+bottom line; `app.bar_top` (or `bar_top = 1` in the INI file) controls placement.
+Settings persist theme colors, the bar position, visibility and clock,
 shadows, inactive dimming, mouse cursor visibility, Vim mode, and move/resize
 bindings. Theme presets are Borland, Light Borland, Dark, Light, Teal, Modern
 and Serial. `app.theme`

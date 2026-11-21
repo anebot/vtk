@@ -30,10 +30,16 @@ fn (app &App) bar_height() int {
 	return int((app.desktop && app.bar_always) || app.windows.any(it.minimized && !it.closed))
 }
 
+fn (app &App) bar_y() int { return if app.bar_top { 0 } else { app.height - 1 } }
+
+fn (app &App) work_area() Rect {
+	return Rect{0, if app.bar_top { app.bar_height() } else { 0 }, app.width, max(0, app.height - app.bar_height())}
+}
+
 fn (mut app App) draw_bar() {
 	if app.bar_height() == 0 { return }
 	t := app.theme
-	y := app.height - 1
+	y := app.bar_y()
 	app.screen.fill(Rect{0, y, app.width, 1}, ` `, t.bar_fg, t.bar_bg)
 	if app.desktop { app.screen.text(0, y, '[App]', t.bar_fg, t.bar_bg, bold) }
 	mut x := (if app.desktop { 6 } else { 0 }) - app.bar_offset
@@ -59,7 +65,8 @@ fn (mut app App) draw_bar() {
 }
 
 fn (mut app App) layout_notices() {
-	mut y := app.height - app.bar_height() - 3
+	area := app.work_area()
+	mut y := area.y + area.h - 3
 	for mut notice in app.notices {
 		if notice.closed { continue }
 		w := min(max(20, text_width(notice.text) + 7), max(1, app.width - 2))
@@ -107,7 +114,7 @@ fn desktop_action(mut c Ctl, mut app App) {
 
 pub fn (mut app App) app_menu(x int, y int) {
 	if !app.desktop || !isnil(app.blocker(unsafe { nil })) { return }
-	anchored := x == 0 && y == app.height - 1 && app.bar_height() > 0
+	anchored := x == 0 && y == app.bar_y() && app.bar_height() > 0
 	if anchored && !isnil(app.app_popup) {
 		app.close_popups()
 		return
@@ -128,12 +135,13 @@ pub fn (mut app App) app_menu(x int, y int) {
 	app.open_menu(menu, x, y)
 	if anchored && app.popups.len > 0 {
 		app.app_popup = app.popups[0]
+		app.popup_at_bar = true
 		app.layout_popups()
 	}
 }
 
 fn (mut app App) bar_mouse(e Event) bool {
-	if app.bar_height() == 0 || e.y != app.height - 1 { return false }
+	if app.bar_height() == 0 || e.y != app.bar_y() { return false }
 	if !isnil(app.blocker(unsafe { nil })) { return true }
 	if e.button in [.wheel_up, .wheel_down] {
 		app.bar_offset = max(0, app.bar_offset + if e.button == .wheel_up { -3 } else { 3 })
@@ -189,6 +197,7 @@ pub fn (mut app App) settings_load() ! {
 			'move_key' { move = parse_binding(value) or { move } }
 			'resize_key' { resize = parse_binding(value) or { resize } }
 			'bar_always' { app.bar_always = value == '1' }
+			'bar_top' { app.bar_top = value == '1' }
 			'bar_clock' { app.bar_clock = value == '1' }
 			'window_shadow' { app.window_shadow = value == '1' }
 			'dim_inactive' { app.dim_inactive = value == '1' }
@@ -214,9 +223,9 @@ pub fn (app &App) settings_saved() bool { return os.exists(app.settings_filename
 
 pub fn (app &App) settings_save() ! {
 	mut lines := ['[vtk]', 'move_key = ${app.move_key}', 'resize_key = ${app.resize_key}',
-		'bar_always = ${int(app.bar_always)}', 'bar_clock = ${int(app.bar_clock)}',
-		'window_shadow = ${int(app.window_shadow)}', 'dim_inactive = ${int(app.dim_inactive)}',
-		'mouse_cursor = ${int(app.mouse_cursor.enabled)}',
+		'bar_always = ${int(app.bar_always)}', 'bar_top = ${int(app.bar_top)}',
+		'bar_clock = ${int(app.bar_clock)}', 'window_shadow = ${int(app.window_shadow)}',
+		'dim_inactive = ${int(app.dim_inactive)}', 'mouse_cursor = ${int(app.mouse_cursor.enabled)}',
 		'vim_mode = ${int(app.vim_mode)}', 'ascii = ${int(app.theme.ascii)}']
 	$for field in Theme.fields {
 		$if field.typ is int {
@@ -230,6 +239,7 @@ pub fn (app &App) settings_save() ! {
 pub fn (mut app App) settings_reset() ! {
 	app.theme = theme_default()
 	app.bar_always = true
+	app.bar_top = false
 	app.bar_clock = true
 	app.window_shadow = true
 	app.dim_inactive = true
@@ -246,6 +256,7 @@ struct Settings {
 mut:
 	theme        &Ctl = unsafe { nil }
 	bar          &Ctl = unsafe { nil }
+	bar_top      &Ctl = unsafe { nil }
 	clock        &Ctl = unsafe { nil }
 	shadow       &Ctl = unsafe { nil }
 	dim          &Ctl = unsafe { nil }
@@ -261,6 +272,7 @@ fn settings_apply(mut c Ctl, mut app App) {
 		app.settings_reset() or { app.notify(err.msg(), 2500) }
 		s.theme.value = 0
 		s.bar.value = int(app.bar_always)
+		s.bar_top.value = int(app.bar_top)
 		s.clock.value = int(app.bar_clock)
 		s.shadow.value = int(app.window_shadow)
 		s.dim.value = int(app.dim_inactive)
@@ -284,6 +296,7 @@ fn settings_apply(mut c Ctl, mut app App) {
 	}
 	app.theme = theme_preset(unsafe { Preset(clamp(s.theme.value, 0, 6)) })
 	app.bar_always = s.bar.value != 0
+	app.bar_top = s.bar_top.value != 0
 	app.bar_clock = s.clock.value != 0
 	app.window_shadow = s.shadow.value != 0
 	app.dim_inactive = s.dim.value != 0
@@ -315,6 +328,7 @@ pub fn (mut app App) settings_dialog() {
 	theme_row.add(mut s.theme)
 	body.add(mut theme_row)
 	s.bar = checkbox('Always show window bar', app.bar_always)
+	s.bar_top = checkbox('Window bar at top', app.bar_top)
 	s.clock = checkbox('Clock', app.bar_clock)
 	s.shadow = checkbox('Window shadows', app.window_shadow)
 	s.dim = checkbox('Dim inactive windows', app.dim_inactive)
@@ -324,7 +338,7 @@ pub fn (mut app App) settings_dialog() {
 	s.move.expand = false
 	s.resize = entry(app.resize_key.str(), 0)
 	s.resize.expand = false
-	mut controls := [s.bar, s.clock, s.shadow, s.dim, s.mouse_cursor, s.vim]
+	mut controls := [s.bar, s.bar_top, s.clock, s.shadow, s.dim, s.mouse_cursor, s.vim]
 	for mut ctl in controls { body.add(mut ctl) }
 	mut move_label := label('Move shortcut')
 	body.add(mut move_label)

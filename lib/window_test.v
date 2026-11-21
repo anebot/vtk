@@ -59,3 +59,47 @@ fn test_window_minimum_size_limits_and_resizing() {
 	app.cascade()
 	assert w.w == 20 && w.h == 6
 }
+
+fn test_top_bar_reserves_first_row_for_windows_dialogs_and_placement() {
+	mut app := new_app()
+	app.bar_top = true
+	mut w := app.window('Top', 30, 8)
+	app.maximize(mut w)
+	assert w.y == 1 && w.h == 23
+	app.dispatch(Event{ kind: .resize, width: 100, height: 30 })
+	app.redraw()
+	assert w.y == 1 && w.h == 29
+	for side in [TileSide.left, .right, .top, .bottom] {
+		app.tile_side(mut w, side)
+		assert w.y >= 1 && w.y + w.h == if side == .top { 15 } else { 30 }
+	}
+	mut second := app.window('Second', 30, 8)
+	app.tile()
+	assert w.y == 1 && second.y == 1
+	app.cascade()
+	assert w.y == 1 && second.y == 2
+	app.begin_placement(mut w, false)
+	app.dispatch(Event{ key: int(Key.up), shift: true })
+	assert w.y == 1
+	app.redraw()
+	assert app.screen.cells[..4].map(it.glyph).join('') == 'Move'
+	app.dispatch(Event{ key: int(Key.enter) })
+	app.raise(mut w)
+	app.redraw()
+	app.dispatch(Event{ kind: .mouse, x: w.x + 5, y: w.y, button: .left, pressed: true })
+	app.dispatch(Event{ kind: .mouse, x: w.x + 5, y: 0, button: .left, pressed: true, motion: true })
+	app.dispatch(Event{ kind: .mouse, button: .left })
+	assert w.y == 1
+	mut body := label('Dialog body')
+	mut dialog := app.dialog('Centered', mut body)
+	assert dialog.y == 1 + (29 - dialog.h) / 2
+	app.notify('Notice', 0)
+	app.redraw()
+	assert app.notices[0].rect.y + 3 == 30
+	app.bar_always = false
+	app.maximize(mut w)
+	assert w.y == 0 && w.h == 30
+	app.minimize(mut second)
+	app.redraw()
+	assert w.y == 1 && w.h == 29
+}

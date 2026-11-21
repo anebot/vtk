@@ -1,8 +1,8 @@
 module vtk
 
 fn app_button_click(mut app App) {
-	app.dispatch(Event{ kind: .mouse, x: 2, y: app.height - 1, button: .left, pressed: true })
-	app.dispatch(Event{ kind: .mouse, x: 2, y: app.height - 1, button: .left })
+	app.dispatch(Event{ kind: .mouse, x: 2, y: app.bar_y(), button: .left, pressed: true })
+	app.dispatch(Event{ kind: .mouse, x: 2, y: app.bar_y(), button: .left })
 }
 
 fn test_app_menu_opens_above_button_and_click_toggles_it() {
@@ -86,4 +86,73 @@ fn test_resize_keeps_context_menus_and_submenus_in_bounds() {
 	app.dispatch(Event{ kind: .resize, width: 10, height: 6 })
 	assert app.popups[0].x + app.popups[0].w <= 10
 	assert app.popups[0].y + app.popups[0].h <= 6
+}
+
+fn test_top_app_menu_opens_downward_and_survives_resizing() {
+	mut app := new_app()
+	app.bar_top = true
+	app.redraw()
+	assert app.screen.cells[..5].map(it.glyph).join('') == '[App]'
+	assert app.screen.cells[(app.height - 1) * app.width].glyph == '▒'
+	for shortcut in [Event{ key: int(`a`), alt: true }, Event{ key: int(Key.f10), alt: true },
+		Event{ key: int(`o`), ctrl: true }] {
+		app.dispatch(shortcut)
+		assert app.app_popup.y == 1
+		app_button_click(mut app)
+		assert app.popups.len == 0
+	}
+	for i in 0 .. 20 { app.register('Tool ${i}', menu_test_launcher, unsafe { nil }) }
+	app_button_click(mut app)
+	mut more := app.app_popup.link.add_menu('More')
+	more.menu_item('Action', menu_test_launcher_action)
+	for _ in 0 .. 30 { app.dispatch(Event{ key: int(Key.down) }) }
+	selected := app.app_popup.value
+	app.dispatch(Event{ kind: .resize, width: 20, height: 10 })
+	assert app.app_popup.y == 1 && app.app_popup.h == 9
+	assert app.app_popup.value == selected && app.app_popup.top > 0
+	app.dispatch(Event{ key: int(Key.right) })
+	assert app.popups.len == 2
+	for p in app.popups {
+		assert p.y >= 1 && p.y + p.h <= 10
+		assert p.x >= 0 && p.x + p.w <= 20
+	}
+	app.dispatch(Event{ kind: .resize, width: 80, height: 50 })
+	assert app.app_popup.y == 1 && app.app_popup.top == 0
+	app.bar_top = false
+	app.redraw()
+	assert app.app_popup.y + app.app_popup.h == 49
+	app.bar_top = true
+	app.redraw()
+	assert app.app_popup.y == 1
+	app.dispatch(Event{ key: int(Key.enter) })
+	assert app.clipboard == 'launched' && app.popups.len == 0
+}
+
+fn menu_test_launcher_action(mut _ Ctl, mut app App) { menu_test_launcher(mut app, unsafe { nil }) }
+
+fn test_top_bar_window_menu_and_window_dropdowns_open_below_their_controls() {
+	mut app := new_app()
+	app.bar_top = true
+	mut w := app.window('One', 40, 12)
+	mut menu := w.add_menu('File')
+	menu.menu_item('Action', menu_test_launcher_action)
+	mut dropdown := combo()
+	dropdown.add_item('Choice')
+	w.add(mut dropdown)
+	app.maximize(mut w)
+	app.redraw()
+	app.dispatch(Event{ kind: .mouse, x: 7, y: 0, button: .right, pressed: true })
+	assert app.popups.len == 1 && app.popups[0].x == 7 && app.popups[0].y == 1
+	assert isnil(app.hovered_ctl())
+	app.dispatch(Event{ key: int(Key.enter) })
+	assert w.minimized
+	app.dispatch(Event{ kind: .mouse, x: 7, y: 0, button: .left, pressed: true })
+	assert !w.minimized
+	app.redraw()
+	app.dispatch(Event{ key: int(Key.f10) })
+	assert app.popups[0].y == menu.y + 1
+	app.close_popups()
+	app.set_focus(dropdown)
+	app.dispatch(Event{ key: int(Key.down) })
+	assert app.popups[0].y == dropdown.y + 1
 }

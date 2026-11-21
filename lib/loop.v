@@ -73,14 +73,16 @@ pub fn (mut app App) redraw() {
 	app.screen.cursor_y = -1
 	app.screen.restore_clip(Rect{0, 0, app.width, app.height})
 	app.screen.fill(Rect{0, 0, app.width, app.height}, `▒`, app.theme.desk_fg, app.theme.desk_bg)
+	area := app.work_area()
 	for mut w in app.windows {
 		if w.closed || w.minimized || w.hidden { continue }
 		if w.maximized {
 			w.x = 0
-			w.y = 0
+			w.y = area.y
 			w.w = app.width
-			w.h = app.height - app.bar_height()
+			w.h = area.h
 		}
+		w.y = max(area.y, w.y)
 		w.measure()
 		w.layout(w.rect())
 	}
@@ -100,12 +102,12 @@ pub fn (mut app App) redraw() {
 		}
 		app.draw_ctl(mut w)
 	}
-	app.draw_bar()
 	app.draw_notices()
+	app.draw_bar()
 	app.draw_popups()
 	if !isnil(app.placement) {
-		app.screen.fill(Rect{0, app.height - 1, app.width, 1}, ` `, app.theme.bar_fg, app.theme.bar_bg)
-		app.screen.text(0, app.height - 1, (if app.placement_resize { 'Resize' } else { 'Move' }) + ': arrows / Shift+arrows, Enter accepts, Esc cancels', app.theme.bar_fg, app.theme.bar_bg, 0)
+		app.screen.fill(Rect{0, app.bar_y(), app.width, 1}, ` `, app.theme.bar_fg, app.theme.bar_bg)
+		app.screen.text(0, app.bar_y(), (if app.placement_resize { 'Resize' } else { 'Move' }) + ': arrows / Shift+arrows, Enter accepts, Esc cancels', app.theme.bar_fg, app.theme.bar_bg, 0)
 	}
 	// A cursor is valid only if its cell remains visible in the top window.
 	if app.popups.len > 0 || (!isnil(app.focus) && app.focus.owner_window() != app.top_window()) {
@@ -207,7 +209,7 @@ pub fn (mut app App) dispatch(e Event) {
 		return
 	}
 	if (e.alt && e.key in [int(`a`), int(Key.f10)]) || (e.ctrl && e.key == `o` && (isnil(app.focus) || app.focus.kind == .terminal)) {
-		app.app_menu(0, app.height - 1)
+		app.app_menu(0, app.bar_y())
 		return
 	}
 	if e.key == int(Key.tab) && (isnil(app.focus) || app.focus.kind != .terminal || e.shift) {
@@ -238,7 +240,7 @@ pub fn (mut app App) dispatch(e Event) {
 		}
 	}
 	if e.ctrl && e.key == `o` {
-		app.app_menu(0, app.height - 1)
+		app.app_menu(0, app.bar_y())
 		return
 	}
 	if !isnil(w) {
@@ -416,7 +418,8 @@ fn (mut app App) mouse(e Event) {
 				w.bound_size()
 			} else {
 				w.x = max(0, e.x - app.drag_x)
-				w.y = max(0, e.y)
+				area := app.work_area()
+				w.y = clamp(e.y, area.y, area.y + area.h - 1)
 			}
 			app.placement = unsafe { nil }
 		}
@@ -457,7 +460,8 @@ fn (mut app App) mouse(e Event) {
 			dx, dy := e.x - app.drag_x, e.y - app.drag_y
 			if app.drag_mode == 0 {
 				c.x = max(0, app.drag_start.x + dx)
-				c.y = clamp(app.drag_start.y + dy, 0, app.height - app.bar_height() - 1)
+				area := app.work_area()
+				c.y = clamp(app.drag_start.y + dy, area.y, area.y + area.h - 1)
 			} else {
 				if app.drag_mode & 16 == 0 {
 					c.w = app.drag_start.w + if app.drag_mode & 1 != 0 { -dx } else { dx }
@@ -485,6 +489,7 @@ fn (mut app App) mouse(e Event) {
 		}
 		return
 	}
+	if app.bar_mouse(e) { return }
 	for mut n in app.notices {
 		if n.closed { continue }
 		if n.rect.contains(e.x, e.y) {
@@ -492,7 +497,6 @@ fn (mut app App) mouse(e Event) {
 			return
 		}
 	}
-	if app.bar_mouse(e) { return }
 	mut w := &Ctl(unsafe { nil })
 	for i := app.windows.len - 1; i >= 0; i-- {
 		candidate := app.windows[i]
@@ -686,7 +690,8 @@ fn (mut app App) placement_key(e Event) {
 			w.bound_size()
 		} else {
 			w.x = max(0, w.x + dx)
-			w.y = clamp(w.y + dy, 0, app.height - 2)
+			area := app.work_area()
+			w.y = clamp(w.y + dy, area.y, area.y + area.h - 1)
 		}
 	}
 	app.dirty = true

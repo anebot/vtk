@@ -146,10 +146,11 @@ pub fn (mut app App) maximize(mut w Ctl) {
 	if !w.maximized { w.saved = w.rect() }
 	w.maximized = true
 	w.minimized = false
-	w.x = 0
-	w.y = 0
-	w.w = app.width
-	w.h = app.height - app.bar_height()
+	area := app.work_area()
+	w.x = area.x
+	w.y = area.y
+	w.w = area.w
+	w.h = area.h
 	app.raise(mut w)
 }
 
@@ -187,31 +188,32 @@ fn (mut c Ctl) bound_size() {
 
 pub fn (mut app App) tile_side(mut w Ctl, side TileSide) {
 	w.maximized = false
-	h := app.height - app.bar_height()
+	area := app.work_area()
+	h := area.h
 	match side {
 		.left {
 			w.x = 0
-			w.y = 0
+			w.y = area.y
 			w.w = app.width / 2
 			w.h = h
 		}
 		.right {
 			w.x = app.width / 2
-			w.y = 0
+			w.y = area.y
 			w.w = app.width - w.x
 			w.h = h
 		}
 		.top {
 			w.x = 0
-			w.y = 0
+			w.y = area.y
 			w.w = app.width
 			w.h = h / 2
 		}
 		.bottom {
 			w.x = 0
-			w.y = h / 2
+			w.y = area.y + h / 2
 			w.w = app.width
-			w.h = h - w.y
+			w.h = h - h / 2
 		}
 	}
 	w.bound_size()
@@ -224,24 +226,26 @@ pub fn (mut app App) tile() {
 	mut cols := 1
 	for cols * cols < windows.len { cols++ }
 	rows := (windows.len + cols - 1) / cols
+	area := app.work_area()
 	for i, mut w in windows {
 		w.maximized = false
 		w.x = (i % cols) * app.width / cols
-		w.y = (i / cols) * (app.height - app.bar_height()) / rows
+		w.y = area.y + (i / cols) * area.h / rows
 		w.w = app.width / cols
-		w.h = (app.height - app.bar_height()) / rows
+		w.h = area.h / rows
 		w.bound_size()
 	}
 	app.dirty = true
 }
 
 pub fn (mut app App) cascade() {
+	area := app.work_area()
 	for i, mut w in app.windows.filter(!it.closed && !it.minimized) {
 		w.maximized = false
 		w.x = (i * 3) % max(1, app.width / 3)
-		w.y = i % max(1, app.height / 3)
+		w.y = area.y + i % max(1, area.h / 3)
 		w.w = app.width * 2 / 3
-		w.h = (app.height - app.bar_height()) * 2 / 3
+		w.h = area.h * 2 / 3
 		w.bound_size()
 	}
 	app.dirty = true

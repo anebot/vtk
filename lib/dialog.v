@@ -17,9 +17,10 @@ fn dialog_button(text string, accepted bool) &Ctl {
 
 pub fn (mut app App) dialog(title string, mut body Ctl) &Ctl {
 	body.measure()
-	mut w := app.window(title, min(app.width, max(24, body.pw + 4)), min(app.height - app.bar_height(), max(6, body.ph + 4)))
+	area := app.work_area()
+	mut w := app.window(title, min(app.width, max(24, body.pw + 4)), min(area.h, max(6, body.ph + 4)))
 	w.x = max(0, (app.width - w.w) / 2)
-	w.y = max(0, (app.height - app.bar_height() - w.h) / 2)
+	w.y = area.y + max(0, (area.h - w.h) / 2)
 	w.dismissable = true
 	w.controls = window_close
 	w.value = -1

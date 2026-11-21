@@ -66,7 +66,7 @@ fn (app &App) hover_target() &Ctl {
 	for n in app.notices {
 		if !n.closed && n.rect.contains(x, y) { return unsafe { nil } }
 	}
-	if y == app.height - 1 && (app.bar_height() > 0 || !isnil(app.placement)) {
+	if y == app.bar_y() && (app.bar_height() > 0 || !isnil(app.placement)) {
 		return unsafe { nil }
 	}
 	for i := app.windows.len - 1; i >= 0; i-- {

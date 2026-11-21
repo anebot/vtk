@@ -1,5 +1,7 @@
 module vtk
 
+import os
+
 fn close_nested_modal(mut app App) {
 	mut child := app.top_window()
 	assert child.modal && !isnil(child.modal_parent)
@@ -75,4 +77,40 @@ fn test_settings_blocks_existing_new_windows_and_stale_input() {
 	app.set_focus(first)
 	app.dispatch(Event{ key: int(`x`) })
 	assert first.text == 'unchangedx'
+}
+
+fn check_settings_bar_position(mut app App) {
+	mut settings := app.top_window()
+	body := settings.kids[0]
+	options := body.kids.filter(it.kind == .checkbox && it.text == 'Window bar at top')
+	assert options.len == 1
+	option := options[0]
+	buttons := body.kids.last().kids
+	app.set_focus(option)
+	app.dispatch(Event{ key: int(Key.space) })
+	assert !app.bar_top
+	app.set_focus(buttons[0]) // Apply
+	app.dispatch(Event{ key: int(Key.enter) })
+	app.redraw()
+	assert app.bar_top && settings.y >= 1
+	assert app.screen.cells[..5].map(it.glyph).join('') == '[App]'
+	app.set_focus(buttons[1]) // Save
+	app.dispatch(Event{ key: int(Key.enter) })
+	mut loaded := new_app()
+	loaded.settings_file(app.settings_filename())
+	loaded.settings_load() or { panic(err) }
+	assert loaded.bar_top
+	app.set_focus(buttons[2]) // Reset
+	app.dispatch(Event{ key: int(Key.enter) })
+	assert !app.bar_top && option.value == 0 && !app.settings_saved()
+	app.close(mut settings)
+}
+
+fn test_settings_applies_saves_and_resets_bar_position() {
+	path := os.join_path(os.temp_dir(), 'vtk-bar-settings-${os.getpid()}.ini')
+	defer { os.rm(path) or {} }
+	mut app := new_app()
+	app.settings_file(path)
+	app.after(0, check_settings_bar_position)
+	app.settings_dialog()
 }

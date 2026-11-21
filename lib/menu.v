@@ -47,30 +47,37 @@ fn (mut app App) push_menu(owner &Ctl, x int, y int) {
 	}
 	for p.value < owner.kids.len - 1 && owner.kids[p.value].kind == .separator { p.value++ }
 	app.popups << p
+	app.layout_popups()
 	app.dirty = true
 }
 
 pub fn (mut app App) close_popups() {
 	app.popups.clear()
 	app.app_popup = unsafe { nil }
+	app.popup_at_bar = false
 	app.dirty = true
 }
 
 fn (mut app App) layout_popups() {
-	anchored := !isnil(app.app_popup)
-	if anchored && (!app.desktop || app.bar_height() == 0 || app.height < 4 || app.width < 5) {
+	anchored := app.popup_at_bar
+	if anchored && ((!isnil(app.app_popup) && !app.desktop) || app.bar_height() == 0 || app.height < 4 || app.width < 5) {
 		app.close_popups()
 		return
 	}
-	height := max(1, app.height - int(anchored))
+	area := if anchored || app.bar_top {
+		app.work_area()
+	} else {
+		Rect{0, 0, app.width, app.height}
+	}
+	height := max(1, area.h)
 	for i, mut p in app.popups {
 		mut width := 8
 		for item in p.link.kids { width = max(width, text_width(item.text) + 4) }
 		p.w = min(app.width, width)
 		p.h = min(height, p.link.kids.len + 2)
 		if i == 0 && anchored {
-			p.x = 0
-			p.y = height - p.h
+			if !isnil(app.app_popup) { p.x = 0 }
+			p.y = if app.bar_top { area.y } else { area.y + height - p.h }
 		} else if i > 0 {
 			parent := app.popups[i - 1]
 			p.x = if parent.x + parent.w - 1 + p.w <= app.width {
@@ -81,7 +88,7 @@ fn (mut app App) layout_popups() {
 			p.y = parent.y + parent.value - parent.top
 		}
 		p.x = clamp(p.x, 0, app.width - p.w)
-		p.y = clamp(p.y, 0, height - p.h)
+		p.y = clamp(p.y, area.y, area.y + height - p.h)
 		view := max(1, p.h - 2)
 		p.value = clamp(p.value, 0, p.link.kids.len - 1)
 		p.top = clamp(p.top, 0, p.link.kids.len - view)
@@ -216,4 +223,8 @@ pub fn (mut app App) window_menu(mut w Ctl, x int, y int) {
 		item.data = i64(i + 1)
 	}
 	app.open_menu(menu, x, y)
+	if y == app.bar_y() && app.bar_height() > 0 && app.popups.len > 0 {
+		app.popup_at_bar = true
+		app.layout_popups()
+	}
 }

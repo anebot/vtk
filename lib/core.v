@@ -262,6 +262,7 @@ pub mut:
 	height           int  = 24
 	desktop          bool = true
 	bar_always       bool = true
+	bar_top          bool
 	bar_clock        bool = true
 	window_shadow    bool = true
 	dim_inactive     bool = true
@@ -299,6 +300,7 @@ mut:
 	settings_path    string
 	bar_offset       int
 	app_popup        &Ctl = unsafe { nil }
+	popup_at_bar     bool
 	mouse_x          int = -1
 	mouse_y          int = -1
 	hover            &Ctl = unsafe { nil }
