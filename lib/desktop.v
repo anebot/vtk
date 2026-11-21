@@ -336,16 +336,22 @@ pub fn (mut app App) settings_dialog() {
 	s.vim = checkbox('Vim mode', app.vim_mode)
 	s.move = entry(app.move_key.str(), 0)
 	s.move.expand = false
+	s.move.col = 1
 	s.resize = entry(app.resize_key.str(), 0)
 	s.resize.expand = false
+	s.resize.col = 1
+	s.resize.row = 1
 	mut controls := [s.bar, s.bar_top, s.clock, s.shadow, s.dim, s.mouse_cursor, s.vim]
 	for mut ctl in controls { body.add(mut ctl) }
+	mut shortcuts := grid()
 	mut move_label := label('Move shortcut')
-	body.add(mut move_label)
-	body.add(mut s.move)
+	shortcuts.add(mut move_label)
+	shortcuts.add(mut s.move)
 	mut resize_label := label('Resize shortcut')
-	body.add(mut resize_label)
-	body.add(mut s.resize)
+	resize_label.row = 1
+	shortcuts.add(mut resize_label)
+	shortcuts.add(mut s.resize)
+	body.add(mut shortcuts)
 	mut row := button_bar()
 	for i, text in ['Apply', 'Save', 'Reset'] {
 		mut b := button(text)
