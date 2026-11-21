@@ -212,7 +212,7 @@ fn window_menu_action(mut item Ctl, mut app App) {
 }
 
 pub fn (mut app App) window_menu(mut w Ctl, x int, y int) {
-	if !w.visible() || !isnil(app.blocker(&w)) { return }
+	if w.hidden || w.closed || w.disabled || !isnil(app.blocker(&w)) { return }
 	mut menu := context_menu()
 	names := ['Minimize', if w.maximized { 'Restore' } else { 'Maximize' }, 'Move', 'Resize',
 		(if w.always_on_top { '[x] ' } else { '[ ] ' }) + 'Always on top', 'Close', 'Tile left',
