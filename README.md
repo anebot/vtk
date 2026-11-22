@@ -211,6 +211,8 @@ and Serial. `app.theme`
 can be edited directly. Window titlebars use `title` and `title_bg`; dimmed
 inactive titlebars use `inactive_title` and `inactive_title_bg`. The title and
 window buttons share a solid background, separate from the body and frame.
+Focused controls use the `focus_fg` and `focus_bg` pair. Dark and Modern use
+RGB palettes for consistent contrast across terminal color schemes.
 `color_rgb` and `color_256` provide extended colors;
 Serial uses basic ANSI colors and ASCII fallbacks.
 

@@ -173,7 +173,7 @@ fn (mut app App) draw_popups() {
 			} else {
 				t.fg
 			}
-			bg := if i == p.value { t.sel_bg } else { t.bg }
+			bg := if i == p.value && !item.disabled { t.sel_bg } else { t.bg }
 			app.screen.fill(Rect{p.x + 1, y, p.w - 2, 1}, if item.kind == .separator {
 				`─`
 			} else {

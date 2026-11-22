@@ -83,7 +83,7 @@ fn (mut app App) draw_ctl(mut c Ctl) {
 	if c.hidden || c.closed || c.minimized || c.w <= 0 || c.h <= 0 { return }
 	old := app.screen.set_clip(c.rect())
 	t := app.theme
-	focused := app.focus == &c
+	focused := app.focus == &c && !c.disabled
 	mut fg := if c.disabled { t.dim } else { t.fg }
 	mut bg := t.bg
 	mut p := c.parent
@@ -94,8 +94,8 @@ fn (mut app App) draw_ctl(mut c Ctl) {
 			break
 		}
 		if p.kind == .status {
-			fg = t.title
-			bg = t.dim
+			fg = t.bar_fg
+			bg = t.bar_bg
 			break
 		}
 		p = p.parent
@@ -105,17 +105,20 @@ fn (mut app App) draw_ctl(mut c Ctl) {
 		.window { app.draw_window(mut c) }
 		.label, .status {
 			if c.kind == .status {
-				fg = t.title
-				bg = t.dim
+				fg = t.bar_fg
+				bg = t.bar_bg
 			}
 			app.screen.fill(c.rect(), ` `, fg, bg)
 			for i, line in c.text.split('\n') { app.screen.text(c.x, c.y + i, line, fg, bg, 0) }
 			for mut child in c.kids { app.draw_ctl(mut child) }
 		}
 		.button, .toolbutton {
-			if c.kind == .button {
+			if c.disabled {
+				bg = t.bg
+				fg = t.dim
+			} else if c.kind == .button {
 				bg = if focused { t.focus_bg } else { t.btn_bg }
-				fg = if c.disabled { t.dim } else { t.btn_fg }
+				fg = if focused { t.focus_fg } else { t.btn_fg }
 			} else if focused || c.value != 0 {
 				bg = t.sel_bg
 				fg = t.sel_fg
@@ -132,6 +135,7 @@ fn (mut app App) draw_ctl(mut c Ctl) {
 			}
 		}
 		.checkbox, .switch {
+			if focused { fg = t.focus_fg }
 			mark := if c.kind == .switch {
 				if c.value != 0 { '[ ON  ] ' } else { '[ OFF ] ' }
 			} else if c.value != 0 {
@@ -158,22 +162,26 @@ fn (mut app App) draw_ctl(mut c Ctl) {
 			app.screen.fill(Rect{c.x, c.y, fill, 1}, `█`, t.field_fg, bg)
 		}
 		.spin {
-			app.screen.fill(c.rect(), ` `, t.field_fg, if focused { t.focus_bg } else { t.field_bg })
+			fg = if c.disabled { t.dim } else if focused { t.focus_fg } else { t.field_fg }
+			focus_bg = if focused { t.focus_bg } else { t.field_bg }
+			app.screen.fill(c.rect(), ` `, fg, focus_bg)
 			app.screen.text(c.x, c.y, '◄', fg, focus_bg, 0)
 			app.screen.text(c.x + max(1, (c.w - c.value.str().len) / 2), c.y, c.value.str(), fg, focus_bg, 0)
 			app.screen.text(c.x + c.w - 1, c.y, '►', fg, focus_bg, 0)
 		}
 		.entry, .multiline, .markdown { app.draw_editor(mut c) }
 		.combo {
-			app.screen.fill(c.rect(), ` `, t.field_fg, if focused { t.focus_bg } else { t.field_bg })
+			fg = if c.disabled { t.dim } else if focused { t.focus_fg } else { t.field_fg }
+			focus_bg = if focused { t.focus_bg } else { t.field_bg }
+			app.screen.fill(c.rect(), ` `, fg, focus_bg)
 			if c.value >= 0 && c.value < c.kids.len {
-				app.screen.aligned_text(c.x, c.y, c.w - 1, c.kids[c.value].text, c.text_align, t.field_fg, t.field_bg, 0)
+				app.screen.aligned_text(c.x, c.y, c.w - 1, c.kids[c.value].text, c.text_align, fg, focus_bg, 0)
 			}
-			app.screen.text(c.x + c.w - 1, c.y, '▼', t.field_fg, t.field_bg, 0)
+			app.screen.text(c.x + c.w - 1, c.y, '▼', fg, focus_bg, 0)
 		}
 		.radio {
 			for i, child in c.kids {
-				app.screen.text(c.x, c.y + i, (if i == c.value { '(•) ' } else { '( ) ' }) + child.text, fg, if i == c.value {
+				app.screen.text(c.x, c.y + i, (if i == c.value { '(•) ' } else { '( ) ' }) + child.text, if i == c.value && focused { t.focus_fg } else { fg }, if i == c.value {
 					focus_bg
 				} else {
 					bg
@@ -193,14 +201,15 @@ fn (mut app App) draw_ctl(mut c Ctl) {
 				c.top = clamp(c.top, 0, c.high - max(1, c.h - 1))
 				for row := c.top; row < c.high && row < c.top + c.h - 1; row++ {
 					rowbg := if row == c.value {
-						if focused { t.focus_bg } else { t.dim }
+						if focused { t.focus_bg } else { t.sel_bg }
 					} else {
 						bg
 					}
-					app.screen.fill(Rect{c.x, c.y + row - c.top + 1, c.w, 1}, ` `, fg, rowbg)
+					rowfg := if row == c.value { if focused { t.focus_fg } else { t.sel_fg } } else { fg }
+					app.screen.fill(Rect{c.x, c.y + row - c.top + 1, c.w, 1}, ` `, rowfg, rowbg)
 					for col in 0 .. n {
 						clip := app.screen.set_clip(Rect{c.x + col * span, c.y + row - c.top + 1, max(0, span - 1), 1})
-						app.screen.text(c.x + col * span, c.y + row - c.top + 1, c.table_cell(row, col), fg, rowbg, 0)
+						app.screen.text(c.x + col * span, c.y + row - c.top + 1, c.table_cell(row, col), rowfg, rowbg, 0)
 						app.screen.restore_clip(clip)
 					}
 				}
@@ -219,19 +228,20 @@ fn (mut app App) draw_ctl(mut c Ctl) {
 			for i := c.top; i < rows.len && i < c.top + c.h; i++ {
 				row := rows[i]
 				rowbg := if row.node == c.link {
-					if focused { t.focus_bg } else { t.dim }
+					if focused { t.focus_bg } else { t.sel_bg }
 				} else {
 					bg
 				}
-				app.screen.fill(Rect{c.x, c.y + i - c.top, c.w, 1}, ` `, fg, rowbg)
+				rowfg := if row.node == c.link { if focused { t.focus_fg } else { t.sel_fg } } else { fg }
+				app.screen.fill(Rect{c.x, c.y + i - c.top, c.w, 1}, ` `, rowfg, rowbg)
 				if row.node.kids.len > 0 {
 					app.screen.text(c.x + row.depth * 2, c.y + i - c.top, if row.node.value != 0 {
 						'▾'
 					} else {
 						'▸'
-					}, fg, rowbg, 0)
+					}, rowfg, rowbg, 0)
 				}
-				app.screen.text(c.x + row.depth * 2 + 2, c.y + i - c.top, row.node.text, fg, rowbg, 0)
+				app.screen.text(c.x + row.depth * 2 + 2, c.y + i - c.top, row.node.text, rowfg, rowbg, 0)
 			}
 			app.draw_scrollbar(c, rows.len, c.h, 0)
 		}

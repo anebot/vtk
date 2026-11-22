@@ -188,6 +188,7 @@ pub fn (mut app App) settings_load() ! {
 	text := os.read_file(app.settings_filename())!
 	mut move, mut resize := app.move_key, app.resize_key
 	mut in_section := false
+	mut theme_fields := map[string]bool{}
 	for line in text.split_into_lines() {
 		trim := line.trim_space()
 		if trim.starts_with('[') {
@@ -209,8 +210,24 @@ pub fn (mut app App) settings_load() ! {
 			'mouse_cursor' { app.set_mouse_cursor(MouseCursor{ ...app.mouse_cursor, enabled: value == '1' }) }
 			'vim_mode' { app.vim_set(value == '1') }
 			'ascii' { app.theme.ascii = value == '1' }
-			else { app.load_theme_field(key, value.int()) }
+			else {
+				app.load_theme_field(key, value.int())
+				theme_fields[key] = true
+			}
 		}
+	}
+	// Older files have only a title foreground and a focus background. Fill in
+	// their missing partners without replacing the saved palette or custom colors.
+	if theme_fields['title'] && !theme_fields['title_bg'] {
+		app.theme.title_bg = if app.theme.title == black { white } else if app.theme.bg == black { blue } else { black }
+	}
+	if theme_fields['focus_bg'] && !theme_fields['focus_fg'] {
+		t := app.theme
+		app.theme.focus_fg = if t.focus_bg == t.field_bg { t.field_fg }
+			else if t.focus_bg == t.sel_bg { t.sel_fg }
+			else if t.focus_bg == t.tool_bg { t.tool_fg }
+			else if t.focus_bg == t.bg { t.fg }
+			else { t.btn_fg }
 	}
 	app.set_keys(move, resize)
 	app.dirty = true
