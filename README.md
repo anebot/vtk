@@ -234,6 +234,10 @@ scrollbars and manual scrolling that leaves the caret stationary.
 `replace_range`, `replace_selection`, `undo`, `redo`, `begin_edit_group` and
 `end_edit_group` expose the edit model.
 
+Set a multiline control's `syntax = .diff` to highlight unified diffs with
+red deletions, green additions, cyan hunks and bold file headers. Scrolling,
+wrapping and selection preserve the highlighting; `.plain` is the default.
+
 Markdown modes independently select source/rendered and editable/read-only
 presentation. The V renderer handles headings, emphasis, inline code, links,
 lists, task checkboxes, quotes and fenced code. Fences retain source rows.

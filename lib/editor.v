@@ -182,6 +182,8 @@ mut:
 	glyphs  []Glyph
 	code    bool
 	heading bool
+	color   ?int
+	attr    int
 }
 
 fn (c &Ctl) editor_gutter() int {
@@ -201,14 +203,20 @@ fn (c &Ctl) editor_height() int {
 }
 
 fn (c &Ctl) editor_rows() []TextRow {
-	mut lines := if c.kind == .markdown { c.markdown_rows() } else { plain_rows(c.text) }
+	mut lines := if c.kind == .markdown {
+		c.markdown_rows()
+	} else if c.kind == .multiline && c.syntax == .diff {
+		diff_rows(c.text)
+	} else {
+		plain_rows(c.text)
+	}
 	if c.kind == .entry { return lines }
 	mut width := max(1, c.w - c.editor_gutter() - int(c.scrollbar))
 	if c.kind == .markdown && c.md.column_width > 0 { width = min(width, c.md.column_width) }
 	if !(c.wrap || (c.kind == .markdown && !c.md.no_wrap)) { return lines }
 	mut result := []TextRow{}
 	for row in lines {
-		mut part := TextRow{ start: row.start, end: row.end, line: row.line, code: row.code, heading: row.heading }
+		mut part := TextRow{ start: row.start, end: row.end, line: row.line, code: row.code, heading: row.heading, color: row.color, attr: row.attr }
 		mut col := 0
 		for glyph in row.glyphs {
 			gw := if glyph.r == `\t` {
@@ -219,7 +227,7 @@ fn (c &Ctl) editor_rows() []TextRow {
 			if col > 0 && col + gw > width {
 				part.end = glyph.at
 				result << part
-				part = TextRow{ start: glyph.at, end: row.end, line: row.line, code: row.code, heading: row.heading }
+				part = TextRow{ start: glyph.at, end: row.end, line: row.line, code: row.code, heading: row.heading, color: row.color, attr: row.attr }
 				col = 0
 			}
 			part.glyphs << glyph
@@ -340,10 +348,12 @@ fn (mut app App) draw_editor(mut c Ctl) {
 			selected := g.at >= a && g.at < b
 			gfg := if selected {
 				t.sel_fg
+			} else if c.disabled {
+				fg
 			} else if row.heading {
 				t.accent
 			} else {
-				fg
+				row.color or { fg }
 			}
 			gbg := if selected {
 				t.sel_bg
@@ -357,7 +367,7 @@ fn (mut app App) draw_editor(mut c Ctl) {
 				app.screen.fill(Rect{c.x + margin + col - c.left, y, n, 1}, ` `, gfg, gbg)
 				col += n
 			} else {
-				app.screen.put(c.x + margin + col - c.left, y, if c.secret { `*` } else { g.r }, gfg, gbg, g.attr)
+				app.screen.put(c.x + margin + col - c.left, y, if c.secret { `*` } else { g.r }, gfg, gbg, g.attr | row.attr)
 				col += if c.secret { 1 } else { rune_width(g.r) }
 			}
 		}

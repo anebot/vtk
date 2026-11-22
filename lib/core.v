@@ -53,6 +53,11 @@ pub enum CursorShape {
 	bar
 }
 
+pub enum TextSyntax {
+	plain
+	diff
+}
+
 pub enum TextAlign {
 	left
 	center
@@ -131,6 +136,7 @@ pub mut:
 	secret        bool
 	line_numbers  bool
 	wrap          bool
+	syntax        TextSyntax
 	scrollbar     bool
 	scroll_hold   bool
 	readonly      bool
