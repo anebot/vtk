@@ -240,7 +240,8 @@ Insert, Visual and Visual-line modes. Motions include h/j/k/l, w/b/W/B,
 0/^/$ and gg/G; edits include i/a/I/A, o/O, J, x, dd/yy, dw/cw, p/P, undo
 and redo. Insert mode also supports Emacs-style movement, cuts, paste and
 transpose. Insert sessions and changes group into one undo step. Cursor
-shape follows the focused editor's mode.
+shape follows the focused editor's mode. With Vim mode enabled, j/k also
+move the selection in tables, trees, radio lists and tabs.
 
 Clipboard strings preserve explicit lengths, including NUL. `app.ctrl_c`
 selects quit, ignore, copy, or callback behavior. Set `native_clipboard`

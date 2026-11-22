@@ -257,7 +257,13 @@ pub fn (mut app App) dispatch(e Event) {
 	}
 }
 
-fn (mut app App) widget_key(mut c Ctl, e Event) bool {
+fn (mut app App) widget_key(mut c Ctl, event Event) bool {
+	e := if (app.vim_mode || c.vim.enabled) && !event.ctrl && !event.alt
+		&& c.kind in [.radio, .tabs, .table, .tree] && event.key in [int(`j`), int(`k`)] {
+		Event{ ...event, key: if event.key == `j` { int(Key.down) } else { int(Key.up) } }
+	} else {
+		event
+	}
 	match c.kind {
 		.terminal {
 			c.term.key(e)

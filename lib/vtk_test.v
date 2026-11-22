@@ -324,3 +324,43 @@ fn test_frame_resize_preserves_opposite_edge_and_side_height() {
 	app.mouse(Event{ kind: .mouse, x: w.x + w.w - 1, y: w.y, button: .left, pressed: true })
 	assert !w.closed && app.drag == w
 }
+
+fn test_vim_selection_navigation_uses_arrows_and_respects_modifiers() {
+	mut app := new_app()
+	for kind in [Kind.table, .radio, .tabs] {
+		mut c := new_ctl(kind)
+		c.high = 3
+		c.value = 0
+		for title in ['One', 'Two', 'Three'] { c.add_item(title) }
+		assert !app.widget_key(mut c, Event{ key: int(`j`) })
+		app.vim_set(true)
+		assert !app.widget_key(mut c, Event{ key: int(`j`), ctrl: true })
+		assert !app.widget_key(mut c, Event{ key: int(`k`), alt: true })
+		assert c.value == 0
+		c.scroll_hold = true
+		assert app.widget_key(mut c, Event{ key: int(`j`) })
+		assert c.value == 1 && !c.scroll_hold
+		assert app.widget_key(mut c, Event{ key: int(`k`) })
+		assert c.value == 0
+		assert app.widget_key(mut c, Event{ key: int(`k`) })
+		assert c.value == 0
+		app.vim_set(false)
+		assert !app.widget_key(mut c, Event{ key: int(`j`) })
+		c.vim_mode(true)
+		assert app.widget_key(mut c, Event{ key: int(`j`) })
+		assert c.value == 1
+	}
+	app.vim_set(true)
+	mut tree := tree()
+	first := tree.tree_add(unsafe { nil }, 'First')
+	second := tree.tree_add(unsafe { nil }, 'Second')
+	tree.link = first
+	assert app.widget_key(mut tree, Event{ key: int(`j`) })
+	assert tree.link == second
+	assert app.widget_key(mut tree, Event{ key: int(`k`) })
+	assert tree.link == first
+	mut field := entry('', 0)
+	assert app.widget_key(mut field, Event{ key: int(`j`) })
+	assert app.widget_key(mut field, Event{ key: int(`k`) })
+	assert field.text == 'jk'
+}
