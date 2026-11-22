@@ -215,12 +215,17 @@ pub fn (mut app App) window_menu(mut w Ctl, x int, y int) {
 	if w.hidden || w.closed || w.disabled || !isnil(app.blocker(&w)) { return }
 	mut menu := context_menu()
 	names := ['Minimize', if w.maximized { 'Restore' } else { 'Maximize' }, 'Move', 'Resize',
-		(if w.always_on_top { '[x] ' } else { '[ ] ' }) + 'Always on top', 'Close', 'Tile left',
-		'Tile right', 'Tile top', 'Tile bottom']
+		(if w.always_on_top { '[x] ' } else { '[ ] ' }) + 'Always on top', 'Close']
 	for i, name in names {
 		mut item := menu.menu_item(name, window_menu_action)
 		item.link = &w
 		item.data = i64(i + 1)
+	}
+	mut tile := menu.add_menu('Tile')
+	for i, name in ['Left', 'Right', 'Top', 'Bottom'] {
+		mut item := tile.menu_item(name, window_menu_action)
+		item.link = &w
+		item.data = i64(i + 7)
 	}
 	app.open_menu(menu, x, y)
 	if y == app.bar_y() && app.bar_height() > 0 && app.popups.len > 0 {
