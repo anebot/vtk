@@ -1,5 +1,71 @@
 module vtk
 
+fn window_mouse_click(mut app App, x int, y int) {
+	app.dispatch(Event{ kind: .mouse, x: x, y: y, button: .left, pressed: true })
+	app.dispatch(Event{ kind: .mouse, x: x, y: y, button: .left })
+}
+
+fn test_title_double_click_maximizes_and_restores_for_mouse_and_touch_titles() {
+	for touch_titles in [false, true] {
+		for bar_top in [false, true] {
+			mut app := new_app()
+			app.touch_titles = touch_titles
+			app.bar_top = bar_top
+			mut w := app.window('Double click', 30, 8)
+			original := w.rect()
+			x, y := w.x + 8, w.y
+			window_mouse_click(mut app, x, y)
+			assert !w.maximized && w.rect() == original
+			window_mouse_click(mut app, x, y)
+			assert w.maximized && w.rect() == app.work_area() && w.saved == original
+			assert isnil(app.drag) && isnil(app.placement)
+			max_x, max_y := w.x + 8, w.y
+			window_mouse_click(mut app, max_x, max_y)
+			assert w.maximized
+			window_mouse_click(mut app, max_x, max_y)
+			assert !w.maximized && w.rect() == original
+			assert isnil(app.drag) && isnil(app.placement)
+		}
+	}
+}
+
+fn test_title_double_click_requires_matching_clicks_without_a_drag_or_interruption() {
+	for interruption in ['timeout', 'position', 'drag', 'body', 'other_window', 'menu', 'focus', 'disabled'] {
+		mut app := new_app()
+		mut w := app.window('Title', 30, 8)
+		if interruption == 'disabled' { w.controls = window_close }
+		x, y := w.x + 8, w.y
+		app.dispatch(Event{ kind: .mouse, x: x, y: y, button: .left, pressed: true })
+		if interruption == 'drag' {
+			app.dispatch(Event{ kind: .mouse, x: x + 1, y: y, button: .left, pressed: true, motion: true })
+			app.dispatch(Event{ kind: .mouse, x: x, y: y, button: .left, pressed: true, motion: true })
+		}
+		app.dispatch(Event{ kind: .mouse, x: x, y: y, button: .left })
+		match interruption {
+			'timeout' { app.title_click_at = app.now() - 401 }
+			'body' { window_mouse_click(mut app, x, y + 2) }
+			'other_window' {
+				mut other := app.window('Other', 25, 6)
+				other.x = 45
+				other.y = 10
+				window_mouse_click(mut app, other.x + 8, other.y)
+			}
+			'menu' {
+				window_mouse_click(mut app, w.x + 2, y)
+				assert app.popups.len == 1
+				app.close_popups()
+			}
+			'focus' {
+				app.dispatch(Event{ kind: .focus_out })
+				app.dispatch(Event{ kind: .focus_in })
+			}
+			else {}
+		}
+		window_mouse_click(mut app, x + int(interruption == 'position'), y)
+		assert !w.maximized
+	}
+}
+
 fn test_window_titles_stop_before_controls_and_preserve_the_frame() {
 	mut app := new_app()
 	app.desktop = false

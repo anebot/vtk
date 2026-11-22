@@ -120,6 +120,7 @@ pub fn (mut app App) dispatch(e Event) {
 		app.sync_mouse_pointer()
 		return
 	}
+	if e.kind != .mouse { app.title_click = unsafe { nil } }
 	if e.kind in [.focus_in, .focus_out] {
 		app.terminal_focused = e.kind == .focus_in
 		if e.kind == .focus_out {
@@ -417,6 +418,17 @@ pub fn (mut app App) scroll_ctl(mut c Ctl, rows int) bool {
 
 fn (mut app App) mouse(e Event) {
 	app.dirty = true
+	now := app.now()
+	last_title := app.title_click
+	double_title_click := e.pressed && !e.motion && e.button == .left && !isnil(last_title)
+		&& e.x == app.title_click_x && e.y == app.title_click_y && now - app.title_click_at < 400
+	if (e.pressed && !e.motion) || (e.button == .left && (e.x != app.title_click_x || e.y != app.title_click_y)) {
+		app.title_click = unsafe { nil }
+	}
+	if double_title_click && app.placement == last_title && !app.placement_resize
+		&& last_title.controls & window_maximize != 0 {
+		app.placement = unsafe { nil }
+	}
 	if !isnil(app.placement) {
 		if e.pressed && e.button == .left && !e.motion {
 			mut w := app.placement
@@ -549,6 +561,16 @@ fn (mut app App) mouse(e Event) {
 			if w.controls & window_menu != 0 && e.x > w.x && e.x < w.x + 4 {
 				app.window_menu(mut w, w.x, w.y + 1)
 				return
+			}
+			if w.controls & window_maximize != 0 {
+				if double_title_click && last_title == w {
+					if w.maximized { app.restore(mut w) } else { app.maximize(mut w) }
+					return
+				}
+				app.title_click = w
+				app.title_click_at = now
+				app.title_click_x = e.x
+				app.title_click_y = e.y
 			}
 		}
 		if w.maximized { return }

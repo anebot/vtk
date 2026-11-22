@@ -294,6 +294,10 @@ mut:
 	drag_start       Rect
 	drag_x           int
 	drag_y           int
+	title_click      &Ctl = unsafe { nil }
+	title_click_at   i64
+	title_click_x    int
+	title_click_y    int
 	placement        &Ctl = unsafe { nil }
 	placement_resize bool
 	placement_start  Rect
