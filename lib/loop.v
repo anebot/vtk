@@ -75,26 +75,21 @@ pub fn (mut app App) redraw() {
 	app.screen.restore_clip(Rect{0, 0, app.width, app.height})
 	app.screen.fill(Rect{0, 0, app.width, app.height}, `▒`, app.theme.desk_fg, app.theme.desk_bg)
 	area := app.work_area()
+	app.fit_windows()
 	for mut w in app.windows {
 		if w.closed || w.minimized || w.hidden { continue }
-		if w.maximized {
-			w.x = 0
-			w.y = area.y
-			w.w = app.width
-			w.h = area.h
-		}
-		w.y = max(area.y, w.y)
 		w.measure()
 		w.layout(w.rect())
 	}
 	app.layout_notices()
 	app.layout_popups()
 	app.update_hover()
+	workspace_clip := app.screen.set_clip(area)
 	for mut w in app.windows {
 		if w.closed || w.minimized || w.hidden { continue }
 		if app.window_shadow {
-			for y in max(0, w.y + 1) .. min(app.height, w.y + w.h + 1) {
-				for x in max(0, w.x + 2) .. min(app.width, w.x + w.w + 2) {
+			for y in max(area.y, w.y + 1) .. min(area.y + area.h, w.y + w.h + 1) {
+				for x in max(area.x, w.x + 2) .. min(area.x + area.w, w.x + w.w + 2) {
 					at := y * app.width + x
 					app.screen.cells[at].fg = gray
 					app.screen.cells[at].bg = black
@@ -103,6 +98,7 @@ pub fn (mut app App) redraw() {
 		}
 		app.draw_ctl(mut w)
 	}
+	app.screen.restore_clip(workspace_clip)
 	app.draw_notices()
 	app.draw_bar()
 	app.draw_popups()
@@ -111,7 +107,8 @@ pub fn (mut app App) redraw() {
 		app.screen.text(0, app.bar_y(), (if app.placement_resize { 'Resize' } else { 'Move' }) + ': arrows / Shift+arrows, Enter accepts, Esc cancels', app.theme.bar_fg, app.theme.bar_bg, 0)
 	}
 	// A cursor is valid only if its cell remains visible in the top window.
-	if app.popups.len > 0 || (!isnil(app.focus) && app.focus.owner_window() != app.top_window()) {
+	if !area.contains(app.screen.cursor_x, app.screen.cursor_y) || app.popups.len > 0
+		|| (!isnil(app.focus) && app.focus.owner_window() != app.top_window()) {
 		app.screen.cursor_x = -1
 	}
 	app.draw_mouse_cursor()
@@ -418,13 +415,11 @@ fn (mut app App) mouse(e Event) {
 		if e.pressed && e.button == .left && !e.motion {
 			mut w := app.placement
 			if app.placement_resize {
-				w.w = e.x - w.x + 1
-				w.h = e.y - w.y + 1
-				w.bound_size()
+				w.resize_window(e.x - w.x + 1, e.y - w.y + 1, app.work_area(), false, false)
 			} else {
-				w.x = max(0, e.x - app.drag_x)
-				area := app.work_area()
-				w.y = clamp(e.y, area.y, area.y + area.h - 1)
+				w.x = e.x - app.drag_x
+				w.y = e.y
+				w.fit_window(app.work_area())
 			}
 			app.placement = unsafe { nil }
 		}
@@ -464,19 +459,18 @@ fn (mut app App) mouse(e Event) {
 		if e.motion {
 			dx, dy := e.x - app.drag_x, e.y - app.drag_y
 			if app.drag_mode == 0 {
-				c.x = max(0, app.drag_start.x + dx)
-				area := app.work_area()
-				c.y = clamp(app.drag_start.y + dy, area.y, area.y + area.h - 1)
+				c.x = app.drag_start.x + dx
+				c.y = app.drag_start.y + dy
+				c.fit_window(app.work_area())
 			} else {
+				mut width, mut height := c.w, c.h
 				if app.drag_mode & 16 == 0 {
-					c.w = app.drag_start.w + if app.drag_mode & 1 != 0 { -dx } else { dx }
+					width = app.drag_start.w + if app.drag_mode & 1 != 0 { -dx } else { dx }
 				}
 				if app.drag_mode & 8 == 0 {
-					c.h = app.drag_start.h + if app.drag_mode & 2 != 0 { -dy } else { dy }
+					height = app.drag_start.h + if app.drag_mode & 2 != 0 { -dy } else { dy }
 				}
-				c.bound_size()
-				if app.drag_mode & 1 != 0 { c.x = app.drag_start.x + app.drag_start.w - c.w }
-				if app.drag_mode & 2 != 0 { c.y = app.drag_start.y + app.drag_start.h - c.h }
+				c.resize_window(width, height, app.work_area(), app.drag_mode & 1 != 0, app.drag_mode & 2 != 0)
 			}
 		}
 		return
@@ -671,6 +665,7 @@ fn (mut app App) placement_key(e Event) {
 		w.w = app.placement_start.w
 		w.h = app.placement_start.h
 		app.placement = unsafe { nil }
+		w.fit_window(app.work_area())
 	} else if e.key == int(Key.enter) {
 		app.placement = unsafe { nil }
 	} else {
@@ -690,13 +685,11 @@ fn (mut app App) placement_key(e Event) {
 			0
 		}
 		if app.placement_resize {
-			w.w += dx
-			w.h += dy
-			w.bound_size()
+			w.resize_window(w.w + dx, w.h + dy, app.work_area(), false, false)
 		} else {
-			w.x = max(0, w.x + dx)
-			area := app.work_area()
-			w.y = clamp(w.y + dy, area.y, area.y + area.h - 1)
+			w.x += dx
+			w.y += dy
+			w.fit_window(app.work_area())
 		}
 	}
 	app.dirty = true

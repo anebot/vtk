@@ -149,7 +149,9 @@ fn test_hover_respects_occlusion_modals_popups_notices_and_clipping() {
 	app.redraw()
 	assert one.hovered && !two.hovered
 	front.hidden = false
-	front.x = 45
+	front.x = 24
+	front.w = 20
+	front.h = 6
 	front.modal = true
 	app.redraw()
 	assert isnil(app.hovered_ctl())

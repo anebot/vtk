@@ -215,3 +215,27 @@ fn test_bar_menu_targets_follow_scrolling_and_ignore_clipped_buttons() {
 	app.dispatch(Event{ kind: .mouse, x: 5, y: app.bar_y(), button: .left, pressed: true })
 	assert app.popups.len == 0
 }
+
+fn test_context_menus_and_submenus_leave_the_bar_row_available_at_both_edges() {
+	for bar_top in [false, true] {
+		mut app := new_app()
+		app.bar_top = bar_top
+		mut menu := context_menu()
+		mut more := menu.add_menu('More')
+		for i in 0 .. 30 { more.menu_item('Action ${i}', menu_test_launcher_action) }
+		app.open_menu(menu, 10, app.height - 1)
+		app.choose_popup()
+		assert app.popups.len == 2
+		for p in app.popups {
+			assert p.y >= int(bar_top) && p.y + p.h <= 23 + int(bar_top)
+			assert !p.rect().contains(p.x, app.bar_y())
+		}
+		app.redraw()
+		row := app.bar_y() * app.width
+		assert app.screen.cells[row..row + 5].map(it.glyph).join('') == '[App]'
+		app.dispatch(Event{ kind: .resize, width: 20, height: 6 })
+		for p in app.popups {
+			assert p.y >= int(bar_top) && p.y + p.h <= 5 + int(bar_top)
+		}
+	}
+}

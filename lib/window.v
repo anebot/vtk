@@ -74,6 +74,7 @@ pub fn (mut app App) raise(mut w Ctl) {
 		}
 	}
 	app.windows.insert(at, &w)
+	w.fit_window(app.work_area())
 	if isnil(app.focus) || app.focus.owner_window() != &w || !app.focus.visible() {
 		app.focus_first(&w)
 	}
@@ -202,6 +203,18 @@ fn (mut w Ctl) fit_window(area Rect) {
 	w.y = clamp(w.y, area.y, area.y + area.h - w.h)
 }
 
+// Limit the moving edges before restoring the fixed edges. Size limits still
+// take precedence when the workspace is smaller than a window's minimum size.
+fn (mut w Ctl) resize_window(width int, height int, area Rect, from_left bool, from_top bool) {
+	right, bottom := w.x + w.w, w.y + w.h
+	w.w = min(width, if from_left { right - area.x } else { area.x + area.w - w.x })
+	w.h = min(height, if from_top { bottom - area.y } else { area.y + area.h - w.y })
+	w.bound_size()
+	if from_left { w.x = right - w.w }
+	if from_top { w.y = bottom - w.h }
+	w.fit_window(area)
+}
+
 fn (mut app App) fit_windows() {
 	area := app.work_area()
 	for mut w in app.windows {
@@ -239,7 +252,7 @@ pub fn (mut app App) tile_side(mut w Ctl, side TileSide) {
 			w.h = h - h / 2
 		}
 	}
-	w.bound_size()
+	w.fit_window(area)
 	app.raise(mut w)
 }
 
@@ -256,7 +269,7 @@ pub fn (mut app App) tile() {
 		w.y = area.y + (i / cols) * area.h / rows
 		w.w = app.width / cols
 		w.h = area.h / rows
-		w.bound_size()
+		w.fit_window(area)
 	}
 	app.dirty = true
 }
@@ -269,7 +282,7 @@ pub fn (mut app App) cascade() {
 		w.y = area.y + i % max(1, area.h / 3)
 		w.w = app.width * 2 / 3
 		w.h = area.h * 2 / 3
-		w.bound_size()
+		w.fit_window(area)
 	}
 	app.dirty = true
 }
@@ -369,6 +382,7 @@ fn (mut app App) focus_next(back bool) {
 
 pub fn (mut app App) begin_placement(mut w Ctl, resize bool) {
 	if w.maximized || w.minimized { return }
+	w.fit_window(app.work_area())
 	app.placement = &w
 	app.placement_resize = resize
 	app.placement_start = w.rect()

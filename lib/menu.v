@@ -64,12 +64,12 @@ fn (mut app App) layout_popups() {
 		app.close_popups()
 		return
 	}
-	area := if anchored || app.bar_top {
-		app.work_area()
-	} else {
-		Rect{0, 0, app.width, app.height}
+	area := app.work_area()
+	if area.h < 3 {
+		app.close_popups()
+		return
 	}
-	height := max(1, area.h)
+	height := area.h
 	for i, mut p in app.popups {
 		mut width := 8
 		for item in p.link.kids { width = max(width, text_width(item.text) + 4) }

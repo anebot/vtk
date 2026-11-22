@@ -187,3 +187,116 @@ fn test_terminal_resize_preserves_minimum_sizes_and_cancels_stale_placement() {
 	app.dispatch(Event{ key: int(Key.escape) })
 	assert w.rect() == Rect{0, 1, 24, 6}
 }
+
+fn test_new_windows_and_bar_changes_keep_the_whole_frame_in_the_workspace() {
+	for bar_top in [false, true] {
+		mut app := new_app()
+		app.bar_top = bar_top
+		mut w := app.window('Oversized', 100, 40)
+		assert w.rect() == Rect{0, if bar_top { 1 } else { 0 }, 80, 23}
+		w.x = 10
+		w.y = 20
+		w.w = 30
+		w.h = 4
+		app.redraw()
+		assert w.y == if bar_top { 20 } else { 19 }
+		app.bar_top = !bar_top
+		app.redraw()
+		assert w.y + w.h <= if app.bar_top { 24 } else { 23 }
+		app.bar_always = false
+		w.x = 0
+		w.y = 0
+		w.w = 80
+		w.h = 24
+		app.redraw()
+		assert w.rect() == Rect{0, 0, 80, 24}
+		mut second := app.window('Minimized', 20, 5)
+		app.minimize(mut second)
+		app.redraw()
+		assert w.rect() == Rect{0, if app.bar_top { 1 } else { 0 }, 80, 23}
+	}
+}
+
+fn test_mouse_and_keyboard_moves_keep_the_whole_window_above_or_below_the_bar() {
+	for bar_top in [false, true] {
+		mut app := new_app()
+		app.bar_top = bar_top
+		mut w := app.window('Move', 30, 8)
+		app.redraw()
+		app.dispatch(Event{ kind: .mouse, x: w.x + 5, y: w.y, button: .left, pressed: true })
+		app.dispatch(Event{ kind: .mouse, x: 200, y: 200, button: .left, pressed: true, motion: true })
+		assert w.rect() == Rect{50, if bar_top { 16 } else { 15 }, 30, 8}
+		app.dispatch(Event{ kind: .mouse, x: -100, y: -100, button: .left, pressed: true, motion: true })
+		assert w.rect() == Rect{0, if bar_top { 1 } else { 0 }, 30, 8}
+		app.dispatch(Event{ kind: .mouse, button: .left })
+		app.begin_placement(mut w, false)
+		for _ in 0 .. 30 {
+			app.dispatch(Event{ key: int(Key.right), shift: true })
+			app.dispatch(Event{ key: int(Key.down), shift: true })
+		}
+		assert w.rect() == Rect{50, if bar_top { 16 } else { 15 }, 30, 8}
+		app.dispatch(Event{ key: int(Key.escape) })
+		assert w.rect() == Rect{0, if bar_top { 1 } else { 0 }, 30, 8}
+		app.begin_placement(mut w, false)
+		app.dispatch(Event{ kind: .mouse, x: 200, y: 200, button: .left, pressed: true })
+		assert w.rect() == Rect{50, if bar_top { 16 } else { 15 }, 30, 8}
+	}
+}
+
+fn test_frame_and_placement_resize_respect_the_bar_and_preserve_the_fixed_edges() {
+	for bar_top in [false, true] {
+		mut app := new_app()
+		app.bar_top = bar_top
+		mut w := app.window('Resize', 30, 8)
+		w.x = 10
+		w.y = 5
+		app.redraw()
+		app.dispatch(Event{ kind: .mouse, x: 39, y: 12, button: .left, pressed: true })
+		app.dispatch(Event{ kind: .mouse, x: 200, y: 200, button: .left, pressed: true, motion: true })
+		assert w.rect() == Rect{10, 5, 70, if bar_top { 19 } else { 18 }}
+		app.dispatch(Event{ kind: .mouse, button: .left })
+		w.layout(Rect{10, 5, 30, 8})
+		app.dispatch(Event{ kind: .mouse, x: 10, y: 5, button: .left, pressed: true })
+		app.dispatch(Event{ kind: .mouse, x: -100, y: -100, button: .left, pressed: true, motion: true })
+		assert w.rect() == Rect{0, if bar_top { 1 } else { 0 }, 40, if bar_top { 12 } else { 13 }}
+		app.dispatch(Event{ kind: .mouse, button: .left })
+		w.layout(Rect{10, 5, 30, 8})
+		app.begin_placement(mut w, true)
+		for _ in 0 .. 30 {
+			app.dispatch(Event{ key: int(Key.right), shift: true })
+			app.dispatch(Event{ key: int(Key.down), shift: true })
+		}
+		assert w.rect() == Rect{10, 5, 70, if bar_top { 19 } else { 18 }}
+		app.dispatch(Event{ key: int(Key.escape) })
+		assert w.rect() == Rect{10, 5, 30, 8}
+		app.begin_placement(mut w, true)
+		app.dispatch(Event{ kind: .mouse, x: 200, y: 200, button: .left, pressed: true })
+		assert w.rect() == Rect{10, 5, 70, if bar_top { 19 } else { 18 }}
+	}
+}
+
+fn test_tiling_and_cascading_keep_minimum_sized_windows_inside_the_workspace() {
+	for bar_top in [false, true] {
+		mut app := new_app()
+		app.height = 10
+		app.bar_top = bar_top
+		for i in 0 .. 4 {
+			mut w := app.window('Window ${i}', 30, 6)
+			w.set_size_limits(20, 6, 0, 0)
+		}
+		for side in [TileSide.left, .right, .top, .bottom] {
+			for mut w in app.windows.clone() { app.tile_side(mut w, side) }
+			for w in app.windows {
+				assert w.y >= int(bar_top) && w.y + w.h <= 9 + int(bar_top)
+			}
+		}
+		app.tile()
+		for w in app.windows {
+			assert w.y >= int(bar_top) && w.y + w.h <= 9 + int(bar_top)
+		}
+		app.cascade()
+		for w in app.windows {
+			assert w.y >= int(bar_top) && w.y + w.h <= 9 + int(bar_top)
+		}
+	}
+}
