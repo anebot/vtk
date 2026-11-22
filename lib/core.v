@@ -148,6 +148,7 @@ pub mut:
 	term          &Terminal = unsafe { nil }
 mut:
 	modal_parent  &Ctl = unsafe { nil }
+	window_order  int
 }
 
 pub struct Rect {
@@ -304,6 +305,7 @@ mut:
 	placement_start  Rect
 	settings_path    string
 	bar_offset       int
+	next_window_order int
 	app_popup        &Ctl = unsafe { nil }
 	popup_at_bar     bool
 	mouse_x          int = -1

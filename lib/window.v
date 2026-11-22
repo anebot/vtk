@@ -12,7 +12,8 @@ pub enum TileSide {
 
 pub fn (mut app App) window(title string, width int, height int) &Ctl {
 	offset := (app.windows.len * 2) % 10
-	mut w := &Ctl{ kind: .window, text: title, x: 2 + offset, y: 1 + offset / 2, w: max(minimum_window_width, width), h: max(minimum_window_height, height), min_w: minimum_window_width, min_h: minimum_window_height }
+	app.next_window_order++
+	mut w := &Ctl{ kind: .window, text: title, x: 2 + offset, y: 1 + offset / 2, w: max(minimum_window_width, width), h: max(minimum_window_height, height), min_w: minimum_window_width, min_h: minimum_window_height, window_order: app.next_window_order }
 	app.windows << w
 	app.raise(mut w)
 	return w
@@ -56,6 +57,10 @@ pub fn (mut app App) raise(mut w Ctl) {
 		mut dialog := blocked
 		app.raise(mut dialog)
 		return
+	}
+	if w.window_order == 0 {
+		app.next_window_order++
+		w.window_order = app.next_window_order
 	}
 	for i, window in app.windows {
 		if window == &w {

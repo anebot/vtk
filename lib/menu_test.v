@@ -188,10 +188,45 @@ fn test_bar_window_menu_targets_the_clicked_window_without_raising_it() {
 		app.dispatch(Event{ key: int(Key.escape) })
 		app.dispatch(Event{ kind: .mouse, x: 9, y: app.bar_y(), button: .left, pressed: true })
 		assert app.top_window() == first && app.popups.len == 0
-		app.dispatch(Event{ kind: .mouse, x: 7, y: app.bar_y(), button: .left, pressed: true })
+		app.dispatch(Event{ kind: .mouse, x: 15, y: app.bar_y(), button: .left, pressed: true })
 		for _ in 0 .. 5 { app.dispatch(Event{ key: int(Key.down) }) }
 		app.dispatch(Event{ key: int(Key.enter) })
 		assert second.closed && !first.closed && app.top_window() == first
+	}
+}
+
+fn test_window_bar_keeps_creation_order_when_windows_are_raised_minimized_or_pinned() {
+	for bar_top in [false, true] {
+		mut app := new_app()
+		app.bar_top = bar_top
+		mut first := app.window('One', 30, 8)
+		mut second := app.window('Two', 30, 8)
+		mut third := app.window('Tri', 30, 8)
+		mut raised := [first, second, third, first]
+		for mut window in raised {
+			app.raise(mut window)
+			app.redraw()
+			row := app.bar_y() * app.width
+			assert app.screen.cells[row + 6..row + 30].map(it.glyph).join('') == '[= One] [= Two] [= Tri] '
+		}
+		app.minimize(mut first)
+		app.dispatch(Event{ kind: .mouse, x: 9, y: app.bar_y(), button: .left, pressed: true })
+		assert app.top_window() == first && !first.minimized
+		app.always_on_top(mut first, true)
+		app.raise(mut third)
+		app.redraw()
+		row := app.bar_y() * app.width
+		assert app.screen.cells[row + 6..row + 30].map(it.glyph).join('') == '[= One] [= Two] [= Tri] '
+		app.dispatch(Event{ kind: .mouse, x: 15, y: app.bar_y(), button: .left, pressed: true })
+		assert app.popups[0].link.kids[0].link == second
+		app.close_popups()
+		app.close(mut first)
+		app.redraw()
+		assert app.screen.cells[row + 6..row + 22].map(it.glyph).join('') == '[= Two] [= Tri] '
+		app.destroy_ctl(mut second)
+		app.window('New', 30, 8)
+		app.redraw()
+		assert app.screen.cells[row + 6..row + 22].map(it.glyph).join('') == '[= Tri] [= New] '
 	}
 }
 

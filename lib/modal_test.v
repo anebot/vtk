@@ -35,6 +35,7 @@ fn check_settings_modality(mut app App) {
 	mut field := entry('unchanged', 0)
 	created.add(mut field)
 	assert app.blocker(created) == settings && app.top_window() == settings
+	assert app.bar_windows().last() == created
 	app.always_on_top(mut created, true)
 	app.set_focus(field)
 	assert app.top_window() == settings && app.focus.owner_window() == settings

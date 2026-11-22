@@ -182,6 +182,7 @@ The title controls are selected with `window_menu`, `window_minimize`,
 `window_maximize`, `window_close`, or their bitwise combination.
 Window buttons in the app bar use `[= AppName]`: click `=` for the window's
 actions menu, or its name to raise it and restore it from minimized state.
+Buttons keep their creation order when windows are raised, minimized or pinned.
 
 Tab / Shift-Tab cycle focus; Ctrl-Tab / Ctrl-Shift-Tab cycle windows.
 F10 or Alt-M opens the window menubar. Ctrl-G opens the system menu and

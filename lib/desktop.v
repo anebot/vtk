@@ -42,6 +42,12 @@ fn (app &App) bar_buttons_rect() Rect {
 	return Rect{x, app.bar_y(), max(0, app.width - x - clock_width), 1}
 }
 
+fn (app &App) bar_windows() []&Ctl {
+	mut windows := app.windows.filter(!it.closed && (app.desktop || it.minimized))
+	windows.sort(a.window_order < b.window_order)
+	return windows
+}
+
 fn (mut app App) draw_bar() {
 	if app.bar_height() == 0 { return }
 	t := app.theme
@@ -51,8 +57,7 @@ fn (mut app App) draw_bar() {
 	buttons := app.bar_buttons_rect()
 	mut x := buttons.x - app.bar_offset
 	old := app.screen.set_clip(buttons)
-	for w in app.windows {
-		if w.closed || (!app.desktop && !w.minimized) { continue }
+	for w in app.bar_windows() {
 		text := '[= ${w.text}] '
 		app.screen.text(x, y, text, if w == app.top_window() { t.sel_fg } else { t.bar_fg }, if w == app.top_window() {
 			t.sel_bg
@@ -158,8 +163,7 @@ fn (mut app App) bar_mouse(e Event) bool {
 	buttons := app.bar_buttons_rect()
 	if !buttons.contains(e.x, e.y) { return true }
 	mut x := buttons.x - app.bar_offset
-	for mut w in app.windows.clone() {
-		if w.closed || (!app.desktop && !w.minimized) { continue }
+	for mut w in app.bar_windows() {
 		width := text_width(w.text) + 5
 		if e.x >= x && e.x < x + width {
 			if e.button == .right || (e.button == .left && e.x == x + 1) {
