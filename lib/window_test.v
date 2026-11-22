@@ -141,10 +141,11 @@ fn test_title_gradient_covers_text_controls_and_both_ends_of_the_titlebar() {
 			row := w.y * app.width + w.x
 			cells := app.screen.cells[row..row + w.w].clone()
 			assert cells[0].bg != cells.last().bg
-			for i, cell in cells {
+			assert color_as_rgb(cells[0].bg) == color_as_rgb(background)
+			assert cells.last().bg == if active { app.theme.title_bg_end } else { app.theme.inactive_title_bg_end }
+			for cell in cells {
 				assert cell.fg == if active { app.theme.title } else { app.theme.inactive_title }
 				assert cell.bg & 0x1000000 != 0
-				if i > 0 { assert (cell.bg & 0xffffff) <= (cells[i - 1].bg & 0xffffff) }
 			}
 			assert cells[0].glyph == ' ' && cells.last().glyph == ' '
 			assert cells[6..14].map(it.glyph).join('') == 'Gradient'

@@ -293,6 +293,23 @@ pub fn (mut app App) file_pick_for(owner &Ctl, directory string) ?string {
 	return result
 }
 
+@[heap]
+struct ColorPicker {
+mut:
+	sliders []&Ctl
+	preview &Ctl = unsafe { nil }
+}
+
+fn draw_color_preview(mut c Ctl, mut screen Screen) {
+	screen.fill(c.rect(), ` `, c.value, c.value)
+}
+
+fn color_picker_changed(mut c Ctl, mut app App) {
+	mut picker := unsafe { &ColorPicker(c.user) }
+	picker.preview.value = color_rgb(picker.sliders[0].value, picker.sliders[1].value, picker.sliders[2].value)
+	app.dirty = true
+}
+
 // Returns an RGB value (0xRRGGBB), or none on cancel.
 pub fn (mut app App) color_pick(owner &Ctl, title string, rgb int) ?int {
 	mut body := box(true)
@@ -303,11 +320,21 @@ pub fn (mut app App) color_pick(owner &Ctl, title string, rgb int) ?int {
 	mut b := slider(0, 255)
 	b.value = rgb & 255
 	mut sliders := [r, g, b]
+	mut preview := canvas(4, 2, draw_color_preview)
+	preview.value = 0x1000000 | rgb
+	picker := &ColorPicker{ sliders: sliders, preview: preview }
 	for i, mut ctl in sliders {
+		ctl.user = picker
+		ctl.changed = color_picker_changed
 		mut name := label(['Red', 'Green', 'Blue'][i])
 		body.add(mut name)
 		body.add(mut ctl)
 	}
+	mut preview_row := box(false)
+	mut preview_label := label('Preview:')
+	preview_row.add(mut preview_label)
+	preview_row.add(mut preview)
+	body.add(mut preview_row)
 	mut row := button_bar()
 	mut ok := dialog_button('OK', true)
 	mut cancel := dialog_button('Cancel', false)

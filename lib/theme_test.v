@@ -10,8 +10,10 @@ fn test_titlebar_colors_roundtrip_through_settings_and_older_settings_still_load
 	app.settings_file(path)
 	app.theme.title = color_rgb(240, 245, 250)
 	app.theme.title_bg = color_rgb(40, 60, 80)
+	app.theme.title_bg_end = color_rgb(20, 100, 160)
 	app.theme.inactive_title = color_rgb(180, 190, 200)
 	app.theme.inactive_title_bg = color_rgb(30, 35, 40)
+	app.theme.inactive_title_bg_end = color_rgb(70, 80, 90)
 	app.theme.focus_fg = color_rgb(240, 245, 250)
 	app.theme.focus_bg = color_rgb(35, 55, 75)
 	app.theme.desk_bg = color_rgb(15, 25, 35)
@@ -28,6 +30,12 @@ fn test_titlebar_colors_roundtrip_through_settings_and_older_settings_still_load
 	assert loaded.theme.title == bright_white && loaded.theme.bg == black
 	assert loaded.theme.title_bg == blue && loaded.theme.focus_fg == bright_white
 	assert loaded.theme.inactive_title_bg == theme_default().inactive_title_bg
+	assert loaded.theme.title_bg_end == theme_preset(.light).title_bg_end
+	os.write_file(path, '[vtk]\ninactive_title = 7\ninactive_title_bg = 0\n') or { panic(err) }
+	loaded.settings_load() or { panic(err) }
+	assert loaded.theme.inactive_title == black
+	assert loaded.theme.inactive_title_bg != black
+	assert loaded.theme.inactive_title_bg_end != loaded.theme.inactive_title_bg
 }
 
 // Reference xterm colors for the ANSI presets; Dark and Modern specify RGB.
@@ -44,12 +52,14 @@ fn theme_test_luminance(color int) f64 {
 }
 
 fn test_presets_keep_text_readable_on_each_assigned_background() {
-	for preset in [Preset.borland, .light_borland, .dark, .light, .teal, .modern, .serial] {
+	for i in 0 .. theme_names.len {
+		preset := unsafe { Preset(i) }
 		t := theme_preset(preset)
 		for pair in [[t.fg, t.bg], [t.btn_fg, t.btn_bg], [t.focus_fg, t.focus_bg],
 			[t.field_fg, t.field_bg], [t.sel_fg, t.sel_bg], [t.bar_fg, t.bar_bg],
 			[t.menu_fg, t.menu_bg], [t.tool_fg, t.tool_bg], [t.title, t.title_bg],
-			[t.inactive_title, t.inactive_title_bg], [t.accent, t.bg], [t.dim, t.bg]] {
+			[t.title, t.title_bg_end], [t.inactive_title, t.inactive_title_bg],
+			[t.inactive_title, t.inactive_title_bg_end], [t.accent, t.bg], [t.dim, t.bg]] {
 			fg, bg := theme_test_luminance(pair[0]), theme_test_luminance(pair[1])
 			ratio := if fg > bg { (fg + 0.05) / (bg + 0.05) } else { (bg + 0.05) / (fg + 0.05) }
 			assert ratio >= 4.5, '${preset}: ${pair} has contrast ${ratio}'
@@ -60,7 +70,8 @@ fn test_presets_keep_text_readable_on_each_assigned_background() {
 fn theme_test_cell(_ &Ctl, _ int, _ int) string { return 'Project' }
 
 fn test_controls_use_matching_foreground_and_background_roles() {
-	for preset in [Preset.borland, .light_borland, .dark, .light, .teal, .modern, .serial] {
+	for i in 0 .. theme_names.len {
+		preset := unsafe { Preset(i) }
 		mut app := new_app()
 		app.theme = theme_preset(preset)
 		app.screen.resize(80, 24)

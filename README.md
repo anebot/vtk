@@ -207,19 +207,22 @@ Settings use **`~/vtk.ini`**, with a `[vtk]` section. `app.settings_file(path)`
 overrides the location. Enable **Window bar at top** to place the `[App]` bar
 on the first screen line, with its menus opening downward. The default is the
 bottom line; `app.bar_top` (or `bar_top = 1` in the INI file) controls placement.
-Settings include a desktop background color picker and optional window title
-gradients. Apply previews changes; Save also keeps them for future sessions.
+Settings include a desktop background color picker with live color swatches and
+optional window title gradients. Active and inactive titles have separate gradient
+colors. Apply previews changes; Save also keeps them for future sessions.
 Settings persist theme colors, the bar position, visibility and clock,
 shadows, inactive dimming, mouse cursor visibility, Vim mode, and move/resize
-bindings. Theme presets are Borland, Light Borland, Dark, Light, Teal, Modern
-and Serial. `app.theme`
-can be edited directly. Window titlebars use `title` and `title_bg`; dimmed
-inactive titlebars use `inactive_title` and `inactive_title_bg`. The title and
-window buttons share a solid background, separate from the body and frame.
+bindings. Theme presets are Borland, Light Borland, Dark, Light, Teal, Modern,
+Serial and `wineight`. Selecting `wineight` enables title gradients and uses a
+Windows 98-style RGB palette: teal desktop, silver controls, white fields, navy
+selections and blue active titles. Inactive titles fade from gray to silver.
+`app.theme` can be edited directly. Window titlebars use `title`, `title_bg` and
+`title_bg_end`; dimmed inactive titles use `inactive_title`, `inactive_title_bg`
+and `inactive_title_bg_end`. Gradients span the title and its window buttons.
 Focused controls use the `focus_fg` and `focus_bg` pair. Dark and Modern use
 RGB palettes for consistent contrast across terminal color schemes.
 `color_rgb` and `color_256` provide extended colors;
-Serial uses basic ANSI colors and ASCII fallbacks.
+Serial uses basic ANSI colors and ASCII fallbacks when gradients are off.
 
 ## Editing and rendering
 

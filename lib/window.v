@@ -321,12 +321,11 @@ fn (mut app App) draw_window(mut w Ctl) {
 	app.screen.aligned_text(w.x + 5, w.y, max(0, title_end - w.x - 5), ' ${w.text} ', .left, title_fg, title_bg, bold)
 	if app.title_gradient && w.y >= 0 && w.y < app.screen.height {
 		rgb := color_as_rgb(title_bg)
+		end := color_as_rgb(if active || !app.dim_inactive { t.title_bg_end } else { t.inactive_title_bg_end })
 		for column in max(0, w.x) .. min(app.screen.width, w.x + w.w) {
 			if !app.screen.clip.contains(column, w.y) { continue }
-			shade := 100 - 30 * (column - w.x) / max(1, w.w - 1)
-			app.screen.cells[w.y * app.screen.width + column].bg = color_rgb(
-				((rgb >> 16) & 255) * shade / 100,
-				((rgb >> 8) & 255) * shade / 100, (rgb & 255) * shade / 100)
+			app.screen.cells[w.y * app.screen.width + column].bg = color_blend(rgb, end,
+				column - w.x, max(1, w.w - 1))
 		}
 	}
 	inside := app.screen.set_clip(Rect{w.x + 1, w.y + 1, w.w - 2, w.h - 2})

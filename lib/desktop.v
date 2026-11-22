@@ -234,6 +234,17 @@ pub fn (mut app App) settings_load() ! {
 			else if t.focus_bg == t.bg { t.fg }
 			else { t.btn_fg }
 	}
+	if !theme_fields['title_bg_end'] {
+		app.theme.title_bg_end = default_title_gradient_end(app.theme.title_bg, app.theme.title, false)
+	}
+	if !theme_fields['inactive_title_bg_end'] {
+		if app.theme.inactive_title_bg == black {
+			t := theme_default()
+			app.theme.inactive_title = t.inactive_title
+			app.theme.inactive_title_bg = t.inactive_title_bg
+		}
+		app.theme.inactive_title_bg_end = default_title_gradient_end(app.theme.inactive_title_bg, app.theme.inactive_title, true)
+	}
 	app.set_keys(move, resize)
 	app.dirty = true
 }
@@ -286,6 +297,7 @@ mut:
 	palette      Theme
 	theme        &Ctl = unsafe { nil }
 	desktop      &Ctl = unsafe { nil }
+	desktop_preview &Ctl = unsafe { nil }
 	bar          &Ctl = unsafe { nil }
 	bar_top      &Ctl = unsafe { nil }
 	clock        &Ctl = unsafe { nil }
@@ -300,11 +312,13 @@ mut:
 
 fn (mut s Settings) update_desktop_color() {
 	s.desktop.set_text('#${color_as_rgb(s.palette.desk_bg):06x}...')
+	s.desktop_preview.value = s.palette.desk_bg
 }
 
 fn settings_theme_changed(mut c Ctl, mut app App) {
 	mut s := unsafe { &Settings(c.user) }
-	s.palette = theme_preset(unsafe { Preset(clamp(c.value, 0, 6)) })
+	s.palette = theme_preset(unsafe { Preset(clamp(c.value, 0, theme_names.len - 1)) })
+	if c.value == int(Preset.wineight) { s.gradient.value = 1 }
 	s.update_desktop_color()
 	app.dirty = true
 }
@@ -374,11 +388,11 @@ pub fn (mut app App) settings_dialog() {
 	body.add(mut spacer)
 	s.theme = combo()
 	s.theme.text_align = .center
-	for name in ['Borland', 'Light Borland', 'Dark', 'Light', 'Teal', 'Modern', 'Serial'] {
+	for name in theme_names {
 		s.theme.add_item(name)
 	}
 	s.theme.value = 0
-	for i in 0 .. 7 {
+	for i in 0 .. theme_names.len {
 		preset := theme_preset(unsafe { Preset(i) })
 		if Theme{ ...app.theme, desk_bg: preset.desk_bg } == preset { s.theme.value = i }
 	}
@@ -396,8 +410,10 @@ pub fn (mut app App) settings_dialog() {
 	s.desktop = button('')
 	s.desktop.user = s
 	s.desktop.changed = settings_desktop_color
-	s.update_desktop_color()
 	desktop_row.add(mut s.desktop)
+	s.desktop_preview = canvas(2, 1, draw_color_preview)
+	desktop_row.add(mut s.desktop_preview)
+	s.update_desktop_color()
 	body.add(mut desktop_row)
 	s.bar = checkbox('Always show window bar', app.bar_always)
 	s.bar_top = checkbox('Window bar at top', app.bar_top)

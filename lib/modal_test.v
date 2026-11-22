@@ -121,7 +121,12 @@ fn choose_settings_desktop_color(mut app App) {
 	assert picker.text == 'Desktop background' && picker.modal_owner.text == 'Settings'
 	mut sliders := picker.kids[0].kids.filter(it.kind == .slider)
 	assert sliders.map(it.value) == [12, 34, 56]
-	for i, mut slider in sliders { slider.value = [65, 43, 21][i] }
+	preview := picker.kids[0].kids[6].kids[1]
+	app.redraw()
+	assert app.screen.cells[preview.y * app.width + preview.x].bg == color_rgb(12, 34, 56)
+	for i, mut slider in sliders { slider.set_value([65, 43, 21][i], mut app) }
+	app.redraw()
+	assert app.screen.cells[preview.y * app.width + preview.x].bg == color_rgb(65, 43, 21)
 	app.set_focus(picker.link)
 	app.dispatch(Event{ key: int(Key.enter) })
 }
@@ -148,6 +153,8 @@ fn change_settings_appearance(mut app App) {
 	assert app.theme.bg == theme_preset(.dark).bg
 	app.redraw()
 	assert app.screen.cells[0].bg == app.theme.desk_bg
+	swatch := body.kids[2].kids[2]
+	assert app.screen.cells[swatch.y * app.width + swatch.x].bg == app.theme.desk_bg
 	app.set_focus(buttons[1])
 	app.dispatch(Event{ key: int(Key.enter) })
 	app.close(mut settings)
@@ -170,6 +177,14 @@ fn check_saved_settings_appearance_and_reset(mut app App) {
 	app.set_focus(buttons[0])
 	app.dispatch(Event{ key: int(Key.enter) })
 	assert app.theme == theme_preset(.light)
+	app.set_focus(theme)
+	app.dispatch(Event{ key: int(Key.down) })
+	for _ in 0 .. theme.kids.len { app.dispatch(Event{ key: int(Key.down) }) }
+	app.dispatch(Event{ key: int(Key.enter) })
+	assert theme.kids[theme.value].text == 'wineight' && gradient.value == 1
+	app.set_focus(buttons[0])
+	app.dispatch(Event{ key: int(Key.enter) })
+	assert app.theme == theme_preset(.wineight) && app.title_gradient
 	app.set_focus(buttons[2])
 	app.dispatch(Event{ key: int(Key.enter) })
 	assert app.theme == theme_default() && !app.title_gradient && gradient.value == 0
