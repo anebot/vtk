@@ -15,7 +15,7 @@ fn test_window_titles_stop_before_controls_and_preserve_the_frame() {
 	w.controls = 0
 	app.redraw()
 	assert app.screen.cells[row + 38].glyph == 'X'
-	assert app.screen.cells[row + 39].glyph == '╗'
+	assert app.screen.cells[row + 39].glyph == ' '
 	w.controls = window_default_controls
 	w.set_text('界'.repeat(80))
 	app.redraw()
@@ -33,18 +33,18 @@ fn test_window_titlebars_use_their_own_colors_and_clear_the_top_frame_line() {
 	mut first := app.window('Title', 40, 8)
 	app.redraw()
 	row := first.y * app.width + first.x
-	for cell in app.screen.cells[row + 1..row + first.w - 1] {
+	for cell in app.screen.cells[row..row + first.w] {
 		assert cell.bg == app.theme.title_bg && cell.fg == app.theme.title
 		assert cell.glyph != '═'
 	}
 	assert app.screen.cells[row + 4].glyph == ' '
-	assert app.screen.cells[row].glyph == '╔' && app.screen.cells[row + 39].glyph == '╗'
+	assert app.screen.cells[row].glyph == ' ' && app.screen.cells[row + 39].glyph == ' '
 	assert app.screen.cells[row + app.width + 1].bg == app.theme.bg
 	mut second := app.window('Active', 20, 6)
 	second.x = 50
 	second.y = 10
 	app.redraw()
-	for cell in app.screen.cells[row + 1..row + first.w - 1] {
+	for cell in app.screen.cells[row..row + first.w] {
 		assert cell.bg == app.theme.inactive_title_bg && cell.fg == app.theme.inactive_title
 	}
 	app.dim_inactive = false
@@ -213,7 +213,7 @@ fn test_terminal_resize_preserves_minimum_sizes_and_cancels_stale_placement() {
 	assert isnil(app.placement) && isnil(app.drag) && isnil(app.scroll_drag)
 	assert w.rect() == Rect{0, 1, 24, 6}
 	app.redraw()
-	assert app.screen.cells[app.width..app.width + 4].map(it.glyph).join('') == '╔[=]'
+	assert app.screen.cells[app.width..app.width + 4].map(it.glyph).join('') == ' [=]'
 	app.dispatch(Event{ kind: .resize, width: 80, height: 24 })
 	app.dispatch(Event{ key: int(Key.escape) })
 	assert w.rect() == Rect{0, 1, 24, 6}

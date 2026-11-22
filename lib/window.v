@@ -295,7 +295,7 @@ fn (mut app App) draw_window(mut w Ctl) {
 	title_bg := if active || !app.dim_inactive { t.title_bg } else { t.inactive_title_bg }
 	app.screen.fill(w.rect(), ` `, t.fg, t.bg)
 	app.screen.frame(w.rect(), true, frame, t.bg)
-	app.screen.fill(Rect{w.x + 1, w.y, w.w - 2, 1}, ` `, title_fg, title_bg)
+	app.screen.fill(Rect{w.x, w.y, w.w, 1}, ` `, title_fg, title_bg)
 	if w.controls & window_menu != 0 { app.screen.text(w.x + 1, w.y, '[=]', title_fg, title_bg, 0) }
 	mut title_end := w.x + w.w - 1
 	mut x := w.x + w.w - 4
