@@ -102,13 +102,23 @@ pub fn (mut c Ctl) measure() {
 			}
 			if c.vertical { h++ } else { w++ }
 		}
-		.group, .tabs {
+		.group {
 			w = text_width(c.text) + 4
 			h = 2
 			for child in c.kids {
 				w = max(w, child.pw + 2)
 				h = max(h, child.ph + 2)
 			}
+		}
+		.tabs {
+			mut headers := 2
+			h = 3
+			for page in c.kids {
+				headers += text_width(page.text) + 5
+				w = max(w, page.pw + 2)
+				h = max(h, page.ph + 3)
+			}
+			w = max(w, headers)
 		}
 		.scroll {
 			w = 16
@@ -311,10 +321,14 @@ pub fn (mut c Ctl) layout(r Rect) {
 				for i, mut page in c.kids {
 					page.hidden = i != c.value
 					page.tab_x = x
-					page.tab_w = text_width(page.text) + 2
+					page.tab_w = min(text_width(page.text) + 4, max(0, c.w - 3))
 					x += page.tab_w + 1
-					if !page.hidden { page.layout(Rect{c.x + 1, c.y + 1, c.w - 2, c.h - 2}) }
+					if !page.hidden { page.layout(Rect{c.x + 1, c.y + 2, c.w - 2, c.h - 3}) }
 				}
+				// Keep the selected header visible when the strip is wider than the pane.
+				selected := c.kids[c.value]
+				offset := max(0, selected.tab_x + selected.tab_w - (c.x + c.w - 1))
+				for mut page in c.kids { page.tab_x -= offset }
 			} else {
 				padding := if c.kind == .group { 1 } else { 0 }
 				for mut child in kids {

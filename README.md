@@ -95,6 +95,11 @@ are right-aligned and bottom-docked. A split's `value` in `1..999` specifies
 the first pane's share in thousandths; zero uses its preferred size. Layout
 and hit testing exclude hidden controls and inactive tab pages.
 
+Tabs use a two-row header with rounded UTF-8 outlines (ASCII borders in
+Serial mode). The selected tab opens into its page and uses bold accent text,
+keeping the page's background even when focused. Narrow strips keep the
+selected header visible, clipping long titles inside their outlines.
+
 Comboboxes support `control.text_align = .left`, `.center`, or `.right` for
 the selected value and dropdown choices; left is the default. Alignment uses
 terminal cell widths and keeps the dropdown arrow fixed at the right edge.

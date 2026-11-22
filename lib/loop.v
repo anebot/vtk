@@ -661,6 +661,7 @@ fn (mut app App) mouse(e Event) {
 		.combo { app.open_menu(c, c.x, c.y + 1) }
 		.radio { c.set_value(clamp(e.y - c.y, 0, c.kids.len - 1), mut app) }
 		.tabs {
+			if e.y >= c.y + 2 { return }
 			for i, page in c.kids {
 				if e.x >= page.tab_x && e.x < page.tab_x + page.tab_w {
 					c.value = i

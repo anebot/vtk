@@ -246,13 +246,30 @@ fn (mut app App) draw_ctl(mut c Ctl) {
 			app.draw_scrollbar(c, rows.len, c.h, 0)
 		}
 		.tabs {
-			app.screen.frame(c.rect(), false, t.dim, bg)
-			for i, mut page in c.kids {
-				app.screen.text(page.tab_x, c.y, ' ${page.text} ', if i == c.value {
-					fg
+			app.screen.fill(Rect{c.x, c.y, c.w, 1}, ` `, fg, bg)
+			app.screen.frame(Rect{c.x, c.y + 1, c.w, c.h - 1}, false, t.dim, bg)
+			clip := app.screen.set_clip(Rect{c.x + 1, c.y, max(0, c.w - 2), 2})
+			for i, page in c.kids {
+				if page.tab_w < 4 { continue }
+				selected := i == c.value
+				tab_fg := if selected && !c.disabled { t.accent } else { t.dim }
+				attr := if selected { bold } else { 0 }
+				app.screen.fill(Rect{page.tab_x, c.y, page.tab_w, 1}, ` `, tab_fg, bg)
+				app.screen.put(page.tab_x, c.y, `╭`, tab_fg, bg, attr)
+				app.screen.aligned_text(page.tab_x + 2, c.y, page.tab_w - 4, page.text, .left, tab_fg, bg, attr)
+				app.screen.put(page.tab_x + page.tab_w - 1, c.y, `╮`, tab_fg, bg, attr)
+				if selected {
+					// The open bottom joins the selected tab to its page.
+					app.screen.fill(Rect{page.tab_x + 1, c.y + 1, page.tab_w - 2, 1}, ` `, fg, bg)
+					app.screen.put(page.tab_x, c.y + 1, `╯`, t.dim, bg, 0)
+					app.screen.put(page.tab_x + page.tab_w - 1, c.y + 1, `╰`, t.dim, bg, 0)
 				} else {
-					t.dim
-				}, bg, if i == c.value { bold } else { 0 })
+					app.screen.put(page.tab_x, c.y + 1, `┴`, t.dim, bg, 0)
+					app.screen.put(page.tab_x + page.tab_w - 1, c.y + 1, `┴`, t.dim, bg, 0)
+				}
+			}
+			app.screen.restore_clip(clip)
+			for mut page in c.kids {
 				if !page.hidden { app.draw_ctl(mut page) }
 			}
 		}
