@@ -369,6 +369,65 @@ fn test_mouse_and_keyboard_moves_keep_the_whole_window_above_or_below_the_bar() 
 	}
 }
 
+fn test_maximized_corner_drag_resizes_from_current_bounds_and_preserves_the_opposite_corner() {
+	for bar_top in [false, true] {
+		for from_left in [false, true] {
+			for from_top in [false, true] {
+				mut app := new_app()
+				app.bar_top = bar_top
+				mut w := app.window('Maximized', 30, 8)
+				app.maximize(mut w)
+				area := app.work_area()
+				x := if from_left { w.x } else { w.x + w.w - 1 }
+				y := if from_top { w.y } else { w.y + w.h - 1 }
+				app.dispatch(Event{ kind: .mouse, x: x, y: y, button: .left, pressed: true })
+				app.dispatch(Event{ kind: .mouse, x: x, y: y, button: .left, pressed: true, motion: true })
+				assert w.maximized && w.rect() == area && app.drag == w
+				new_x := x + if from_left { 7 } else { -7 }
+				new_y := y + if from_top { 3 } else { -3 }
+				app.dispatch(Event{ kind: .mouse, x: new_x, y: new_y, button: .left, pressed: true, motion: true })
+				resized := Rect{area.x + if from_left { 7 } else { 0 },
+					area.y + if from_top { 3 } else { 0 }, area.w - 7, area.h - 3}
+				assert !w.maximized && w.rect() == resized
+				app.redraw()
+				assert w.rect() == resized
+				app.dispatch(Event{ kind: .mouse, x: new_x, y: new_y, button: .left })
+				assert isnil(app.drag)
+				app.maximize(mut w)
+				app.restore(mut w)
+				assert w.rect() == resized
+			}
+		}
+	}
+}
+
+fn test_maximized_frame_resize_respects_size_limits_and_only_unmaximizes_when_size_changes() {
+	mut app := new_app()
+	mut w := app.window('Maximized', 30, 8)
+	w.set_size_limits(24, 6, 50, 12)
+	app.maximize(mut w)
+	area := app.work_area()
+	app.dispatch(Event{ kind: .mouse, x: w.x, y: w.y, button: .left, pressed: true })
+	app.dispatch(Event{ kind: .mouse, x: 5, y: 2, button: .left, pressed: true, motion: true })
+	assert !w.maximized && w.rect() == Rect{30, area.y + area.h - 12, 50, 12}
+	app.dispatch(Event{ kind: .mouse, x: 200, y: 200, button: .left, pressed: true, motion: true })
+	assert w.rect() == Rect{56, area.y + area.h - 6, 24, 6}
+	app.dispatch(Event{ kind: .mouse, x: 200, y: 200, button: .left })
+	w.set_size_limits(16, 3, 0, 0)
+	app.maximize(mut w)
+	x, y := w.x + w.w - 1, w.y + w.h - 1
+	app.dispatch(Event{ kind: .mouse, x: x, y: y, button: .left, pressed: true })
+	app.dispatch(Event{ kind: .mouse, x: 200, y: 200, button: .left, pressed: true, motion: true })
+	assert w.maximized && w.rect() == area
+	app.dispatch(Event{ kind: .mouse, x: 200, y: 200, button: .left })
+	assert w.maximized && isnil(app.drag)
+	// Side borders resize only their horizontal axis.
+	app.dispatch(Event{ kind: .mouse, x: w.x, y: w.y + 3, button: .left, pressed: true })
+	app.dispatch(Event{ kind: .mouse, x: 10, y: w.y + 6, button: .left, pressed: true, motion: true })
+	assert !w.maximized && w.rect() == Rect{10, area.y, area.w - 10, area.h}
+	app.dispatch(Event{ kind: .mouse, x: 10, y: w.y + 6, button: .left })
+}
+
 fn test_frame_and_placement_resize_respect_the_bar_and_preserve_the_fixed_edges() {
 	for bar_top in [false, true] {
 		mut app := new_app()

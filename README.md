@@ -171,6 +171,7 @@ terminal while it retains focus can leave the last pointer position visible.
 Windows drag by their title, resize from the frame and support minimize,
 maximize, restore, tile, cascade, size limits and always-on-top ordering.
 Double-click a title to maximize the window; double-click again to restore it.
+Drag a maximized window's frame edge or corner to resize it from its current bounds.
 The minimum window size is 16 columns by 3 rows, including the frame.
 Opening, moving, resizing and arranging windows keep their full frames inside
 the workspace, respecting their size limits and the app bar at either edge.

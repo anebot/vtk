@@ -476,6 +476,7 @@ fn (mut app App) mouse(e Event) {
 		}
 		if e.motion {
 			dx, dy := e.x - app.drag_x, e.y - app.drag_y
+			if c.maximized && dx == 0 && dy == 0 { return }
 			if app.drag_mode == 0 {
 				c.x = app.drag_start.x + dx
 				c.y = app.drag_start.y + dy
@@ -488,7 +489,10 @@ fn (mut app App) mouse(e Event) {
 				if app.drag_mode & 8 == 0 {
 					height = app.drag_start.h + if app.drag_mode & 2 != 0 { -dy } else { dy }
 				}
+				was_maximized := c.maximized
+				c.maximized = false
 				c.resize_window(width, height, app.work_area(), app.drag_mode & 1 != 0, app.drag_mode & 2 != 0)
+				if was_maximized && c.rect() == app.drag_start { c.maximized = true }
 			}
 		}
 		return
@@ -573,7 +577,6 @@ fn (mut app App) mouse(e Event) {
 				app.title_click_y = e.y
 			}
 		}
-		if w.maximized { return }
 		app.drag_start = w.rect()
 		app.drag_x = e.x
 		app.drag_y = e.y
@@ -582,6 +585,7 @@ fn (mut app App) mouse(e Event) {
 		} else {
 			4 | int(e.x == w.x) | (int(e.y == w.y) << 1)
 		}
+		if w.maximized && app.drag_mode == 0 { return }
 		if app.drag_mode != 0 {
 			if e.x > w.x && e.x < w.x + w.w - 1 {
 				app.drag_mode |= 16
