@@ -14,11 +14,14 @@ fn test_titlebar_colors_roundtrip_through_settings_and_older_settings_still_load
 	app.theme.inactive_title_bg = color_rgb(30, 35, 40)
 	app.theme.focus_fg = color_rgb(240, 245, 250)
 	app.theme.focus_bg = color_rgb(35, 55, 75)
+	app.theme.desk_bg = color_rgb(15, 25, 35)
+	app.title_gradient = true
 	app.settings_save() or { panic(err) }
 	mut loaded := new_app()
 	loaded.settings_file(path)
 	loaded.settings_load() or { panic(err) }
 	assert loaded.theme == app.theme
+	assert loaded.title_gradient
 	os.write_file(path, '[vtk]\ntitle = 15\nbg = 0\nfocus_bg = 4\nfield_bg = 4\nfield_fg = 15\n') or { panic(err) }
 	loaded.theme = theme_default()
 	loaded.settings_load() or { panic(err) }

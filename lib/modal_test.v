@@ -114,3 +114,81 @@ fn test_settings_applies_saves_and_resets_bar_position() {
 	app.after(0, check_settings_bar_position)
 	app.settings_dialog()
 }
+
+fn choose_settings_desktop_color(mut app App) {
+	mut picker := app.top_window()
+	assert picker.text == 'Desktop background' && picker.modal_owner.text == 'Settings'
+	mut sliders := picker.kids[0].kids.filter(it.kind == .slider)
+	assert sliders.map(it.value) == [12, 34, 56]
+	for i, mut slider in sliders { slider.value = [65, 43, 21][i] }
+	app.set_focus(picker.link)
+	app.dispatch(Event{ key: int(Key.enter) })
+}
+
+fn change_settings_appearance(mut app App) {
+	mut settings := app.top_window()
+	body := settings.kids[0]
+	theme := body.kids[1].kids[1]
+	desktop := body.kids[2].kids[1]
+	gradient := body.kids.filter(it.text == 'Gradient window titles')[0]
+	buttons := body.kids.last().kids
+	app.redraw()
+	assert body.kids[0].text == '' && theme.y == body.y + 1
+	assert theme.value == int(Preset.dark)
+	app.set_focus(gradient)
+	app.dispatch(Event{ key: int(Key.space) })
+	app.after(0, choose_settings_desktop_color)
+	app.set_focus(desktop)
+	app.dispatch(Event{ key: int(Key.enter) })
+	assert !app.title_gradient && app.theme.desk_bg == color_rgb(12, 34, 56)
+	app.set_focus(buttons[0])
+	app.dispatch(Event{ key: int(Key.enter) })
+	assert app.title_gradient && app.theme.desk_bg == color_rgb(65, 43, 21)
+	assert app.theme.bg == theme_preset(.dark).bg
+	app.redraw()
+	assert app.screen.cells[0].bg == app.theme.desk_bg
+	app.set_focus(buttons[1])
+	app.dispatch(Event{ key: int(Key.enter) })
+	app.close(mut settings)
+}
+
+fn check_saved_settings_appearance_and_reset(mut app App) {
+	mut settings := app.top_window()
+	body := settings.kids[0]
+	theme := body.kids[1].kids[1]
+	gradient := body.kids.filter(it.text == 'Gradient window titles')[0]
+	buttons := body.kids.last().kids
+	assert theme.value == int(Preset.dark) && gradient.value == 1
+	app.set_focus(buttons[0])
+	app.dispatch(Event{ key: int(Key.enter) })
+	assert app.title_gradient && app.theme.desk_bg == color_rgb(65, 43, 21)
+	app.set_focus(theme)
+	app.dispatch(Event{ key: int(Key.down) })
+	app.dispatch(Event{ key: int(Key.down) })
+	app.dispatch(Event{ key: int(Key.enter) })
+	app.set_focus(buttons[0])
+	app.dispatch(Event{ key: int(Key.enter) })
+	assert app.theme == theme_preset(.light)
+	app.set_focus(buttons[2])
+	app.dispatch(Event{ key: int(Key.enter) })
+	assert app.theme == theme_default() && !app.title_gradient && gradient.value == 0
+	assert !app.settings_saved()
+	app.close(mut settings)
+}
+
+fn test_settings_appearance_color_picker_save_reopen_and_reset() {
+	path := os.join_path(os.temp_dir(), 'vtk-appearance-settings-${os.getpid()}.ini')
+	defer { os.rm(path) or {} }
+	mut app := new_app()
+	app.settings_file(path)
+	app.theme = theme_preset(.dark)
+	app.theme.desk_bg = color_rgb(12, 34, 56)
+	app.after(0, change_settings_appearance)
+	app.settings_dialog()
+	mut loaded := new_app()
+	loaded.settings_file(path)
+	loaded.settings_load() or { panic(err) }
+	assert loaded.theme == app.theme && loaded.title_gradient
+	loaded.after(0, check_saved_settings_appearance_and_reset)
+	loaded.settings_dialog()
+}

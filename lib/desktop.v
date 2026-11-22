@@ -207,6 +207,7 @@ pub fn (mut app App) settings_load() ! {
 			'bar_clock' { app.bar_clock = value == '1' }
 			'window_shadow' { app.window_shadow = value == '1' }
 			'dim_inactive' { app.dim_inactive = value == '1' }
+			'title_gradient' { app.title_gradient = value == '1' }
 			'mouse_cursor' { app.set_mouse_cursor(MouseCursor{ ...app.mouse_cursor, enabled: value == '1' }) }
 			'vim_mode' { app.vim_set(value == '1') }
 			'ascii' { app.theme.ascii = value == '1' }
@@ -248,6 +249,7 @@ pub fn (app &App) settings_save() ! {
 		'bar_always = ${int(app.bar_always)}', 'bar_top = ${int(app.bar_top)}',
 		'bar_clock = ${int(app.bar_clock)}', 'window_shadow = ${int(app.window_shadow)}',
 		'dim_inactive = ${int(app.dim_inactive)}', 'mouse_cursor = ${int(app.mouse_cursor.enabled)}',
+		'title_gradient = ${int(app.title_gradient)}',
 		'vim_mode = ${int(app.vim_mode)}', 'ascii = ${int(app.theme.ascii)}']
 	$for field in Theme.fields {
 		$if field.typ is int {
@@ -265,6 +267,7 @@ pub fn (mut app App) settings_reset() ! {
 	app.bar_clock = true
 	app.window_shadow = true
 	app.dim_inactive = true
+	app.title_gradient = false
 	app.set_mouse_cursor(MouseCursor{ ...app.mouse_cursor, enabled: false })
 	app.move_key = Binding{ key: int(Key.f7), alt: true }
 	app.resize_key = Binding{ key: int(Key.f8), alt: true }
@@ -276,28 +279,54 @@ pub fn (mut app App) settings_reset() ! {
 @[heap]
 struct Settings {
 mut:
+	palette      Theme
 	theme        &Ctl = unsafe { nil }
+	desktop      &Ctl = unsafe { nil }
 	bar          &Ctl = unsafe { nil }
 	bar_top      &Ctl = unsafe { nil }
 	clock        &Ctl = unsafe { nil }
 	shadow       &Ctl = unsafe { nil }
 	dim          &Ctl = unsafe { nil }
+	gradient     &Ctl = unsafe { nil }
 	mouse_cursor &Ctl = unsafe { nil }
 	vim          &Ctl = unsafe { nil }
 	move         &Ctl = unsafe { nil }
 	resize       &Ctl = unsafe { nil }
 }
 
+fn (mut s Settings) update_desktop_color() {
+	s.desktop.set_text('#${color_as_rgb(s.palette.desk_bg):06x}...')
+}
+
+fn settings_theme_changed(mut c Ctl, mut app App) {
+	mut s := unsafe { &Settings(c.user) }
+	s.palette = theme_preset(unsafe { Preset(clamp(c.value, 0, 6)) })
+	s.update_desktop_color()
+	app.dirty = true
+}
+
+fn settings_desktop_color(mut c Ctl, mut app App) {
+	mut s := unsafe { &Settings(c.user) }
+	if rgb := app.color_pick(c.owner_window(), 'Desktop background', color_as_rgb(s.palette.desk_bg)) {
+		s.palette.desk_bg = 0x1000000 | rgb
+		s.update_desktop_color()
+		app.dirty = true
+	}
+}
+
 fn settings_apply(mut c Ctl, mut app App) {
 	mut s := unsafe { &Settings(c.user) }
 	if c.data == 2 {
 		app.settings_reset() or { app.notify(err.msg(), 2500) }
+		s.palette = app.theme
+		s.update_desktop_color()
 		s.theme.value = 0
 		s.bar.value = int(app.bar_always)
 		s.bar_top.value = int(app.bar_top)
 		s.clock.value = int(app.bar_clock)
 		s.shadow.value = int(app.window_shadow)
 		s.dim.value = int(app.dim_inactive)
+		s.gradient.value = int(app.title_gradient)
 		s.mouse_cursor.value = int(app.mouse_cursor.enabled)
 		s.vim.value = int(app.vim_mode)
 		s.move.set_text(app.move_key.str())
@@ -316,12 +345,13 @@ fn settings_apply(mut c Ctl, mut app App) {
 		app.notify('Move and Resize shortcuts must differ', 2500)
 		return
 	}
-	app.theme = theme_preset(unsafe { Preset(clamp(s.theme.value, 0, 6)) })
+	app.theme = s.palette
 	app.bar_always = s.bar.value != 0
 	app.bar_top = s.bar_top.value != 0
 	app.bar_clock = s.clock.value != 0
 	app.window_shadow = s.shadow.value != 0
 	app.dim_inactive = s.dim.value != 0
+	app.title_gradient = s.gradient.value != 0
 	app.set_mouse_cursor(MouseCursor{ ...app.mouse_cursor, enabled: s.mouse_cursor.value != 0 })
 	app.vim_set(s.vim.value != 0)
 	if c.data == 1 {
@@ -334,26 +364,43 @@ fn settings_apply(mut c Ctl, mut app App) {
 }
 
 pub fn (mut app App) settings_dialog() {
-	mut s := &Settings{}
+	mut s := &Settings{ palette: app.theme }
 	mut body := box(true)
+	mut spacer := label('')
+	body.add(mut spacer)
 	s.theme = combo()
 	s.theme.text_align = .center
 	for name in ['Borland', 'Light Borland', 'Dark', 'Light', 'Teal', 'Modern', 'Serial'] {
 		s.theme.add_item(name)
 	}
 	s.theme.value = 0
-	for i in 0 .. 7 { if app.theme == theme_preset(unsafe { Preset(i) }) { s.theme.value = i } }
+	for i in 0 .. 7 {
+		preset := theme_preset(unsafe { Preset(i) })
+		if Theme{ ...app.theme, desk_bg: preset.desk_bg } == preset { s.theme.value = i }
+	}
+	s.theme.user = s
+	s.theme.changed = settings_theme_changed
 	mut theme_row := box(false)
 	mut theme_label := label('Theme:')
 	theme_row.add(mut theme_label)
 	s.theme.expand = true
 	theme_row.add(mut s.theme)
 	body.add(mut theme_row)
+	mut desktop_row := box(false)
+	mut desktop_label := label('Desktop background:')
+	desktop_row.add(mut desktop_label)
+	s.desktop = button('')
+	s.desktop.user = s
+	s.desktop.changed = settings_desktop_color
+	s.update_desktop_color()
+	desktop_row.add(mut s.desktop)
+	body.add(mut desktop_row)
 	s.bar = checkbox('Always show window bar', app.bar_always)
 	s.bar_top = checkbox('Window bar at top', app.bar_top)
 	s.clock = checkbox('Clock', app.bar_clock)
 	s.shadow = checkbox('Window shadows', app.window_shadow)
 	s.dim = checkbox('Dim inactive windows', app.dim_inactive)
+	s.gradient = checkbox('Gradient window titles', app.title_gradient)
 	s.mouse_cursor = checkbox('Block mouse cursor', app.mouse_cursor.enabled)
 	s.vim = checkbox('Vim mode', app.vim_mode)
 	s.move = entry(app.move_key.str(), 0)
@@ -363,7 +410,7 @@ pub fn (mut app App) settings_dialog() {
 	s.resize.expand = false
 	s.resize.col = 1
 	s.resize.row = 1
-	mut controls := [s.bar, s.bar_top, s.clock, s.shadow, s.dim, s.mouse_cursor, s.vim]
+	mut controls := [s.bar, s.bar_top, s.clock, s.shadow, s.dim, s.gradient, s.mouse_cursor, s.vim]
 	for mut ctl in controls { body.add(mut ctl) }
 	mut shortcuts := grid()
 	mut move_label := label('Move shortcut')

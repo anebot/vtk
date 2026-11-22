@@ -266,6 +266,7 @@ pub mut:
 	bar_clock        bool = true
 	window_shadow    bool = true
 	dim_inactive     bool = true
+	title_gradient   bool
 	vim_mode         bool
 	touch_titles     bool
 	ctrl_c           CtrlC

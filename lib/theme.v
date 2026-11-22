@@ -54,6 +54,22 @@ pub fn color_rgb(r int, g int, b int) int {
 
 pub fn color_256(index int) int { return 0x2000000 | clamp(index, 0, 255) }
 
+fn color_as_rgb(color int) int {
+	if color & 0x1000000 != 0 { return color & 0xffffff }
+	index := if color & 0x2000000 != 0 { color & 255 } else { color & 15 }
+	if index < 16 {
+		return [0x000000, 0xcd0000, 0x00cd00, 0xcdcd00, 0x0000ee, 0xcd00cd, 0x00cdcd, 0xe5e5e5,
+			0x7f7f7f, 0xff0000, 0x00ff00, 0xffff00, 0x5c5cff, 0xff00ff, 0x00ffff, 0xffffff][index]
+	}
+	if index >= 232 {
+		level := 8 + (index - 232) * 10
+		return level << 16 | level << 8 | level
+	}
+	levels := [0, 95, 135, 175, 215, 255]
+	cube := index - 16
+	return levels[cube / 36] << 16 | levels[cube / 6 % 6] << 8 | levels[cube % 6]
+}
+
 pub enum Preset {
 	borland
 	light_borland

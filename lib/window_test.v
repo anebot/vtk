@@ -124,6 +124,35 @@ fn test_window_titlebars_use_their_own_colors_and_clear_the_top_frame_line() {
 	assert app.screen.cells[row + 1].fg == app.theme.title
 }
 
+fn test_title_gradient_covers_text_controls_and_both_ends_of_the_titlebar() {
+	for background in [blue, color_256(130), color_rgb(80, 120, 160)] {
+		mut app := new_app()
+		app.desktop = false
+		app.title_gradient = true
+		app.theme.title_bg = background
+		app.theme.inactive_title_bg = background
+		mut w := app.window('Gradient', 40, 8)
+		mut other := app.window('Other', 20, 6)
+		other.x = 50
+		other.y = 10
+		for active in [false, true] {
+			if active { app.raise(mut w) }
+			app.redraw()
+			row := w.y * app.width + w.x
+			cells := app.screen.cells[row..row + w.w].clone()
+			assert cells[0].bg != cells.last().bg
+			for i, cell in cells {
+				assert cell.fg == if active { app.theme.title } else { app.theme.inactive_title }
+				assert cell.bg & 0x1000000 != 0
+				if i > 0 { assert (cell.bg & 0xffffff) <= (cells[i - 1].bg & 0xffffff) }
+			}
+			assert cells[0].glyph == ' ' && cells.last().glyph == ' '
+			assert cells[6..14].map(it.glyph).join('') == 'Gradient'
+			assert cells[30..39].map(it.glyph).join('') == '[_][□][■]'
+		}
+	}
+}
+
 fn test_window_minimum_size_limits_and_resizing() {
 	mut app := new_app()
 	app.desktop = false
