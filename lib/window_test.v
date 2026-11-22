@@ -27,6 +27,37 @@ fn test_window_titles_stop_before_controls_and_preserve_the_frame() {
 	assert app.screen.cells[row + 30].glyph == '['
 }
 
+fn test_window_titlebars_use_their_own_colors_and_clear_the_top_frame_line() {
+	mut app := new_app()
+	app.desktop = false
+	mut first := app.window('Title', 40, 8)
+	app.redraw()
+	row := first.y * app.width + first.x
+	for cell in app.screen.cells[row + 1..row + first.w - 1] {
+		assert cell.bg == app.theme.title_bg && cell.fg == app.theme.title
+		assert cell.glyph != '═'
+	}
+	assert app.screen.cells[row + 4].glyph == ' '
+	assert app.screen.cells[row].glyph == '╔' && app.screen.cells[row + 39].glyph == '╗'
+	assert app.screen.cells[row + app.width + 1].bg == app.theme.bg
+	mut second := app.window('Active', 20, 6)
+	second.x = 50
+	second.y = 10
+	app.redraw()
+	for cell in app.screen.cells[row + 1..row + first.w - 1] {
+		assert cell.bg == app.theme.inactive_title_bg && cell.fg == app.theme.inactive_title
+	}
+	app.dim_inactive = false
+	app.redraw()
+	assert app.screen.cells[row + 1].bg == app.theme.title_bg
+	assert app.screen.cells[row + 1].fg == app.theme.title
+	app.dim_inactive = true
+	app.raise(mut first)
+	app.redraw()
+	assert app.screen.cells[row + 1].bg == app.theme.title_bg
+	assert app.screen.cells[row + 1].fg == app.theme.title
+}
+
 fn test_window_minimum_size_limits_and_resizing() {
 	mut app := new_app()
 	app.desktop = false

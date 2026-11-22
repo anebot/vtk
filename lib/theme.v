@@ -24,7 +24,10 @@ pub mut:
 	fg       int = white
 	dim      int = cyan
 	frame    int = 14
-	title    int = bright_white
+	title    int = black
+	title_bg int = white
+	inactive_title int = white
+	inactive_title_bg int = black
 	btn_bg   int = green
 	btn_fg   int = black
 	focus_bg int = cyan
@@ -69,7 +72,8 @@ pub fn theme_preset(preset Preset) Theme {
 			t.fg = black
 			t.dim = gray
 			t.frame = blue
-			t.title = black
+			t.title = bright_white
+			t.title_bg = blue
 			t.menu_bg = blue
 		}
 		.dark {
@@ -78,6 +82,8 @@ pub fn theme_preset(preset Preset) Theme {
 			t.bg = black
 			t.fg = white
 			t.frame = white
+			t.title = bright_white
+			t.title_bg = blue
 			t.tool_bg = gray
 			t.tool_fg = white
 			t.focus_bg = blue
@@ -89,7 +95,8 @@ pub fn theme_preset(preset Preset) Theme {
 			t.fg = black
 			t.dim = gray
 			t.frame = blue
-			t.title = black
+			t.title = bright_white
+			t.title_bg = blue
 			t.field_bg = white
 			t.field_fg = black
 			t.tool_bg = white
@@ -112,6 +119,9 @@ pub fn theme_preset(preset Preset) Theme {
 			t.dim = color_rgb(110, 118, 114)
 			t.frame = color_rgb(151, 177, 152)
 			t.title = t.fg
+			t.title_bg = color_rgb(53, 68, 58)
+			t.inactive_title = color_rgb(178, 186, 180)
+			t.inactive_title_bg = color_rgb(43, 48, 45)
 			t.btn_bg = color_rgb(62, 73, 65)
 			t.btn_fg = t.fg
 			t.focus_bg = color_rgb(72, 98, 78)
@@ -136,6 +146,7 @@ pub fn theme_preset(preset Preset) Theme {
 			t.dim = gray
 			t.frame = white
 			t.title = white
+			t.title_bg = blue
 			t.tool_bg = black
 			t.tool_fg = white
 		}

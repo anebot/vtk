@@ -208,7 +208,10 @@ Settings persist theme colors, the bar position, visibility and clock,
 shadows, inactive dimming, mouse cursor visibility, Vim mode, and move/resize
 bindings. Theme presets are Borland, Light Borland, Dark, Light, Teal, Modern
 and Serial. `app.theme`
-can be edited directly. `color_rgb` and `color_256` provide extended colors;
+can be edited directly. Window titlebars use `title` and `title_bg`; dimmed
+inactive titlebars use `inactive_title` and `inactive_title_bg`. The title and
+window buttons share a solid background, separate from the body and frame.
+`color_rgb` and `color_256` provide extended colors;
 Serial uses basic ANSI colors and ASCII fallbacks.
 
 ## Editing and rendering
