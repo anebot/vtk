@@ -103,3 +103,87 @@ fn test_top_bar_reserves_first_row_for_windows_dialogs_and_placement() {
 	app.redraw()
 	assert w.y == 1 && w.h == 29
 }
+
+fn test_terminal_resize_keeps_windows_inside_the_workspace() {
+	for bar_top in [false, true] {
+		for bar_always in [false, true] {
+			mut app := new_app()
+			app.width = 100
+			app.height = 40
+			app.bar_top = bar_top
+			app.bar_always = bar_always
+			inside := app.window('Inside', 20, 5)
+			original := inside.rect()
+			mut displaced := app.window('Displaced', 25, 8)
+			displaced.x = 70
+			displaced.y = 25
+			mut oversized := app.window('Oversized', 90, 30)
+			mut field := entry('Keep this text', 0)
+			oversized.add(mut field)
+			app.set_focus(field)
+			order := app.windows.clone()
+			app.dispatch(Event{ kind: .resize, width: 40, height: 12 })
+			area := app.work_area()
+			assert inside.rect() == original
+			assert oversized.w == 40 && oversized.h == area.h
+			for w in app.windows {
+				assert w.x >= area.x && w.x + w.w <= area.x + area.w
+				assert w.y >= area.y && w.y + w.h <= area.y + area.h
+			}
+			assert app.windows == order && app.focus == field && field.text == 'Keep this text'
+			adjusted := displaced.rect()
+			app.raise(mut displaced)
+			app.redraw()
+			app.dispatch(Event{ kind: .mouse, x: displaced.x + 2, y: displaced.y, button: .left, pressed: true })
+			assert app.popups.len == 1 && app.popups[0].link.kids[0].link == displaced
+			app.close_popups()
+			app.dispatch(Event{ kind: .resize, width: 100, height: 40 })
+			assert displaced.rect() == adjusted && inside.rect() == original
+		}
+	}
+}
+
+fn test_terminal_resize_keeps_minimized_hidden_and_restored_windows_reachable() {
+	mut app := new_app()
+	mut minimized := app.window('Minimized', 25, 8)
+	minimized.x = 50
+	minimized.y = 15
+	app.minimize(mut minimized)
+	mut hidden := app.window('Hidden', 30, 10)
+	hidden.x = 45
+	hidden.y = 12
+	hidden.hidden = true
+	mut maximized := app.window('Maximized', 25, 8)
+	maximized.x = 50
+	maximized.y = 15
+	app.maximize(mut maximized)
+	saved := maximized.saved
+	app.dispatch(Event{ kind: .resize, width: 30, height: 10 })
+	assert maximized.rect() == Rect{0, 0, 30, 9}
+	assert maximized.saved == saved && minimized.minimized && hidden.hidden
+	app.raise(mut minimized)
+	assert !minimized.minimized && minimized.rect() == Rect{5, 1, 25, 8}
+	hidden.hidden = false
+	app.raise(mut hidden)
+	assert hidden.rect() == Rect{0, 0, 30, 9}
+	app.restore(mut maximized)
+	assert !maximized.maximized && maximized.rect() == Rect{5, 1, 25, 8}
+}
+
+fn test_terminal_resize_preserves_minimum_sizes_and_cancels_stale_placement() {
+	mut app := new_app()
+	app.bar_top = true
+	mut w := app.window('Bounded', 30, 10)
+	w.set_size_limits(24, 6, 40, 12)
+	app.begin_placement(mut w, false)
+	app.dispatch(Event{ key: int(Key.right), shift: true })
+	app.drag = w
+	app.dispatch(Event{ kind: .resize, width: 12, height: 3 })
+	assert isnil(app.placement) && isnil(app.drag) && isnil(app.scroll_drag)
+	assert w.rect() == Rect{0, 1, 24, 6}
+	app.redraw()
+	assert app.screen.cells[app.width..app.width + 4].map(it.glyph).join('') == '╔[=]'
+	app.dispatch(Event{ kind: .resize, width: 80, height: 24 })
+	app.dispatch(Event{ key: int(Key.escape) })
+	assert w.rect() == Rect{0, 1, 24, 6}
+}

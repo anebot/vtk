@@ -163,6 +163,7 @@ pub fn (mut app App) restore(mut w Ctl) {
 	}
 	w.maximized = false
 	w.minimized = false
+	w.fit_window(app.work_area())
 	app.raise(mut w)
 }
 
@@ -184,6 +185,28 @@ fn (mut c Ctl) bound_size() {
 	c.h = max(max(minimum_window_height, c.min_h), c.h)
 	if c.max_w > 0 { c.w = min(c.w, c.max_w) }
 	if c.max_h > 0 { c.h = min(c.h, c.max_h) }
+}
+
+fn (mut w Ctl) fit_window(area Rect) {
+	if w.maximized {
+		w.x = area.x
+		w.y = area.y
+		w.w = area.w
+		w.h = area.h
+		return
+	}
+	w.w = min(w.w, area.w)
+	w.h = min(w.h, area.h)
+	w.bound_size()
+	w.x = clamp(w.x, area.x, area.x + area.w - w.w)
+	w.y = clamp(w.y, area.y, area.y + area.h - w.h)
+}
+
+fn (mut app App) fit_windows() {
+	area := app.work_area()
+	for mut w in app.windows {
+		if !w.closed { w.fit_window(area) }
+	}
 }
 
 pub fn (mut app App) tile_side(mut w Ctl, side TileSide) {
