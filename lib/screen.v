@@ -52,7 +52,8 @@ pub fn rune_width(r rune) int {
 	if (r >= 0x300 && r <= 0x36f) || (r >= 0x1ab0 && r <= 0x1aff) || (r >= 0x1dc0 && r <= 0x1dff) || (r >= 0x20d0 && r <= 0x20ff) || (r >= 0xfe00 && r <= 0xfe0f) || r == 0x200d || (r >= 0xfe20 && r <= 0xfe2f) || (r >= 0xe0100 && r <= 0xe01ef) {
 		return 0
 	}
-	if r >= 0x1100 && (r <= 0x115f || r == 0x2329 || r == 0x232a || (r >= 0x2e80 && r <= 0xa4cf && r != 0x303f) || (r >= 0xac00 && r <= 0xd7a3) || (r >= 0xf900 && r <= 0xfaff) || (r >= 0xfe10 && r <= 0xfe19) || (r >= 0xfe30 && r <= 0xfe6f) || (r >= 0xff00 && r <= 0xff60) || (r >= 0xffe0 && r <= 0xffe6) || (r >= 0x1f300 && r <= 0x1faff) || (r >= 0x20000 && r <= 0x3fffd)) {
+	if r < 0x1100 { return 1 }
+	if in_rune_ranges(r, emoji_presentation) || (r >= 0x1100 && (r <= 0x115f || r == 0x2329 || r == 0x232a || (r >= 0x2e80 && r <= 0xa4cf && r != 0x303f) || (r >= 0xac00 && r <= 0xd7a3) || (r >= 0xf900 && r <= 0xfaff) || (r >= 0xfe10 && r <= 0xfe19) || (r >= 0xfe30 && r <= 0xfe6f) || (r >= 0xff00 && r <= 0xff60) || (r >= 0xffe0 && r <= 0xffe6) || (r >= 0x1f200 && r <= 0x1f251) || (r >= 0x20000 && r <= 0x3fffd))) {
 		return 2
 	}
 	return 1
@@ -60,7 +61,7 @@ pub fn rune_width(r rune) int {
 
 pub fn text_width(text string) int {
 	mut width := 0
-	for r in text.runes() { width += rune_width(r) }
+	for cluster in text.graphemes() { width += grapheme_width(cluster) }
 	return width
 }
 
@@ -83,15 +84,20 @@ fn ascii_glyph(r rune) rune {
 }
 
 pub fn (mut s Screen) put(x int, y int, r rune, fg int, bg int, attr int) {
+	s.put_grapheme(x, y, r.str(), rune_width(r), fg, bg, attr)
+}
+
+fn (mut s Screen) put_grapheme(x int, y int, text string, columns int, fg int, bg int, attr int) {
 	if y < 0 || y >= s.height || x < 0 || x > s.width { return }
+	r := text.runes()[0]
 	if r < 32 || (r >= 0x7f && r < 0xa0) { return }
-	actual := if s.ascii { ascii_glyph(r) } else { r }
-	width := rune_width(actual)
+	actual := if s.ascii { ascii_glyph(r).str() } else { text }
+	width := if s.ascii { 1 } else { columns }
 	if width == 0 {
 		if x > 0 && s.clip.contains(x - 1, y) {
 			mut at := y * s.width + x - 1
 			if s.cells[at].continuation && x > 1 { at-- }
-			if s.clip.contains(at % s.width, y) { s.cells[at].glyph += actual.str() }
+			if s.clip.contains(at % s.width, y) { s.cells[at].glyph += actual }
 		}
 		return
 	}
@@ -101,16 +107,25 @@ pub fn (mut s Screen) put(x int, y int, r rune, fg int, bg int, attr int) {
 	// Overwriting either half of a wide character clears its partner.
 	if s.cells[at].continuation && x > 0 { s.cells[at - 1] = Cell{ fg: fg, bg: bg } }
 	if x + 1 < s.width && s.cells[at + 1].continuation { s.cells[at + 1] = Cell{ fg: fg, bg: bg } }
-	s.cells[at] = Cell{actual.str(), fg, bg, attr, false}
+	s.cells[at] = Cell{actual, fg, bg, attr, false}
 	if width == 2 { s.cells[at + 1] = Cell{'', fg, bg, attr, true} }
 }
 
 pub fn (mut s Screen) text(x int, y int, text string, fg int, bg int, attr int) {
 	mut at := x
-	for r in text.runes() {
-		if r == `\n` || r == `\r` { break }
-		s.put(at, y, r, fg, bg, attr)
-		at += if s.ascii { 1 } else { rune_width(r) }
+	if s.ascii {
+		for r in text.runes() {
+			if r == `\n` || r == `\r` { break }
+			s.put(at, y, r, fg, bg, attr)
+			at++
+		}
+		return
+	}
+	for cluster in text.graphemes() {
+		if cluster.starts_with('\n') || cluster.starts_with('\r') { break }
+		width := grapheme_width(cluster)
+		s.put_grapheme(at, y, cluster, width, fg, bg, attr)
+		at += width
 	}
 }
 
@@ -118,10 +133,8 @@ pub fn (mut s Screen) text(x int, y int, text string, fg int, bg int, attr int) 
 fn (mut s Screen) aligned_text(x int, y int, width int, text string, align TextAlign, fg int, bg int, attr int) {
 	if width <= 0 { return }
 	mut columns := 0
-	for r in text.runes() {
-		if r == `\n` || r == `\r` { break }
-		columns += if s.ascii { 1 } else { rune_width(r) }
-	}
+	line := text.all_before('\n').all_before('\r')
+	columns = if s.ascii { line.runes().len } else { text_width(line) }
 	spare := max(0, width - columns)
 	offset := match align {
 		.left { 0 }

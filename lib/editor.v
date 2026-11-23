@@ -167,6 +167,7 @@ fn word_class(text string, at int, big bool) int {
 
 struct Glyph {
 	r    rune
+	text string
 	at   int
 	end  int
 	attr int
@@ -182,6 +183,7 @@ mut:
 	glyphs  []Glyph
 	code    bool
 	heading bool
+	no_wrap bool
 	color   ?int
 	attr    int
 }
@@ -216,13 +218,14 @@ fn (c &Ctl) editor_rows() []TextRow {
 	if !(c.wrap || (c.kind == .markdown && !c.md.no_wrap)) { return lines }
 	mut result := []TextRow{}
 	for row in lines {
+		if row.no_wrap { result << row; continue }
 		mut part := TextRow{ start: row.start, end: row.end, line: row.line, code: row.code, heading: row.heading, color: row.color, attr: row.attr }
 		mut col := 0
 		for glyph in row.glyphs {
 			gw := if glyph.r == `\t` {
 				max(1, c.md.tab_width) - col % max(1, c.md.tab_width)
 			} else {
-				rune_width(glyph.r)
+				glyph_width(glyph)
 			}
 			if col > 0 && col + gw > width {
 				part.end = glyph.at
@@ -253,6 +256,8 @@ fn plain_rows(text string) []TextRow {
 		}
 		at += max(1, n)
 	}
+	for mut existing in result { existing.glyphs = grapheme_glyphs(existing.glyphs) }
+	row.glyphs = grapheme_glyphs(row.glyphs)
 	row.end = text.len
 	result << row
 	return result
@@ -267,7 +272,7 @@ fn row_column(row TextRow, at int, tab_width int, secret bool) int {
 		} else if g.r == `\t` {
 			tab_width - col % tab_width
 		} else {
-			rune_width(g.r)
+			glyph_width(g)
 		}
 	}
 	return col
@@ -281,7 +286,7 @@ fn row_hit(row TextRow, column int, tab_width int, secret bool) int {
 		} else if g.r == `\t` {
 			tab_width - col % tab_width
 		} else {
-			rune_width(g.r)
+			glyph_width(g)
 		}
 		if column < col + max(1, width) { return g.at }
 		col += width
@@ -291,6 +296,16 @@ fn row_hit(row TextRow, column int, tab_width int, secret bool) int {
 
 fn (c &Ctl) caret_row(rows []TextRow) int {
 	caret := c.caret_position()
+	// Wrapped table cells can share a source line; locate the actual glyph
+	// before falling back to the source row range. Synthetic borders have
+	// zero-length spans and must not steal the caret.
+	for i, row in rows {
+		if row.no_wrap {
+			for glyph in row.glyphs {
+				if caret >= glyph.at && caret < glyph.end { return i }
+			}
+		}
+	}
 	for i, row in rows {
 		if caret >= row.start && (caret <= row.end || i == rows.len - 1) { return i }
 	}
@@ -326,7 +341,8 @@ fn (mut app App) draw_editor(mut c Ctl) {
 	tab_width := max(1, c.md.tab_width)
 	caret_col := row_column(rows[caret], c.caret_position(), tab_width, c.secret)
 	view_w := max(1, c.w - margin - int(c.scrollbar))
-	if c.kind == .entry || (!c.wrap && (c.kind != .markdown || c.md.no_wrap)) {
+	if c.kind == .entry || (!c.wrap && (c.kind != .markdown || c.md.no_wrap))
+		|| (rows[caret].no_wrap && markdown_glyph_width(rows[caret].glyphs) > view_w) {
 		if !c.scroll_hold {
 			if caret_col < c.left { c.left = caret_col }
 			if caret_col >= c.left + view_w { c.left = caret_col - view_w + 1 }
@@ -367,8 +383,9 @@ fn (mut app App) draw_editor(mut c Ctl) {
 				app.screen.fill(Rect{c.x + margin + col - c.left, y, n, 1}, ` `, gfg, gbg)
 				col += n
 			} else {
-				app.screen.put(c.x + margin + col - c.left, y, if c.secret { `*` } else { g.r }, gfg, gbg, g.attr | row.attr)
-				col += if c.secret { 1 } else { rune_width(g.r) }
+				if c.secret { app.screen.put(c.x + margin + col - c.left, y, `*`, gfg, gbg, g.attr | row.attr) }
+				else { app.screen.put_grapheme(c.x + margin + col - c.left, y, glyph_text(g), glyph_width(g), gfg, gbg, g.attr | row.attr) }
+				col += if c.secret { 1 } else { glyph_width(g) }
 			}
 		}
 		app.screen.restore_clip(old)

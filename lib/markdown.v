@@ -52,7 +52,10 @@ fn (c &Ctl) markdown_rows() []TextRow {
 	mut fence_len := 0
 	section_a, section_b := c.markdown_section_range()
 	source := c.md.mode in [.source, .source_read]
-	for line_no, line in c.text.split('\n') {
+	lines := c.text.split('\n')
+	mut line_no := 0
+	for line_no < lines.len {
+		line := lines[line_no]
 		mut row := TextRow{ start: offset, end: offset + line.len, line: line_no }
 		trim := line.trim_left(' ')
 		indent := line.len - trim.len
@@ -72,6 +75,16 @@ fn (c &Ctl) markdown_rows() []TextRow {
 			}
 		}
 		row.code = was_code || line.starts_with('\t') || line.starts_with('    ')
+		if !source && !row.code && !is_fence {
+			if table := parse_markdown_table(lines, line_no, offset) {
+				if offset >= section_a && offset <= section_b {
+					rows << c.render_markdown_table(table)
+				}
+				for consumed in lines[line_no..line_no + table.lines] { offset += consumed.len + 1 }
+				line_no += table.lines
+				continue
+			}
+		}
 		if source || (row.code && !is_fence) {
 			row.glyphs = line_glyphs(line, offset, 0, -1)
 		} else if !is_fence {
@@ -123,6 +136,7 @@ fn (c &Ctl) markdown_rows() []TextRow {
 			rows << TextRow{ start: offset + line.len, end: offset + line.len, line: line_no, glyphs: line_glyphs('──── Page ${(line_no + 1) / max(1, c.md.page_lines) + 1} ────', offset + line.len, 0, -1) }
 		}
 		offset += line.len + 1
+		line_no++
 	}
 	if rows.len == 0 { rows << TextRow{ start: section_a, end: section_a } }
 	return rows
@@ -160,15 +174,14 @@ fn line_glyphs(text string, offset int, attr int, task int) []Glyph {
 		out << Glyph{ r: r, at: offset + i, end: offset + i + max(1, n), attr: attr, task: task }
 		i += max(1, n)
 	}
-	return out
+	return grapheme_glyphs(out)
 }
 
 fn inline_markdown(text string, offset int, initial_attr int) []Glyph {
 	mut out := []Glyph{}
 	mut i, mut attr := 0, initial_attr
-	mut code := false
 	for i < text.len {
-		if !code && text[i] == `<` {
+		if text[i] == `<` {
 			if close := text[i..].index('>') {
 				tag := text[i + 1..i + close].to_lower()
 				if tag in ['u', '/u', 'b', '/b', 'strong', '/strong', 'em', '/em', 'i', '/i'] {
@@ -192,21 +205,26 @@ fn inline_markdown(text string, offset int, initial_attr int) []Glyph {
 			continue
 		}
 		if text[i] == 96 {
-			code = !code
-			i++
-			continue
+			end, span_end := markdown_code_span(text, i)
+			if span_end > i {
+				mut opening := i
+				for opening < text.len && text[opening] == 96 { opening++ }
+				out << line_glyphs(text[opening..end], offset + opening, attr | reverse, -1)
+				i = span_end
+				continue
+			}
 		}
-		if !code && i + 1 < text.len && text[i..i + 2] in ['**', '__', '~~'] {
+		if i + 1 < text.len && text[i..i + 2] in ['**', '__', '~~'] {
 			attr ^= if text[i] == `~` { underline } else { bold }
 			i += 2
 			continue
 		}
-		if !code && text[i] in [u8(`*`), u8(`_`)] {
+		if text[i] in [u8(`*`), u8(`_`)] {
 			attr ^= italic
 			i++
 			continue
 		}
-		if !code && text[i] == `[` {
+		if text[i] == `[` {
 			if close_rel := text[i + 1..].index('](') {
 				close := i + 1 + close_rel
 				if end_rel := text[close + 2..].index(')') {
@@ -224,15 +242,11 @@ fn inline_markdown(text string, offset int, initial_attr int) []Glyph {
 			r:    r
 			at:   offset + i
 			end:  offset + i + max(1, n)
-			attr: attr | if code {
-				reverse
-			} else {
-				0
-			}
+			attr: attr
 		}
 		i += max(1, n)
 	}
-	return out
+	return grapheme_glyphs(out)
 }
 
 fn task_offset(line string) int {

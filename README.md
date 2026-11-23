@@ -243,9 +243,23 @@ Set a multiline control's `syntax = .diff` to highlight unified diffs with
 red deletions, green additions, cyan hunks and bold file headers. Scrolling,
 wrapping and selection preserve the highlighting; `.plain` is the default.
 
+Terminal widths are measured per Unicode grapheme: default emoji, emoji presentation
+selectors, skin tones, flags and ZWJ sequences occupy their shared display cells.
+Drawing, alignment, wrapping and hit testing use the same widths. The terminal
+parser also joins sequences delivered across separate PTY reads. Unicode emoji
+properties are generated into `lib/emoji_data.v`; optional regeneration uses
+`tools/unicode-width.swift`, with no Swift dependency at build time.
+
 Markdown modes independently select source/rendered and editable/read-only
 presentation. The V renderer handles headings, emphasis, inline code, links,
-lists, task checkboxes, quotes and fenced code. Fences retain source rows.
+lists, task checkboxes, quotes, fenced code and pipe tables. Tables support
+left/center/right alignment, inline formatting and links, escaped pipes and
+code spans containing pipes. Short columns keep their natural widths while
+long cells wrap to the available width; resizing recomputes the layout. Set
+`md.no_wrap` for natural table widths and horizontal scrolling. Table borders
+are display glyphs: selection, mouse hit testing and copying retain the original
+UTF-8 Markdown source. Fenced examples and source modes stay literal.
+Inline code accepts matching runs of multiple backticks. Fences retain source rows.
 Task clicks in View, double-clicks in Edit, and Space in View change only
 the task's state byte as one undo entry. Code blocks are inert. Set
 `md.task_interactive = false` for strict source viewers. `md.linkfn` receives

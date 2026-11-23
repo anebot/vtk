@@ -106,6 +106,29 @@ fn (mut t Terminal) newline() {
 }
 
 fn (mut t Terminal) put(r rune) {
+	// ACP/PTY output can split a selector, modifier or ZWJ sequence between
+	// reads. Upgrade the previous cell in place instead of advancing again.
+	if r >= 0x80 && t.cx > 0 {
+		mut at := t.cy * t.cols + min(t.cols - 1, t.cx - 1)
+		if t.cells[at].continuation && at % t.cols > 0 { at-- }
+		previous := t.cells[at]
+		joined := previous.glyph + r.str()
+		if joined.graphemes().len == 1 {
+			width := grapheme_width(joined)
+			old_width := if at % t.cols + 1 < t.cols && t.cells[at + 1].continuation { 2 } else { 1 }
+			column := at % t.cols
+			t.clear_range(t.cy, column, column + max(width, old_width))
+			if column + width > t.cols {
+				t.cx = 0
+				t.newline()
+				at = t.cy * t.cols
+			} else { t.cx = column }
+			t.cells[at] = Cell{ ...previous, glyph: joined }
+			if width == 2 { t.cells[at + 1] = Cell{ ...previous, glyph: '', continuation: true } }
+			t.cx += width
+			return
+		}
+	}
 	w := rune_width(r)
 	if w == 0 {
 		if t.cx > 0 {
