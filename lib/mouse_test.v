@@ -7,13 +7,13 @@ mut:
 }
 
 fn record_enter(mut c Ctl, mut app App) {
-	assert c.hovered && app.hovered_ctl() == &c
+	assert c.hovered && app.hovered_ctl() == ?&Ctl(&c)
 	mut log := unsafe { &HoverLog(c.user) }
 	log.events << 'enter:${c.text}'
 }
 
 fn record_leave(mut c Ctl, mut app App) {
-	assert !c.hovered && app.hovered_ctl() != &c
+	assert !c.hovered && app.hovered_ctl() != ?&Ctl(&c)
 	mut log := unsafe { &HoverLog(c.user) }
 	log.events << 'leave:${c.text}'
 }
@@ -85,7 +85,7 @@ fn test_hover_transitions_do_not_activate_or_focus_controls() {
 	app.dispatch(Event{ kind: .mouse, x: two.x, y: two.y, button: .left })
 	assert one.value == 1 && two.value == 0 && app.focus == one
 	pointer_move(mut app, 0, 0)
-	assert isnil(app.hovered_ctl()) && !two.hovered
+	assert (app.hovered_ctl() == none) && !two.hovered
 	assert log.events.last() == 'leave:Two'
 }
 
@@ -109,24 +109,24 @@ fn test_hover_rechecks_tabs_visibility_detach_and_lifecycle() {
 	assert log.events == ['enter:One', 'leave:One', 'enter:Two']
 	two.disabled = true
 	app.redraw()
-	assert !two.hovered && isnil(app.hovered_ctl())
+	assert !two.hovered && (app.hovered_ctl() == none)
 	two.disabled = false
 	app.redraw()
 	assert two.hovered
 	two.detach()
 	app.redraw()
-	assert !two.hovered && app.hovered_ctl() != two
+	assert !two.hovered && app.hovered_ctl() != ?&Ctl(two)
 	mut page := pages.kids[1]
 	page.add(mut two)
 	app.redraw()
 	assert two.hovered
 	app.minimize(mut w)
-	assert !two.hovered && isnil(app.hovered_ctl())
+	assert !two.hovered && (app.hovered_ctl() == none)
 	app.raise(mut w)
 	app.redraw()
 	assert two.hovered
 	assert app.close(mut w)
-	assert !two.hovered && isnil(app.hovered_ctl())
+	assert !two.hovered && (app.hovered_ctl() == none)
 }
 
 fn test_hover_respects_occlusion_modals_popups_notices_and_clipping() {
@@ -154,7 +154,7 @@ fn test_hover_respects_occlusion_modals_popups_notices_and_clipping() {
 	front.h = 6
 	front.modal = true
 	app.redraw()
-	assert isnil(app.hovered_ctl())
+	assert (app.hovered_ctl() == none)
 	order := app.windows.clone()
 	focus := app.focus
 	pointer_move(mut app, one.x, one.y)
@@ -167,7 +167,7 @@ fn test_hover_respects_occlusion_modals_popups_notices_and_clipping() {
 	assert item.hovered && !one.hovered
 	item.disabled = true
 	app.redraw()
-	assert isnil(app.hovered_ctl())
+	assert (app.hovered_ctl() == none)
 	app.close_popups()
 	app.redraw()
 	assert one.hovered
@@ -177,10 +177,10 @@ fn test_hover_respects_occlusion_modals_popups_notices_and_clipping() {
 	app.notify('Overlay', 0)
 	app.redraw()
 	mut n := app.notices[0]
-	assert isnil(app.hovered_ctl())
+	assert (app.hovered_ctl() == none)
 	n.closed = true
 	app.redraw()
-	assert app.hovered_ctl() == one
+	assert app.hovered_ctl() == ?&Ctl(one)
 	mut viewport := scroll()
 	mut wide := label('a long clipped row\nsecond\nthird')
 	viewport.add(mut wide)
@@ -199,7 +199,8 @@ fn test_hover_respects_occlusion_modals_popups_notices_and_clipping() {
 
 fn leave_hides_next(mut c Ctl, mut app App) {
 	record_leave(mut c, mut app)
-	c.link.hidden = true
+	mut next := c.link or { return }
+	next.hidden = true
 	app.redraw()
 }
 
@@ -209,7 +210,7 @@ fn destroy_on_enter(mut c Ctl, mut app App) {
 }
 
 fn record_destroy(mut c Ctl, mut app App) {
-	assert !c.hovered && app.hovered_ctl() != &c
+	assert !c.hovered && app.hovered_ctl() != ?&Ctl(&c)
 	mut log := unsafe { &HoverLog(c.user) }
 	log.events << 'destroy:${c.text}'
 }
@@ -234,13 +235,13 @@ fn test_hover_callbacks_can_mutate_and_destroy_controls() {
 	pointer_move(mut app, two.x, two.y)
 	assert log.events == ['enter:One', 'leave:One']
 	assert !one.hovered && !two.hovered
-	assert app.hovered_ctl() == body
+	assert app.hovered_ctl() == ?&Ctl(body)
 	one.mouse_leave = record_leave
 	one.mouse_enter = destroy_on_enter
 	one.destroy = record_destroy
 	pointer_move(mut app, one.x, one.y)
 	assert log.events == ['enter:One', 'leave:One', 'enter:One', 'leave:One', 'destroy:One']
-	assert !one.hovered && app.hovered_ctl() != one && body.kids.len == 1
+	assert !one.hovered && app.hovered_ctl() != ?&Ctl(one) && body.kids.len == 1
 }
 
 fn pointer_canvas(mut c Ctl, mut screen Screen) {
@@ -298,7 +299,7 @@ fn test_mouse_cursor_restores_unicode_cells_and_preserves_caret() {
 	assert app.screen.cells == base
 	mx, my := app.mouse_position()
 	assert mx == -1 && my == -1
-	assert isnil(app.hovered_ctl())
+	assert (app.hovered_ctl() == none)
 	app.dispatch(Event{ kind: .focus_in })
 	app.redraw()
 	assert app.screen.cells == base

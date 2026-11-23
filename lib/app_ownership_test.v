@@ -81,7 +81,7 @@ fn test_control_actions_resolve_ownership_after_reparenting() {
 	first.dirty, second.dirty = false, false
 	second.set_focus(editor)
 	assert !second.scroll_ctl(mut editor, 1)
-	second.history_for(unsafe { nil }, mut editor)
+	second.history_for(none, mut editor)
 	second.history_for(w1, mut local_editor)
 	second.destroy_ctl(mut editor)
 	assert !editor.closed && editor.parent == w1 && editor.data == 0
@@ -124,7 +124,7 @@ fn test_reparenting_clears_hover_and_stale_input_ownership() {
 	assert first.focus == editor && first.drag == editor && editor.hovered
 	first.scroll_drag = editor
 	w2.add(mut editor)
-	assert editor.data == 1 && !editor.hovered && isnil(first.hovered_ctl())
+	assert editor.data == 1 && !editor.hovered && (first.hovered_ctl() == none)
 	editor.anchor, editor.cursor = 0, 3
 	assert !first.copy_focus() && first.clipboard_text() == 'leave'
 	first.dispatch(Event{ key: int(`x`) })
@@ -204,7 +204,7 @@ fn test_standalone_menu_transfer_clears_old_hover_and_input() {
 	first.dispatch(Event{ kind: .mouse, x: 1, y: 1, motion: true })
 	assert item.hovered
 	second.open_menu(menu, 0, 0)
-	assert !item.hovered && item.data == 1 && isnil(first.hovered_ctl())
+	assert !item.hovered && item.data == 1 && (first.hovered_ctl() == none)
 	first.dispatch(Event{ key: int(Key.enter) })
 	assert first.popups.len == 0 && item.data == 1
 	second.dispatch(Event{ key: int(Key.enter) })

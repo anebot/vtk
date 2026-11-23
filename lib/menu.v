@@ -31,7 +31,7 @@ pub fn (mut c Ctl) menu_separator() {
 }
 
 pub fn (mut app App) open_menu(owner &Ctl, x int, y int) {
-	w := owner.owner_window()
+	w := owner.owner_window_ptr()
 	if !isnil(w) && (w.app != &app || !isnil(app.blocker(w))) { return }
 	app.close_popups()
 	app.push_menu(owner, x, y)
@@ -213,12 +213,12 @@ fn (mut app App) draw_popups() {
 }
 
 fn window_desktop_action(mut item Ctl, mut app App) {
-	mut w := item.link
+	mut w := item.link or { return }
 	app.move_window_to_desktop(mut w, int(item.data))
 }
 
 fn window_menu_action(mut item Ctl, mut app App) {
-	mut w := item.link
+	mut w := item.link or { return }
 	match item.data {
 		1 { app.minimize(mut w) }
 		2 {

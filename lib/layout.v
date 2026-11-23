@@ -187,7 +187,7 @@ fn (c &Ctl) grid_dims() ([]int, []int) {
 	return cols[..nc], rows[..nr]
 }
 
-pub fn (mut c Ctl) layout(r Rect) {
+fn (mut c Ctl) layout(r Rect) {
 	c.x = r.x
 	c.y = r.y
 	c.w = max(0, r.w)
@@ -369,21 +369,30 @@ fn (c &Ctl) walk_tree(depth int, mut rows []TreeRow) {
 	}
 }
 
-pub fn (mut c Ctl) tree_add(parent &Ctl, text string) &Ctl {
+pub fn (mut c Ctl) tree_add(parent ?&Ctl, text string) &Ctl {
 	mut node := &Ctl{ kind: .treenode, text: text, expanded: true }
-	mut p := if isnil(parent) { &c } else { unsafe { parent } }
+	mut p := parent or { &c }
 	p.add(mut node)
 	if isnil(c.selected_node) { c.selected_node = node }
 	return node
 }
 
-pub fn (c &Ctl) hit(x int, y int) &Ctl {
+pub fn (mut c Ctl) tree_select(node ?&Ctl) bool {
+	if c.kind != .tree { return false }
+	value := node or { unsafe { nil } }
+	if !isnil(value) && (value.kind != .treenode || !c.contains_ctl(value)) { return false }
+	c.selected_node = value
+	c.invalidate()
+	return true
+}
+
+fn (c &Ctl) hit_ptr(x int, y int) &Ctl {
 	if c.hidden || c.closed || c.minimized || !c.rect().contains(x, y) { return unsafe { nil } }
 	if c.kind == .scroll && c.scrollbar && x == c.x + c.w - 1 { return unsafe { c } }
 	for i := c.kids.len - 1; i >= 0; i-- {
 		child := c.kids[i]
 		if child.kind in [.menu, .item, .treenode, .menuitem] { continue }
-		hit := child.hit(x, y)
+		hit := child.hit_ptr(x, y)
 		if !isnil(hit) { return hit }
 	}
 	return unsafe { c }

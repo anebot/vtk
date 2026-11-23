@@ -14,11 +14,10 @@ pub:
 
 @[heap]
 pub struct Edit {
-pub mut:
+mut:
 	undo     []Change
 	redo     []Change
 	revision u64
-mut:
 	grouping     bool
 	group_text   string
 	group_cursor int

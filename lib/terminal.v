@@ -7,7 +7,7 @@ import os
 // feed can be used on arbitrary chunks, including split UTF-8/CSI sequences.
 @[heap]
 pub struct Terminal {
-pub mut:
+mut:
 	cols          int
 	rows          int
 	cells         []Cell
@@ -15,7 +15,6 @@ pub mut:
 	cy            int
 	cursor_hidden bool
 	exited        bool
-mut:
 	pty         Pty
 	saved_x     int
 	saved_y     int

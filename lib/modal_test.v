@@ -3,7 +3,7 @@ module vtk
 import os
 
 fn close_nested_modal(mut app App) {
-	mut child := app.top_window()
+	mut child := app.top_window_ptr()
 	assert child.modal && !isnil(child.modal_parent)
 	assert app.blocker(child.modal_parent) == child
 	assert app.blocker(app.windows[0]) == child
@@ -11,7 +11,7 @@ fn close_nested_modal(mut app App) {
 }
 
 fn check_settings_modality(mut app App) {
-	mut settings := app.top_window()
+	mut settings := app.top_window_ptr()
 	assert settings.text == 'Settings' && settings.modal && isnil(settings.modal_owner)
 	assert isnil(app.drag) && isnil(app.scroll_drag) && isnil(app.placement)
 	assert app.popups.len == 0
@@ -20,7 +20,7 @@ fn check_settings_modality(mut app App) {
 		if w == settings { continue }
 		assert app.blocker(w) == settings
 		app.set_focus(w.kids[0])
-		assert app.focus.owner_window() == settings
+		assert app.focus.owner_window_ptr() == settings
 		// Even stale focus from application callbacks cannot route input behind it.
 		app.focus = w.kids[0]
 		app.dispatch(Event{ key: int(`x`) })
@@ -29,28 +29,28 @@ fn check_settings_modality(mut app App) {
 		assert w.kids[0].text == 'unchanged'
 		app.drag = w.kids[0]
 		app.dispatch(Event{ kind: .mouse, x: w.x, y: w.y, button: .left, pressed: true, motion: true })
-		assert isnil(app.drag) && app.focus.owner_window() == settings
+		assert isnil(app.drag) && app.focus.owner_window_ptr() == settings
 	}
 	mut created := app.window('New window', 24, 6)
 	mut field := entry('unchanged', 0)
 	created.add(mut field)
-	assert app.blocker(created) == settings && app.top_window() == settings
+	assert app.blocker(created) == settings && app.top_window_ptr() == settings
 	assert app.bar_windows().last() == created
 	app.always_on_top(mut created, true)
 	app.set_focus(field)
-	assert app.top_window() == settings && app.focus.owner_window() == settings
+	assert app.top_window_ptr() == settings && app.focus.owner_window_ptr() == settings
 	app.dispatch(Event{ key: int(Key.tab), ctrl: true })
 	app.dispatch(Event{ key: int(`a`), alt: true })
 	app.dispatch(Event{ key: int(`o`), ctrl: true })
 	app.app_menu(0, app.height - 1)
 	app.window_menu(mut created, 0, 0)
-	assert app.popups.len == 0 && app.top_window() == settings
+	assert app.popups.len == 0 && app.top_window_ptr() == settings
 	app.minimize(mut settings)
 	assert !settings.minimized && app.blocker(created) == settings
 	mut nested := app.window('Nested application modal', 24, 6)
 	app.after(0, close_nested_modal)
-	app.modal_for(mut nested, unsafe { nil })
-	assert app.blocker(created) == settings && app.top_window() == settings
+	app.modal_for(mut nested, none)
+	assert app.blocker(created) == settings && app.top_window_ptr() == settings
 	app.close(mut created)
 	app.close(mut settings)
 }
@@ -81,7 +81,7 @@ fn test_settings_blocks_existing_new_windows_and_stale_input() {
 }
 
 fn check_settings_bar_position(mut app App) {
-	mut settings := app.top_window()
+	mut settings := app.top_window_ptr()
 	body := settings.kids[0]
 	options := body.kids.filter(it.kind == .checkbox && it.text == 'Window bar at top')
 	assert options.len == 1
@@ -117,7 +117,7 @@ fn test_settings_applies_saves_and_resets_bar_position() {
 }
 
 fn change_settings_window_buttons(mut app App) {
-	mut settings := app.top_window()
+	mut settings := app.top_window_ptr()
 	body := settings.kids[0]
 	option := body.kids.filter(it.kind == .checkbox && it.text == 'macOS window buttons')[0]
 	buttons := body.kids.last().kids
@@ -162,7 +162,7 @@ fn test_settings_applies_saves_reopens_and_resets_macos_window_buttons() {
 }
 
 fn choose_settings_desktop_color(mut app App) {
-	mut picker := app.top_window()
+	mut picker := app.top_window_ptr()
 	assert picker.text == 'Desktop background' && picker.modal_owner.text == 'Settings'
 	mut sliders := picker.kids[0].kids.filter(it.kind == .slider)
 	assert sliders.map(it.value) == [12, 34, 56]
@@ -177,7 +177,7 @@ fn choose_settings_desktop_color(mut app App) {
 }
 
 fn change_settings_appearance(mut app App) {
-	mut settings := app.top_window()
+	mut settings := app.top_window_ptr()
 	body := settings.kids[0]
 	theme := body.kids[1].kids[1]
 	desktop := body.kids[2].kids[1]
@@ -206,7 +206,7 @@ fn change_settings_appearance(mut app App) {
 }
 
 fn check_saved_settings_appearance_and_reset(mut app App) {
-	mut settings := app.top_window()
+	mut settings := app.top_window_ptr()
 	body := settings.kids[0]
 	theme := body.kids[1].kids[1]
 	gradient := body.kids.filter(it.text == 'Gradient window titles')[0]

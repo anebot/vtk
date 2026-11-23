@@ -31,22 +31,22 @@ fn test_desktop_buttons_switch_visible_windows_and_restore_focus() {
 		row := app.bar_y() * app.width
 		assert app.screen.cells[row..row + 21].map(it.glyph).join('') == '[Start] [1][_][_][_] '
 		desktop_click(mut app, 2)
-		assert app.active_desktop == 2 && isnil(app.top_window()) && isnil(app.focus)
+		assert app.active_desktop == 2 && isnil(app.top_window_ptr()) && isnil(app.focus)
 		assert !field1.visible() && app.bar_windows().len == 0
 		mut second := app.window('Second desktop', 36, 9)
 		mut field2 := entry('second', 0)
 		second.add(mut field2)
 		app.set_focus(field2)
 		app.redraw()
-		assert second.desktop_id == 2 && app.top_window() == second
+		assert second.desktop_id == 2 && app.top_window_ptr() == second
 		assert !app.screen.snapshot().contains('First desktop')
 		assert app.screen.cells[row..row + 21].map(it.glyph).join('') == '[Start] [_][2][_][_] '
 		desktop_click(mut app, 1)
-		assert app.focus == field1 && app.top_window() == first
+		assert app.focus == field1 && app.top_window_ptr() == first
 		app.set_focus(field2)
 		assert app.focus == field1
 		app.dispatch(Event{ key: int(Key.tab), ctrl: true })
-		assert app.active_desktop == 1 && app.top_window() == first
+		assert app.active_desktop == 1 && app.top_window_ptr() == first
 		// Stale focus cannot route paste to an inactive desktop.
 		app.focus = field2
 		app.dispatch(Event{ kind: .paste, text: '!' })
@@ -54,7 +54,7 @@ fn test_desktop_buttons_switch_visible_windows_and_restore_focus() {
 		desktop_click(mut app, 2)
 		assert app.focus == field2 && app.bar_windows() == [second]
 		app.raise(mut first)
-		assert app.active_desktop == 1 && app.top_window() == first
+		assert app.active_desktop == 1 && app.top_window_ptr() == first
 	}
 }
 
@@ -86,10 +86,10 @@ fn test_move_window_menu_moves_to_another_desktop_without_switching() {
 		submenu.value = 2
 		app.dispatch(Event{ key: int(Key.enter) })
 		assert moved.desktop_id == 3 && app.active_desktop == 1
-		assert app.top_window() == first && app.focus == fallback && !field.visible()
+		assert app.top_window_ptr() == first && app.focus == fallback && !field.visible()
 		assert app.bar_windows() == [first] && app.popups.len == 0
 		desktop_click(mut app, 3)
-		assert app.top_window() == moved && field.visible()
+		assert app.top_window_ptr() == moved && field.visible()
 		app.redraw()
 		// The appbar [=] exposes the same move menu.
 		app.dispatch(Event{
@@ -111,7 +111,7 @@ fn test_switching_clears_mouse_capture_popups_and_keyboard_placement() {
 	w.add(mut field)
 	app.redraw()
 	app.dispatch(Event{ kind: .mouse, motion: true, x: field.x + 1, y: field.y })
-	assert app.hovered_ctl() == field
+	assert app.hovered_ctl() == ?&Ctl(field)
 	app.drag = field
 	app.scroll_drag = field
 	original := w.rect()
@@ -122,7 +122,7 @@ fn test_switching_clears_mouse_capture_popups_and_keyboard_placement() {
 	app.open_menu(menu, 10, 10)
 	assert app.switch_desktop(2)
 	assert isnil(app.drag) && isnil(app.scroll_drag) && isnil(app.placement)
-	assert app.popups.len == 0 && isnil(app.hovered_ctl()) && !field.hovered
+	assert app.popups.len == 0 && (app.hovered_ctl() == none) && !field.hovered
 	assert w.rect() == original
 }
 
@@ -134,18 +134,18 @@ fn test_desktop_reduction_keeps_windows_and_modal_families_together() {
 	owned.modal = true
 	owned.modal_owner = owner
 	assert app.move_window_to_desktop(mut owner, 4)
-	assert owner.desktop_id == 4 && owned.desktop_id == 4 && isnil(app.top_window())
-	assert app.switch_desktop(4) && app.top_window() == owned
+	assert owner.desktop_id == 4 && owned.desktop_id == 4 && isnil(app.top_window_ptr())
+	assert app.switch_desktop(4) && app.top_window_ptr() == owned
 	assert !app.move_window_to_desktop(mut owned, 2)
 	app.set_desktop_count(2)
 	assert app.desktop_count == 2 && app.active_desktop == 2
-	assert owner.desktop_id == 2 && owned.desktop_id == 2 && app.top_window() == owned
+	assert owner.desktop_id == 2 && owned.desktop_id == 2 && app.top_window_ptr() == owned
 	mut global := app.window('Application modal', 30, 8)
 	global.modal = true
 	assert !app.switch_desktop(1)
 	assert !app.move_window_to_desktop(mut owner, 1)
 	app.set_desktop_count(1)
-	assert app.active_desktop == 1 && app.top_window() == global
+	assert app.active_desktop == 1 && app.top_window_ptr() == global
 	assert app.windows.len == 3 && app.windows.all(it.desktop_id == 1)
 	app.set_desktop_count(20)
 	assert app.desktop_count == 4
@@ -186,7 +186,7 @@ fn test_narrow_bar_does_not_activate_clipped_desktop_slots() {
 }
 
 fn check_desktop_count_settings(mut app App) {
-	mut w := app.top_window()
+	mut w := app.top_window_ptr()
 	mut rows := w.kids[0].kids.filter(it.kind == .box && it.kids.len > 0 && it.kids[0].text == 'Virtual desktops:')
 	assert rows.len == 1
 	mut row := rows[0]
@@ -238,12 +238,12 @@ fn test_owned_dialog_opened_from_another_desktop_follows_its_owner() {
 	owner := app.window('Owner on one', 30, 8)
 	app.switch_desktop(2)
 	app.after(0, fn (mut app App) {
-		assert app.active_desktop == 1 && app.top_window().desktop_id == 1
-		assert app.top_window().modal_owner.desktop_id == 1
+		assert app.active_desktop == 1 && app.top_window_ptr().desktop_id == 1
+		assert app.top_window_ptr().modal_owner.desktop_id == 1
 		app.dispatch(Event{ key: int(Key.escape) })
 	})
 	if _ := app.prompt_for(owner, 'Owned dialog', 'Text:', '') {
 		assert false
 	}
-	assert app.active_desktop == 1 && app.top_window() == owner
+	assert app.active_desktop == 1 && app.top_window_ptr() == owner
 }

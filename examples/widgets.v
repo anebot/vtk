@@ -27,10 +27,9 @@ fn clock_clicked(event vtk.Event, mut app vtk.App) {
 	} else { show_calendar(mut app) }
 }
 
-fn hover_status(mut c vtk.Ctl, mut app vtk.App) {
+fn hover_status(mut c vtk.Ctl, mut _ vtk.App) {
 	mut status := unsafe { &vtk.Ctl(c.user) }
-	status.set_text(if c.hovered { 'Mouse over ${c.kind}' } else { 'Tab cycles controls | F10 menus | Ctrl-C quits' })
-	app.dirty = true
+	status.set_text(if c.is_hovered() { 'Mouse over ${c.kind}' } else { 'Tab cycles controls | F10 menus | Ctrl-C quits' })
 }
 
 fn main() {
@@ -75,7 +74,7 @@ fn main() {
 	table.table_column('Square')
 	tabs.add_tab('Table', mut table)
 	mut tree := vtk.tree()
-	root := tree.tree_add(unsafe { nil }, 'Library')
+	root := tree.tree_add(none, 'Library')
 	tree.tree_add(root, 'Controls')
 	tree.tree_add(root, 'Layouts')
 	tree.tree_add(root, 'Editors')

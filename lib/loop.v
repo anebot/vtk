@@ -66,8 +66,17 @@ pub fn (mut app App) step(timeout_ms int) bool {
 	return app.running
 }
 
+pub fn (mut app App) layout() {
+	app.fit_windows()
+	for mut w in app.windows {
+		if !app.on_desktop(w) || w.closed || w.minimized || w.hidden { continue }
+		w.measure()
+		w.layout(w.rect())
+	}
+	app.dirty = true
+}
+
 pub fn (mut app App) redraw() {
-	app.dirty = false
 	app.screen.resize(app.width, app.height)
 	app.screen.ascii = app.theme.ascii
 	app.screen.cursor_x = -1
@@ -75,12 +84,8 @@ pub fn (mut app App) redraw() {
 	app.screen.restore_clip(Rect{0, 0, app.width, app.height})
 	app.screen.fill(Rect{0, 0, app.width, app.height}, `▒`, app.theme.desk_fg, app.theme.desk_bg)
 	area := app.work_area()
-	app.fit_windows()
-	for mut w in app.windows {
-		if !app.on_desktop(w) || w.closed || w.minimized || w.hidden { continue }
-		w.measure()
-		w.layout(w.rect())
-	}
+	app.layout()
+	app.dirty = false
 	app.layout_notices()
 	app.layout_popups()
 	app.update_hover()
@@ -108,7 +113,7 @@ pub fn (mut app App) redraw() {
 	}
 	// A cursor is valid only if its cell remains visible in the top window.
 	if !area.contains(app.screen.cursor_x, app.screen.cursor_y) || app.popups.len > 0
-		|| (!isnil(app.focus) && app.focus.owner_window() != app.top_window()) {
+		|| (!isnil(app.focus) && app.focus.owner_window_ptr() != app.top_window_ptr()) {
 		app.screen.cursor_x = -1
 	}
 	app.draw_mouse_cursor()
@@ -193,7 +198,7 @@ pub fn (mut app App) dispatch(e Event) {
 		}
 		return
 	}
-	mut w := app.top_window()
+	mut w := app.top_window_ptr()
 	if !isnil(w) {
 		if app.move_key.matches(e) {
 			app.begin_placement(mut w, false)
@@ -606,7 +611,7 @@ fn (mut app App) mouse(e Event) {
 			return
 		}
 	}
-	mut c := w.hit(e.x, e.y)
+	mut c := w.hit_ptr(e.x, e.y)
 	if isnil(c) || !c.visible() { return }
 	if e.button == .right && e.pressed {
 		mut p := c

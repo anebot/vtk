@@ -134,13 +134,13 @@ fn (mut app App) draw_date_picker(c &Ctl) {
 }
 
 fn date_picker_accept(mut c Ctl, mut app App) {
-	mut w := c.owner_window()
+	mut w := c.owner_window_ptr()
 	w.dialog_result = 1
 	app.close(mut w)
 }
 
 // date_pick returns the chosen date, or none when cancelled.
-pub fn (mut app App) date_pick(owner &Ctl, title string, initial time.Time) ?time.Time {
+pub fn (mut app App) date_pick(owner ?&Ctl, title string, initial time.Time) ?time.Time {
 	if !app.can_access(owner) { return none }
 	mut body := box(true)
 	mut picker := date_picker(initial)

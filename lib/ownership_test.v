@@ -113,7 +113,7 @@ fn test_structural_and_presentation_mutations_invalidate_without_callbacks() {
 	pages.add_tab('New', mut page)
 	assert app.dirty
 	app.dirty = false
-	nodes.tree_add(unsafe { nil }, 'Node')
+	nodes.tree_add(none, 'Node')
 	assert app.dirty
 	app.dirty = false
 	text.scroll_rows(1, 20, 5)

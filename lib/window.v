@@ -19,7 +19,7 @@ pub fn (mut app App) window(title string, width int, height int) &Ctl {
 	return w
 }
 
-pub fn (app &App) top_window() &Ctl {
+fn (app &App) top_window_ptr() &Ctl {
 	for i := app.windows.len - 1; i >= 0; i-- {
 		w := app.windows[i]
 		if app.on_desktop(w) && !w.closed && !w.minimized && !w.hidden { return w }
@@ -84,7 +84,7 @@ pub fn (mut app App) raise(mut w Ctl) {
 	}
 	app.windows.insert(at, &w)
 	w.fit_window(app.work_area())
-	if isnil(app.focus) || app.focus.owner_window() != &w || !app.focus.visible() {
+	if isnil(app.focus) || app.focus.owner_window_ptr() != &w || !app.focus.visible() {
 		app.focus_first(&w)
 	}
 	app.dirty = true
@@ -104,9 +104,9 @@ pub fn (mut app App) close(mut w Ctl) bool {
 	app.clear_hover_within(&w)
 	app.close_terminals(mut w)
 	app.close_popups()
-	if !isnil(app.focus) && app.focus.owner_window() == &w {
+	if !isnil(app.focus) && app.focus.owner_window_ptr() == &w {
 		app.focus = unsafe { nil }
-		app.focus_first(app.top_window())
+		app.focus_first(app.top_window_ptr())
 	}
 	app.dirty = true
 	return true
@@ -126,13 +126,23 @@ pub fn (mut app App) destroy_ctl(mut c Ctl) {
 	if f := c.destroy { f(mut c, mut app) }
 	c.detach()
 	c.kids.clear()
-	for i, w in app.windows {
-		if w == &c {
-			app.windows.delete(i)
-			break
-		}
-	}
 	if app.focus == &c { app.focus = unsafe { nil } }
+	app.dirty = true
+}
+
+pub fn (mut app App) set_default_button(mut w Ctl, button ?&Ctl) bool {
+	if w.kind != .window || w.app != &app { return false }
+	value := button or { unsafe { nil } }
+	if !isnil(value) && !w.contains_ctl(value) { return false }
+	w.default_button = value
+	app.dirty = true
+	return true
+}
+
+pub fn (mut app App) move(mut w Ctl, x int, y int) {
+	if w.kind != .window || !app.can_access(&w) { return }
+	w.x, w.y = x, y
+	w.fit_window(app.work_area())
 	app.dirty = true
 }
 
@@ -151,8 +161,8 @@ pub fn (mut app App) minimize(mut w Ctl) {
 	if !app.can_access(&w) || w.modal || !isnil(app.blocker(&w)) { return }
 	w.minimized = true
 	app.clear_hover_within(&w)
-	if !isnil(app.focus) && app.focus.owner_window() == &w { app.focus = unsafe { nil } }
-	if isnil(app.focus) { app.focus_first(app.top_window()) }
+	if !isnil(app.focus) && app.focus.owner_window_ptr() == &w { app.focus = unsafe { nil } }
+	if isnil(app.focus) { app.focus_first(app.top_window_ptr()) }
 	app.dirty = true
 }
 
@@ -346,7 +356,7 @@ fn (app &App) window_title_layout(w &Ctl) WindowTitleLayout {
 
 fn (mut app App) draw_window(mut w Ctl) {
 	t := app.theme
-	active := app.top_window() == &w
+	active := app.top_window_ptr() == &w
 	frame := if active || !app.dim_inactive { t.frame } else { t.dim }
 	title_fg := if active || !app.dim_inactive { t.title } else { t.inactive_title }
 	title_bg := if active || !app.dim_inactive { t.title_bg } else { t.inactive_title_bg }
@@ -388,7 +398,7 @@ fn (mut app App) draw_window(mut w Ctl) {
 }
 
 pub fn (mut app App) set_focus(c &Ctl) {
-	if isnil(c) || !app.can_access(c) || !c.focusable || !c.visible() || !isnil(app.blocker(c.owner_window())) { return }
+	if isnil(c) || c.root().app != &app || !c.focusable || !c.visible() || !isnil(app.blocker(c.owner_window_ptr())) { return }
 	app.focus = c
 	app.dirty = true
 }
@@ -408,10 +418,10 @@ fn (mut app App) focus_first(w &Ctl) {
 
 fn (mut app App) enforce_modal_input() {
 	if app.popups.any(!app.can_access(it.popup_owner)) { app.close_popups() }
-	if !isnil(app.drag) && (!app.can_access(app.drag) || !app.drag.visible() || !isnil(app.blocker(app.drag.owner_window()))) {
+	if !isnil(app.drag) && (!app.can_access(app.drag) || !app.drag.visible() || !isnil(app.blocker(app.drag.owner_window_ptr()))) {
 		app.drag = unsafe { nil }
 	}
-	if !isnil(app.scroll_drag) && (!app.can_access(app.scroll_drag) || !app.scroll_drag.visible() || !isnil(app.blocker(app.scroll_drag.owner_window()))) {
+	if !isnil(app.scroll_drag) && (!app.can_access(app.scroll_drag) || !app.scroll_drag.visible() || !isnil(app.blocker(app.scroll_drag.owner_window_ptr()))) {
 		app.scroll_drag = unsafe { nil }
 	}
 	if !app.can_access(app.placement) { app.placement = unsafe { nil } }
@@ -419,14 +429,14 @@ fn (mut app App) enforce_modal_input() {
 		app.placement_key(Event{ key: int(Key.escape) })
 	}
 	if !isnil(app.focus) && (!app.can_access(app.focus) || !app.focus.visible()) { app.focus = unsafe { nil } }
-	mut blocked := app.blocker(if isnil(app.focus) { app.top_window() } else { app.focus.owner_window() })
+	mut blocked := app.blocker(if isnil(app.focus) { app.top_window_ptr() } else { app.focus.owner_window_ptr() })
 	if !isnil(blocked) { app.raise(mut blocked) }
-	if isnil(app.focus) { app.focus_first(app.top_window()) }
+	if isnil(app.focus) { app.focus_first(app.top_window_ptr()) }
 }
 
 fn (mut app App) focus_next(back bool) {
 	mut found := []&Ctl{}
-	w := if !isnil(app.focus) { app.focus.owner_window() } else { app.top_window() }
+	w := if !isnil(app.focus) { app.focus.owner_window_ptr() } else { app.top_window_ptr() }
 	if isnil(w) { return }
 	focusable(w, mut found)
 	if found.len == 0 { return }

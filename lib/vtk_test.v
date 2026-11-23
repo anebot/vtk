@@ -37,7 +37,7 @@ fn test_layout_focus_tabs_and_window_lifecycle() {
 	app.redraw()
 	app.set_focus(first)
 	assert app.focus == first
-	assert w.hit(first.x, first.y) == first
+	assert w.hit_ptr(first.x, first.y) == first
 	assert !second.visible()
 	app.set_focus(tabs)
 	app.dispatch(Event{ key: int(Key.right) })
@@ -239,7 +239,7 @@ fn test_vim_utf8_edits_visual_and_undo_group() {
 }
 
 fn modal_close_hook(mut app App) {
-	mut dialog := app.top_window()
+	mut dialog := app.top_window_ptr()
 	assert dialog.modal
 	if !isnil(dialog.modal_owner) {
 		assert app.blocker(dialog.modal_owner) == dialog
@@ -249,7 +249,7 @@ fn modal_close_hook(mut app App) {
 	} else {
 		mut other := app.window('Blocked new window', 24, 6)
 		assert app.blocker(other) == dialog
-		assert app.top_window() == dialog
+		assert app.top_window_ptr() == dialog
 		app.close(mut other)
 	}
 	dialog.dialog_result = 42
@@ -265,7 +265,7 @@ fn test_modal_owners_application_modality_and_timer_reentrancy() {
 	assert !dialog.modal
 	mut application_dialog := app.window('Application modal', 24, 6)
 	app.after(0, modal_close_hook)
-	assert app.modal_for(mut application_dialog, unsafe { nil }) == 42
+	assert app.modal_for(mut application_dialog, none) == 42
 	assert app.running
 }
 
@@ -353,8 +353,8 @@ fn test_vim_selection_navigation_uses_arrows_and_respects_modifiers() {
 	}
 	app.vim_set(true)
 	mut tree := tree()
-	first := tree.tree_add(unsafe { nil }, 'First')
-	second := tree.tree_add(unsafe { nil }, 'Second')
+	first := tree.tree_add(none, 'First')
+	second := tree.tree_add(none, 'Second')
 	tree.selected_node = first
 	assert app.widget_key(mut tree, Event{ key: int(`j`) })
 	assert tree.selected_node == second

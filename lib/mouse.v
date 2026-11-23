@@ -34,7 +34,7 @@ pub fn (app &App) mouse_position() (int, int) { return app.mouse_x, app.mouse_y 
 
 // hovered_ctl is the deepest eligible control under the pointer; events do not
 // bubble to its parents. Keyboard focus and mouse capture are independent.
-pub fn (app &App) hovered_ctl() &Ctl { return app.hover }
+pub fn (app &App) hovered_ctl() ?&Ctl { return ctl_option(app.hover) }
 
 fn (mut app App) sync_mouse_motion() {
 	app.driver.set_mouse_motion(app.mouse_motion || app.mouse_cursor.enabled)
@@ -82,7 +82,7 @@ fn (app &App) hover_target() &Ctl {
 				return if menu.visible() { menu } else { unsafe { nil } }
 			}
 		}
-		c := w.hit(x, y)
+		c := w.hit_ptr(x, y)
 		return if !isnil(c) && c.visible() { c } else { unsafe { nil } }
 	}
 	return unsafe { nil }
@@ -98,14 +98,17 @@ fn (mut app App) clear_hover() {
 }
 
 fn (mut app App) clear_hover_within(c &Ctl) {
-	mut p := app.hover
-	for !isnil(p) {
-		if p == c {
-			app.clear_hover()
-			return
-		}
-		p = p.parent
-	}
+	if c.contains_ctl(app.hover) { app.clear_hover() }
+}
+
+fn (mut app App) release_ctl(c &Ctl) {
+	app.clear_hover_within(c)
+	if c.contains_ctl(app.focus) { app.focus = unsafe { nil } }
+	if c.contains_ctl(app.drag) { app.drag = unsafe { nil } }
+	if c.contains_ctl(app.scroll_drag) { app.scroll_drag = unsafe { nil } }
+	if c.contains_ctl(app.placement) { app.placement = unsafe { nil } }
+	if c.contains_ctl(app.title_click) { app.title_click = unsafe { nil } }
+	if app.popups.any(c.contains_ctl(it.popup_owner)) { app.close_popups() }
 }
 
 fn (mut app App) update_hover() {

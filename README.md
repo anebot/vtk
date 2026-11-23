@@ -76,6 +76,26 @@ standalone menus bind to the app that opens them.
 After a transfer, stale focus, capture and popups are discarded before the next
 input event. Hover leave callbacks run before ownership changes.
 
+Tree links, control identity, geometry, lifecycle flags, app stacks and focus,
+and render/history storage are toolkit-owned. Read them through `rect()`,
+`parent_ctl()`, `owner_window()`, `children()`, `window_list()`, `focused_ctl()`
+and the state queries. Returned arrays are copies. Use `add`, `detach`, `clear`
+and `replace` for tree changes; `clear` detaches children, while `destroy_ctl`
+also releases their resources. Detaching removes stale selections, default
+buttons and input capture. Use `app.move` for window positions and `app.layout()`
+to calculate geometry before a redraw. `app.invalidate()` schedules an app redraw.
+
+Lookups such as `top_window()`, `owner_window()`, `parent_ctl()`, `tree_selection()`,
+`hovered_ctl()` and `hit()` return `?&Ctl`. Handle absence with an `if` guard or
+`or` block. Use `none` for a root tree node or an application-modal dialog owner:
+
+```v
+tree.tree_add(none, 'Root')
+if mut window := app.top_window() {
+    app.raise(mut window)
+}
+```
+
 Widget mutations no longer take `mut app`: use `control.set_value(42)`,
 `control.replace_selection(text)`, `control.undo()`, `control.redo()`,
 `control.toggle_task(at)` and `control.fire()`. Value changes and edits notify
@@ -112,7 +132,7 @@ the window stack, theme, focus, clipboard, hooks and desktop settings.
 | Value controls | `slider(low, high)`, `spin(low, high)`, `progress()`, `spinner(text)` |
 | Choices | `combo()`, `radio()`, `control.add_item(text)` |
 | Table | `table(cell_callback, row_count)`, `control.table_column(title)`, `control.row_count` |
-| Tree | `tree()`, `control.tree_add(parent, text)`, `control.selected_node` selection |
+| Tree | `tree()`, `control.tree_add(parent, text)`, `control.tree_selection()`, `control.tree_select(node)` |
 | Tabs / group | `tabs()`, `control.add_tab(title, mut child)`, `group(title)` |
 | Linear / grid / flow | `box(vertical)`, `grid()`, `flow()` |
 | Split / scroll | `split(vertical, share)`, `scroll()` |
@@ -123,11 +143,13 @@ the window stack, theme, focus, clipboard, hooks and desktop settings.
 
 `low` and `high` are numeric range bounds; `value` holds a widget value or
 selection index. Entries use `byte_limit` (zero means unlimited) and `min_w`
-for minimum preferred width. Tables use `row_count`. Trees use `selected_node`
-and each node's `expanded` flag. Dialogs use `dialog_result` and `default_button`;
-popups refer to their menu or combobox through `popup_owner`. `link` is reserved
-for an associated control used by callbacks; `user` and `data` hold application
-state.
+for minimum preferred width. Tables use `row_count`. Trees expose selection through
+`tree_selection()` and each node's `expanded` flag. `tree_select(node)` schedules a
+redraw without emitting `changed`. Dialogs use `dialog_result`; set their default
+button with `app.set_default_button(mut window, button)` and query it with
+`window.get_default_button()`. Popup relationships are managed internally. `link`
+is an optional associated-control reference used by callbacks; unwrap it before
+use. `user` and `data` hold application state.
 
 Grid children use `row` and `col`, both in `0..64`. Expanding children share
 spare space; horizontal boxes leave one cell between children. Button bars
@@ -175,11 +197,11 @@ button.mouse_leave = on_hover
 ```
 
 Both callbacks have the usual `fn (mut vtk.Ctl, mut vtk.App)` signature.
-`control.hovered` is already updated when they run. Enter and leave fire once
+`control.is_hovered()` is already updated when they run. Enter and leave fire once
 per transition on the deepest eligible control, without bubbling to parents
 or changing keyboard focus. Existing `mousefn` callbacks receive movement
 events too; these have `motion == true`, `button == .none`, and `pressed == false`
-when no button is held. `app.hovered_ctl()` returns the hovered control or nil,
+when no button is held. `app.hovered_ctl()` returns the hovered control or `none`,
 and `app.mouse_position()` returns zero-based terminal cells.
 
 The cursor supports a single-cell glyph, foreground/background colors and
@@ -242,7 +264,7 @@ app.switch_desktop(2)
 app.move_window_to_desktop(mut window, 3)
 ```
 
-`app.desktop_count`, `app.active_desktop` and `window.desktop_id` expose the
+`app.get_desktop_count()`, `app.get_active_desktop()` and `window.get_desktop_id()` expose the
 current state. Use the methods above to change it so focus, menus and capture
 are updated together. Desktop numbers are one-based; invalid switch/move
 requests return false. The default count is one.
@@ -332,7 +354,7 @@ a dismissable notification; zero leaves it visible until closed.
 
 `msgbox_for`, `confirm_for`, `prompt_for`, `choice_for`, `list_choice_for`,
 `file_pick_for`, `color_pick`, `emoji_pick` and `history_for` implement the
-dialogs. Explicit owners provide window modality; a nil owner provides
+dialogs. Explicit owners provide window modality; `none` provides
 application modality. Results live in each dialog. `prompt`, `msgbox` and
 `confirm_quit` provide common shortcuts. File picking never changes cwd.
 Settings is application-modal and blocks both existing and newly opened windows.
@@ -448,7 +470,8 @@ Drawing composes clipped cells and emits a single ANSI diff. Wide Unicode
 characters occupy two cells and combining marks attach to the preceding
 glyph. ASCII fallback changes display only. `Screen` exposes text, fill,
 frame and line primitives; canvas callbacks draw in absolute cell coordinates.
-`app.redraw()` and `app.screen.snapshot()` work without opening a terminal.
+`app.redraw()` and `app.snapshot()` work without opening a terminal. Canvas painters
+use `screen.set_cursor(x, y, shape)` to place a caret within their clip rectangle.
 Timers (`after`, `every`, `cancel_hook`) run on the event-loop thread.
 
 The terminal control uses a Unix PTY or Windows ConPTY and an incremental

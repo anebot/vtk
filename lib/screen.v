@@ -14,14 +14,14 @@ pub mut:
 
 pub struct Screen {
 pub mut:
+	ascii        bool
+mut:
 	width        int
 	height       int
 	cells        []Cell
 	cursor_x     int = -1
 	cursor_y     int = -1
 	cursor_shape CursorShape
-	ascii        bool
-mut:
 	front []Cell
 	clip  Rect
 }
@@ -34,9 +34,18 @@ pub fn (mut s Screen) resize(width int, height int) {
 	s.cells = []Cell{len: w * h}
 	s.front = []Cell{}
 	s.clip = Rect{0, 0, w, h}
+	s.set_cursor(s.cursor_x, s.cursor_y, s.cursor_shape)
 }
 
 pub fn (mut s Screen) invalidate() { s.front = []Cell{} }
+
+pub fn (mut s Screen) set_cursor(x int, y int, shape CursorShape) bool {
+	s.cursor_x, s.cursor_y = -1, -1
+	if !s.clip.contains(x, y) || x < 0 || y < 0 || x >= s.width || y >= s.height { return false }
+	s.cursor_x, s.cursor_y = x, y
+	s.cursor_shape = shape
+	return true
+}
 
 pub fn (mut s Screen) set_clip(r Rect) Rect {
 	old := s.clip

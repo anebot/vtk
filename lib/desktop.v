@@ -81,7 +81,7 @@ fn (mut app App) draw_bar() {
 	old := app.screen.set_clip(buttons)
 	for w in app.bar_windows() {
 		text := '[= ${w.text}] '
-		app.screen.text(x, y, text, if w == app.top_window() { t.sel_fg } else { t.bar_fg }, if w == app.top_window() {
+		app.screen.text(x, y, text, if w == app.top_window_ptr() { t.sel_fg } else { t.bar_fg }, if w == app.top_window_ptr() {
 			t.sel_bg
 		} else {
 			t.bar_bg
@@ -373,7 +373,7 @@ fn settings_theme_changed(mut c Ctl, mut app App) {
 
 fn settings_desktop_color(mut c Ctl, mut app App) {
 	mut s := unsafe { &Settings(c.user) }
-	if rgb := app.color_pick(c.owner_window(), 'Desktop background', color_as_rgb(s.palette.desk_bg)) {
+	if rgb := app.color_pick(c.owner_window_ptr(), 'Desktop background', color_as_rgb(s.palette.desk_bg)) {
 		s.palette.desk_bg = 0x1000000 | rgb
 		s.update_desktop_color()
 		app.dirty = true
@@ -540,6 +540,6 @@ pub fn (mut app App) settings_dialog() {
 	row.add(mut close)
 	body.add(mut row)
 	mut w := app.dialog('Settings', mut body)
-	app.modal_for(mut w, unsafe { nil })
+	app.modal_for(mut w, none)
 	app.destroy_ctl(mut w)
 }

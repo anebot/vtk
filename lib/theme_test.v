@@ -102,7 +102,7 @@ fn test_controls_use_matching_foreground_and_background_roles() {
 		table.table_column('Name')
 		table.value = 0
 		mut tree := tree()
-		tree.tree_add(unsafe { nil }, 'Project')
+		tree.tree_add(none, 'Project')
 		mut selections := [table, tree]
 		for mut c in selections {
 			c.layout(Rect{0, 0, 20, 3})

@@ -98,6 +98,7 @@ fn pencil_cell(shape PencilShape, size int, x int, y int) bool {
 fn abs(n int) int { return if n < 0 { -n } else { n } }
 
 fn erase_cell(mut screen vtk.Screen, c &vtk.Ctl, x int, y int) {
+	bounds := c.rect()
 	drawing := unsafe { &Drawing(c.user) }
 	glyph := if drawing.grid && y % 3 == 0 {
 		`─`
@@ -107,10 +108,11 @@ fn erase_cell(mut screen vtk.Screen, c &vtk.Ctl, x int, y int) {
 		` `
 	}
 	fg := if glyph == ` ` { vtk.white } else { vtk.gray }
-	screen.put(c.x + x, c.y + y, glyph, fg, vtk.color_rgb(13, 15, 20), 0)
+	screen.put(bounds.x + x, bounds.y + y, glyph, fg, vtk.color_rgb(13, 15, 20), 0)
 }
 
 fn stamp(mut screen vtk.Screen, c &vtk.Ctl, stroke Stroke, x int, y int) {
+	bounds := c.rect()
 	r := stroke.size - 1
 	color := rgb_color(stroke.rgb)
 	for dy in -r .. r + 1 {
@@ -119,7 +121,7 @@ fn stamp(mut screen vtk.Screen, c &vtk.Ctl, stroke Stroke, x int, y int) {
 				if stroke.erase {
 					erase_cell(mut screen, c, x + dx, y + dy)
 				} else {
-					screen.put(c.x + x + dx, c.y + y + dy, `█`, color, color, 0)
+					screen.put(bounds.x + x + dx, bounds.y + y + dy, `█`, color, color, 0)
 				}
 			}
 		}
@@ -148,16 +150,17 @@ fn paint_segment(mut screen vtk.Screen, c &vtk.Ctl, stroke Stroke, from Point, t
 }
 
 fn paint(mut c vtk.Ctl, mut screen vtk.Screen) {
+	bounds := c.rect()
 	drawing := unsafe { &Drawing(c.user) }
 	bg := vtk.color_rgb(13, 15, 20)
 	clip := screen.set_clip(c.rect())
 	screen.fill(c.rect(), ` `, vtk.white, bg)
 	if drawing.grid {
-		for x := 0; x < c.w; x += 5 {
-			screen.line(c.x + x, c.y, c.x + x, c.y + c.h - 1, `│`, vtk.gray, bg)
+		for x := 0; x < bounds.w; x += 5 {
+			screen.line(bounds.x + x, bounds.y, bounds.x + x, bounds.y + bounds.h - 1, `│`, vtk.gray, bg)
 		}
-		for y := 0; y < c.h; y += 3 {
-			screen.line(c.x, c.y + y, c.x + c.w - 1, c.y + y, `─`, vtk.gray, bg)
+		for y := 0; y < bounds.h; y += 3 {
+			screen.line(bounds.x, bounds.y + y, bounds.x + bounds.w - 1, bounds.y + y, `─`, vtk.gray, bg)
 		}
 	}
 	for stroke in drawing.strokes {
@@ -169,19 +172,20 @@ fn paint(mut c vtk.Ctl, mut screen vtk.Screen) {
 }
 
 fn paint_palette(mut c vtk.Ctl, mut screen vtk.Screen) {
+	bounds := c.rect()
 	drawing := unsafe { &Drawing(c.user) }
 	for i, rgb in palette_colors {
 		color := rgb_color(rgb)
-		x := c.x + i * 4
-		screen.fill(vtk.Rect{x, c.y, 3, 1}, `█`, color, color)
+		x := bounds.x + i * 4
+		screen.fill(vtk.Rect{x, bounds.y, 3, 1}, `█`, color, color)
 		if rgb == drawing.rgb {
 			fg := if ((rgb >> 16) & 255) + ((rgb >> 8) & 255) + (rgb & 255) > 380 {
 				vtk.black
 			} else {
 				vtk.bright_white
 			}
-			screen.put(x, c.y, `[`, fg, color, 0)
-			screen.put(x + 2, c.y, `]`, fg, color, 0)
+			screen.put(x, bounds.y, `[`, fg, color, 0)
+			screen.put(x + 2, bounds.y, `]`, fg, color, 0)
 		}
 	}
 }
@@ -208,6 +212,7 @@ fn update(mut drawing Drawing) {
 }
 
 fn mouse(mut c vtk.Ctl, e vtk.Event, mut app vtk.App) bool {
+	bounds := c.rect()
 	mut drawing := unsafe { &Drawing(c.user) }
 	if e.button != .left || !e.pressed {
 		drawing.active = false
@@ -223,27 +228,28 @@ fn mouse(mut c vtk.Ctl, e vtk.Event, mut app vtk.App) bool {
 		drawing.undone.clear()
 	}
 	drawing.active = true
-	point := Point{e.x - c.x, e.y - c.y}
+	point := Point{e.x - bounds.x, e.y - bounds.y}
 	at := drawing.strokes.len - 1
 	if drawing.strokes[at].points.len == 0 || drawing.strokes[at].points.last() != point {
 		drawing.strokes[at].points << point
 	}
 	app.set_focus(c)
 	update(mut drawing)
-	app.dirty = true
+	app.invalidate()
 	return true
 }
 
 fn palette_mouse(mut c vtk.Ctl, e vtk.Event, mut app vtk.App) bool {
+	bounds := c.rect()
 	if e.button != .left || !e.pressed || e.motion { return false }
-	at := (e.x - c.x) / 4
-	if at < 0 || at >= palette_colors.len || (e.x - c.x) % 4 == 3 { return false }
+	at := (e.x - bounds.x) / 4
+	if at < 0 || at >= palette_colors.len || (e.x - bounds.x) % 4 == 3 { return false }
 	mut drawing := unsafe { &Drawing(c.user) }
 	drawing.active = false
 	drawing.rgb = palette_colors[at]
 	update(mut drawing)
 	app.set_focus(drawing.canvas)
-	app.dirty = true
+	app.invalidate()
 	return true
 }
 
@@ -254,7 +260,7 @@ fn pencil_changed(mut c vtk.Ctl, mut app vtk.App) {
 	drawing.shape = unsafe { PencilShape(drawing.pencil.value) }
 	drawing.size = drawing.width.value
 	update(mut drawing)
-	app.dirty = true
+	app.invalidate()
 }
 
 fn pick_shape(mut c vtk.Ctl, mut app vtk.App) {
@@ -268,7 +274,7 @@ fn pick_color(mut c vtk.Ctl, mut app vtk.App) {
 	drawing.active = false
 	drawing.rgb = int(c.data)
 	update(mut drawing)
-	app.dirty = true
+	app.invalidate()
 }
 
 fn encode_drawing(strokes []Stroke) string {
@@ -353,7 +359,7 @@ fn open_drawing(mut drawing Drawing, path string, mut app vtk.App) bool {
 	drawing.undone.clear()
 	drawing.path = path
 	update(mut drawing)
-	app.dirty = true
+	app.invalidate()
 	return true
 }
 
@@ -418,7 +424,7 @@ fn action(mut c vtk.Ctl, mut app vtk.App) {
 	}
 	update(mut drawing)
 	app.set_focus(drawing.canvas)
-	app.dirty = true
+	app.invalidate()
 }
 
 fn key(mut c vtk.Ctl, e vtk.Event, mut app vtk.App) bool {
@@ -462,7 +468,7 @@ fn menu_item(mut menu vtk.Ctl, drawing &Drawing, title string, id Action) {
 fn new_drawing(mut app vtk.App) &Drawing {
 	mut drawing := &Drawing{}
 	drawing.window = app.window('VTK Draw', 78, 23)
-	drawing.window.y = 0
+	app.move(mut drawing.window, drawing.window.rect().x, 0)
 	drawing.window.user = drawing
 	drawing.window.closing = closing
 	drawing.window.keyfn = key

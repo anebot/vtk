@@ -34,10 +34,12 @@ fn test_tree_selection_and_expansion_preserve_callback_associations() {
 	mut nodes := tree()
 	mut status := label('Ready')
 	nodes.link = status
-	nodes.changed = fn (mut c Ctl, mut _ App) { c.link.set_text(c.selected_node.text) }
-	mut root := nodes.tree_add(unsafe { nil }, 'Root')
+	nodes.changed = fn (mut c Ctl, mut _ App) {
+		if mut status := c.link { status.set_text(c.selected_node.text) }
+	}
+	mut root := nodes.tree_add(none, 'Root')
 	child := nodes.tree_add(root, 'Child')
-	other := nodes.tree_add(unsafe { nil }, 'Other')
+	other := nodes.tree_add(none, 'Other')
 	body.add(mut nodes)
 	body.add(mut status)
 	w.add(mut body)
@@ -60,7 +62,7 @@ fn test_tree_selection_and_expansion_preserve_callback_associations() {
 	nodes.submit = fn (mut c Ctl, mut app App) { app.clipboard_set(c.selected_node.text) }
 	app.dispatch(Event{ key: int(Key.enter) })
 	assert root.expanded && app.clipboard_text() == 'Root'
-	assert nodes.link == status
+	assert nodes.link == ?&Ctl(status)
 }
 
 fn test_dialog_result_and_default_button_preserve_callback_associations() {
@@ -84,7 +86,7 @@ fn test_dialog_result_and_default_button_preserve_callback_associations() {
 		app.dispatch(Event{ key: int(Key.enter) })
 		app.quit() // A regression must fail instead of blocking the modal loop.
 	})
-	assert app.modal_for(mut dialog, unsafe { nil }) == 7
-	assert dialog.link == associated && dialog.default_button == accept
+	assert app.modal_for(mut dialog, none) == 7
+	assert dialog.link == ?&Ctl(associated) && dialog.default_button == accept
 	app.destroy_ctl(mut dialog)
 }

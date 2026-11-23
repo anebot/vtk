@@ -22,7 +22,8 @@ fn access_code_submit(mut code vtk.Ctl, mut app vtk.App) {
 }
 
 fn open_notes(mut button vtk.Ctl, mut app vtk.App) {
-	if button.link.text == 'temple' {
+	code := button.link or { return }
+	if code.text == 'temple' {
 		second_window(mut app)
 	} else {
 		app.notify('Invalid access code', 2500)
@@ -53,7 +54,7 @@ fn demo_start(mut app vtk.App, _ voidptr) {
 	tabs.add_tab('About', mut about)
 	body.add(mut tabs)
 	window.add(mut body)
-	window.layout(window.rect())
+	app.layout()
 	app.set_focus(code)
 }
 

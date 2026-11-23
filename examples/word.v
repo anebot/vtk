@@ -20,12 +20,11 @@ fn update(mut doc Document) {
 	name := if doc.path == '' { '[Untitled]' } else { os.file_name(doc.path) }
 	doc.window.text = name + (if doc.view.text != doc.saved { ' *' } else { '' }) + ' - VTK Word'
 	doc.status.text = '${doc.view.text.fields().len} words | ${doc.view.text.runes().len} chars | ${name}'
-	doc.outline.kids.clear()
-	doc.outline.selected_node = unsafe { nil }
+	doc.outline.clear()
 	mut at := 0
 	for line in doc.view.text.split('\n') {
 		if line.starts_with('#') {
-			mut node := doc.outline.tree_add(unsafe { nil }, line.trim_left('# '))
+			mut node := doc.outline.tree_add(none, line.trim_left('# '))
 			node.data = at
 		}
 		at += line.len + 1
@@ -35,13 +34,13 @@ fn update(mut doc Document) {
 fn changed(mut c vtk.Ctl, mut app vtk.App) {
 	mut doc := unsafe { &Document(c.user) }
 	update(mut doc)
-	app.dirty = true
+	app.invalidate()
 }
 
 fn outline_hit(mut c vtk.Ctl, mut app vtk.App) {
 	mut doc := unsafe { &Document(c.user) }
-	if !isnil(c.selected_node) {
-		doc.view.cursor = int(c.selected_node.data)
+	if node := c.tree_selection() {
+		doc.view.cursor = int(node.data)
 		doc.view.anchor = -1
 		doc.view.scroll_hold = false
 		app.set_focus(doc.view)
@@ -172,7 +171,7 @@ fn action(mut c vtk.Ctl, mut app vtk.App) {
 		29 { wrap(mut doc, '\n```\n', '\n```\n') }
 		else {}
 	}
-	app.dirty = true
+	app.invalidate()
 	app.set_focus(doc.view)
 }
 

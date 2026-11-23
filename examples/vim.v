@@ -65,7 +65,7 @@ fn pane_changed(mut c vtk.Ctl, mut app vtk.App) {
 		}
 	}
 	status(mut pane.editor, &c)
-	app.dirty = true
+	app.invalidate()
 }
 
 fn status(mut editor Editor, c &vtk.Ctl) {
@@ -125,16 +125,9 @@ fn split_pane(mut c vtk.Ctl, vertical bool, path string, fresh bool, mut app vtk
 	mut buffer := pane.buffer
 	if path != '' || fresh { buffer = buffer_open(mut pane.editor, path, mut app) or { return } }
 	mut next := make_pane(mut pane.editor, buffer)
-	mut parent := c.parent
+	mut parent := c.parent_ctl() or { return }
 	mut container := vtk.split(!vertical, 500)
-	for i, child in parent.kids {
-		if child == &c {
-			parent.kids[i] = container
-			break
-		}
-	}
-	container.parent = parent
-	c.parent = unsafe { nil }
+	if !parent.replace(mut c, mut container) { return }
 	container.add(mut c)
 	container.add(mut next)
 	app.redraw()
@@ -153,18 +146,12 @@ fn close_pane(mut c vtk.Ctl, force bool, mut app vtk.App) bool {
 		editor.force_close = force
 		return app.close(mut editor.window)
 	}
-	mut container := c.parent
-	mut other := container.kids[if container.kids[0] == &c { 1 } else { 0 }]
-	mut parent := container.parent
-	for i, child in parent.kids {
-		if child == container {
-			parent.kids[i] = other
-			break
-		}
-	}
-	other.parent = parent
-	container.kids.clear()
-	c.parent = unsafe { nil }
+	mut container := c.parent_ctl() or { return false }
+	children := container.children()
+	mut other := children[if children[0] == &c { 1 } else { 0 }]
+	mut parent := container.parent_ctl() or { return false }
+	if !parent.replace(mut container, mut other) { return false }
+	container.clear()
 	editor.panes = editor.panes.filter(it != &c)
 	app.redraw()
 	app.set_focus(other)
@@ -291,7 +278,7 @@ fn command(mut c vtk.Ctl, source string, mut app vtk.App) {
 		}
 	}
 	status(mut editor, &c)
-	app.dirty = true
+	app.invalidate()
 }
 
 fn pane_key(mut c vtk.Ctl, e vtk.Event, mut app vtk.App) bool {

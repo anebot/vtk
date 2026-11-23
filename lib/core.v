@@ -82,17 +82,10 @@ pub type PaintCallback = fn (mut Ctl, mut Screen)
 // editor positions are UTF-8 byte offsets, just as in HTK.
 @[heap]
 pub struct Ctl {
-pub mut:
+pub:
 	kind          Kind
-	parent        &Ctl = unsafe { nil }
-	kids          []&Ctl
-	link          &Ctl = unsafe { nil }
-	selected_node &Ctl = unsafe { nil }
-	default_button &Ctl = unsafe { nil }
-	popup_owner   &Ctl = unsafe { nil }
-	menu          &Ctl = unsafe { nil }
-	modal         bool
-	modal_owner   &Ctl = unsafe { nil }
+pub mut:
+	link          ?&Ctl
 	text          string
 	text_align    TextAlign
 	changed       ?Callback
@@ -106,14 +99,12 @@ pub mut:
 	mousefn       ?KeyCallback
 	mouse_enter   ?Callback
 	mouse_leave   ?Callback
-	hovered       bool
 	user          voidptr
 	data          i64
 	value         int
 	expanded      bool
 	dialog_result int
 	blocky        bool
-	desktop_id    int = 1
 	low           int
 	high          int
 	byte_limit    int
@@ -122,20 +113,12 @@ pub mut:
 	left          int
 	cursor        int
 	anchor        int = -1
-	x             int
-	y             int
-	w             int
-	h             int
-	pw            int
-	ph            int
 	min_w         int
 	min_h         int
 	max_w         int
 	max_h         int
 	col           int
 	row           int
-	tab_x         int
-	tab_w         int
 	vertical      bool
 	right         bool
 	bottom        bool
@@ -150,19 +133,37 @@ pub mut:
 	scrollbar     bool
 	scroll_hold   bool
 	readonly      bool
+	dismissable   bool
+	controls      int         = window_default_controls
+	cursor_shape  CursorShape = .bar
+	edit          &Edit = &Edit{}
+	md            Markdown
+	vim           Vim
+mut:
+	parent        &Ctl = unsafe { nil }
+	kids          []&Ctl
+	selected_node &Ctl = unsafe { nil }
+	default_button &Ctl = unsafe { nil }
+	popup_owner   &Ctl = unsafe { nil }
+	menu          &Ctl = unsafe { nil }
+	modal         bool
+	modal_owner   &Ctl = unsafe { nil }
+	hovered       bool
+	desktop_id    int = 1
+	x             int
+	y             int
+	w             int
+	h             int
+	pw            int
+	ph            int
+	tab_x         int
+	tab_w         int
 	closed        bool
 	minimized     bool
 	maximized     bool
 	always_on_top bool
-	dismissable   bool
-	controls      int         = window_default_controls
-	cursor_shape  CursorShape = .bar
 	saved         Rect
-	edit          &Edit = &Edit{}
-	md            Markdown
-	vim           Vim
 	term          &Terminal = unsafe { nil }
-mut:
 	// Only roots (windows and standalone menus) retain the owning app.
 	app           &App = unsafe { nil }
 	modal_parent  &Ctl = unsafe { nil }
@@ -191,18 +192,23 @@ pub fn new_ctl(kind Kind) &Ctl {
 }
 
 fn (c &Ctl) can_adopt(child &Ctl) bool {
-	mut ancestor := unsafe { c }
-	for !isnil(ancestor) {
-		if ancestor == child { return false }
-		ancestor = ancestor.parent
+	return !child.contains_ctl(c)
+}
+
+fn (c &Ctl) contains_ctl(child &Ctl) bool {
+	mut node := unsafe { child }
+	for !isnil(node) {
+		if node == c { return true }
+		node = node.parent
 	}
-	return true
+	return false
 }
 
 // add reparents a control and rejects cycles rather than corrupting the tree.
 pub fn (mut c Ctl) add(mut child Ctl) {
 	if !c.can_adopt(&child) { return }
 	child.detach()
+	if !c.can_adopt(&child) { return }
 	child.parent = c
 	c.kids << &child
 	c.invalidate()
@@ -211,7 +217,13 @@ pub fn (mut c Ctl) add(mut child Ctl) {
 pub fn (mut c Ctl) detach() {
 	c.invalidate()
 	mut app := c.root().app
-	if !isnil(app) { app.clear_hover_within(&c) }
+	if !isnil(app) { app.release_ctl(&c) }
+	mut ancestor := c.parent
+	for !isnil(ancestor) {
+		if c.contains_ctl(ancestor.selected_node) { ancestor.selected_node = unsafe { nil } }
+		if c.contains_ctl(ancestor.default_button) { ancestor.default_button = unsafe { nil } }
+		ancestor = ancestor.parent
+	}
 	if !isnil(c.parent) {
 		if c.parent.menu == &c { c.parent.menu = unsafe { nil } }
 		for i, child in c.parent.kids {
@@ -223,9 +235,34 @@ pub fn (mut c Ctl) detach() {
 	}
 	c.parent = unsafe { nil }
 	c.app = unsafe { nil }
+	if !isnil(app) {
+		if c.kind == .window { app.windows = app.windows.filter(it != &c) }
+		if isnil(app.focus) { app.focus_first(app.top_window_ptr()) }
+	}
 }
 
-pub fn (c &Ctl) owner_window() &Ctl {
+// clear detaches children; use App.destroy_ctl when their resources must close.
+pub fn (mut c Ctl) clear() {
+	for mut child in c.kids.clone() { child.detach() }
+	c.selected_node = unsafe { nil }
+	c.invalidate()
+}
+
+pub fn (mut c Ctl) replace(mut child Ctl, mut replacement Ctl) bool {
+	if child.parent != &c || c.kids.index(&child) < 0 || !c.can_adopt(&replacement) { return false }
+	if &child == &replacement { return true }
+	replacement.detach()
+	at := c.kids.index(&child)
+	if at < 0 { return false }
+	child.detach()
+	if !c.can_adopt(&replacement) { return false }
+	replacement.parent = &c
+	c.kids.insert(clamp(at, 0, c.kids.len), &replacement)
+	c.invalidate()
+	return true
+}
+
+fn (c &Ctl) owner_window_ptr() &Ctl {
 	mut p := unsafe { c }
 	for !isnil(p) && p.kind != .window { p = p.parent }
 	return p
@@ -247,9 +284,10 @@ fn (c &Ctl) root() &Ctl {
 }
 
 // Detached controls and nil dialog owners are allowed; foreign roots are not.
-fn (app &App) can_access(c &Ctl) bool {
-	if isnil(c) { return true }
-	owner := c.root().app
+fn (app &App) can_access(c ?&Ctl) bool {
+	value := c or { return true }
+	if isnil(value) { return true }
+	owner := value.root().app
 	return isnil(owner) || owner == app
 }
 
@@ -280,6 +318,7 @@ pub fn (c &Ctl) visible() bool {
 pub struct Notice {
 pub mut:
 	text   string
+mut:
 	due    i64
 	closed bool
 	rect   Rect
@@ -305,20 +344,8 @@ mut:
 @[heap]
 pub struct App {
 pub mut:
-	windows          []&Ctl
-	focus            &Ctl = unsafe { nil }
-	popups           []&Ctl
-	notices          []&Notice
-	launchers        []Launcher
 	theme            Theme = theme_default()
-	screen           Screen
-	running          bool = true
-	dirty            bool = true
-	width            int  = 80
-	height           int  = 24
 	desktop          bool = true
-	desktop_count    int = 1
-	active_desktop   int = 1
 	bar_always       bool = true
 	bar_top          bool
 	bar_clock        bool = true
@@ -337,6 +364,18 @@ pub mut:
 	move_key         Binding = Binding{ key: int(Key.f7), alt: true }
 	resize_key       Binding = Binding{ key: int(Key.f8), alt: true }
 mut:
+	windows          []&Ctl
+	focus            &Ctl = unsafe { nil }
+	popups           []&Ctl
+	notices          []&Notice
+	launchers        []Launcher
+	screen           Screen
+	running          bool = true
+	dirty            bool = true
+	width            int  = 80
+	height           int  = 24
+	desktop_count    int = 1
+	active_desktop   int = 1
 	clipboard        string
 	hooks            []Hook
 	next_hook        int
