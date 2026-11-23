@@ -309,12 +309,12 @@ mut:
 
 fn (app &App) window_title_layout(w &Ctl) WindowTitleLayout {
 	mut title := WindowTitleLayout{ start: w.x + 5, end: w.x + w.w - 1 }
-	if w.controls & window_menu != 0 {
-		title.menu = if app.macos_buttons { w.x + w.w - 4 } else { w.x + 1 }
+	if !app.macos_buttons && w.controls & window_menu != 0 {
+		title.menu = w.x + 1
 	}
 	mut x := if app.macos_buttons { w.x + 1 } else { w.x + w.w - 4 }
 	buttons := if app.macos_buttons {
-		[window_close, window_minimize, window_maximize]
+		[window_close, window_menu, window_minimize]
 	} else {
 		[window_close, window_maximize, window_minimize]
 	}
@@ -322,6 +322,7 @@ fn (app &App) window_title_layout(w &Ctl) WindowTitleLayout {
 		if w.controls & control == 0 { continue }
 		match control {
 			window_close { title.close = x }
+			window_menu { title.menu = x }
 			window_minimize { title.minimize = x }
 			window_maximize { title.maximize = x }
 			else {}
@@ -331,7 +332,6 @@ fn (app &App) window_title_layout(w &Ctl) WindowTitleLayout {
 	}
 	if app.macos_buttons {
 		title.start = max(title.start, x + 1)
-		if title.menu >= 0 { title.end = title.menu }
 	}
 	return title
 }

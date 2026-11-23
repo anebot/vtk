@@ -95,12 +95,22 @@ fn test_window_titles_stop_before_controls_and_preserve_the_frame() {
 
 fn test_window_button_layouts_draw_and_click_each_enabled_control() {
 	for macos in [false, true] {
-		for controls in 1 .. 16 {
-			order := if macos { [window_close, window_minimize, window_maximize] }
+		for controls in 0 .. 16 {
+			order := if macos { [window_close, window_menu, window_minimize] }
 				else { [window_minimize, window_maximize, window_close] }
 			buttons := order.filter(controls & it != 0)
+			if macos {
+				mut app := new_app()
+				app.macos_buttons = true
+				mut w := app.window('X'.repeat(80), 40, 8)
+				w.controls = controls
+				app.redraw()
+				assert app.window_title_layout(w).maximize == -1
+				row := w.y * app.width + w.x
+				assert !app.screen.cells[row .. row + w.w].map(it.glyph).join('').contains('[□]')
+			}
 			for control in [window_menu, window_close, window_minimize, window_maximize] {
-				if controls & control == 0 { continue }
+				if controls & control == 0 || (macos && control == window_maximize) { continue }
 				for column in 0 .. 3 {
 					mut app := new_app()
 					app.macos_buttons = macos
@@ -108,8 +118,8 @@ fn test_window_button_layouts_draw_and_click_each_enabled_control() {
 					w.controls = controls
 					app.redraw()
 					original := w.rect()
-					offset := if control == window_menu {
-						if macos { w.w - 4 } else { 1 }
+					offset := if !macos && control == window_menu {
+						1
 					} else if macos { 1 + buttons.index(control) * 3 }
 						else { w.w - 1 - (buttons.len - buttons.index(control)) * 3 }
 					x, y := w.x + offset, w.y
@@ -149,9 +159,9 @@ fn test_macos_title_clipping_and_dragging_keep_buttons_clear() {
 	mut w := app.window('界'.repeat(80), 40, 8)
 	app.redraw()
 	row := w.y * app.width + w.x
-	assert app.screen.cells[row + 1 .. row + 10].map(it.glyph).join('') == '[■][_][□]'
-	assert app.screen.cells[row + 34].glyph == '界' && app.screen.cells[row + 35].continuation
-	assert app.screen.cells[row + 36 .. row + 39].map(it.glyph).join('') == '[=]'
+	assert app.screen.cells[row + 1 .. row + 10].map(it.glyph).join('') == '[■][=][_]'
+	assert app.screen.cells[row + 36].glyph == '界' && app.screen.cells[row + 37].continuation
+	assert app.screen.cells[row + 38].glyph == ' ' && app.screen.cells[row + 39].glyph == ' '
 	x, y := w.x + 15, w.y
 	app.dispatch(Event{ kind: .mouse, x: x, y: y, button: .left, pressed: true })
 	app.dispatch(Event{ kind: .mouse, x: x + 3, y: y + 2, button: .left, pressed: true, motion: true })
