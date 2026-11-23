@@ -2,15 +2,19 @@ module main
 
 import os
 
-fn test_vtk_generation_matches_example() {
-	file := os.join_path(@VMODROOT, 'vml', 'examples', 'hello', 'ui.vml')
-	source := os.read_file(file) or { panic(err) }
+fn test_vtk_generation_matches_examples() {
 	template := read_template(vtk_template.to_string()) or { panic(err) }
-	generated := generate(source, file, 'build_ui', template) or { panic(err) }
-	assert generated == os.read_file(file[..file.len - 4] + '.v') or { panic(err) }
-	assert generated.index('mut name :=') or { -1 } < generated.index('greet.link = name') or { -1 }
-	assert generated.contains(".add_tab('Greeting', mut ")
-	assert generated.contains('progress.set_value(25)')
+	for example in ['hello', 'preferences', 'markdown'] {
+		file := os.join_path(@VMODROOT, 'vml', 'examples', example, 'ui.vml')
+		source := os.read_file(file) or { panic(err) }
+		generated := generate(source, file, 'build_ui', template) or { panic(err) }
+		assert generated == os.read_file(file[..file.len - 4] + '.v') or { panic(err) }
+		if example == 'hello' {
+			assert generated.index('mut name :=') or { -1 } < generated.index('greet.link = name') or { -1 }
+			assert generated.contains(".add_tab('Greeting', mut ")
+			assert generated.contains('progress.set_value(25)')
+		}
+	}
 }
 
 fn test_template_controls_construction_properties_and_attachment() {

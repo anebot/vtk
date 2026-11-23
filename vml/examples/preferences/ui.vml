@@ -1,0 +1,42 @@
+# Compile with: v run vml vml/examples/preferences/ui.vml
+Window title="VML preferences" width=54 height=18 dismissable {
+	VBox expand {
+		Group title=Desktop {
+			Grid {
+				Label text=Theme;
+				Combo $theme col=1 value=0 {
+					Item text=Borland;
+					Item text=Dark;
+					Item text=Light;
+				}
+				Label text="Virtual desktops" row=1;
+				Spin $desktops col=1 row=1 low=1 high=4 value={app.get_desktop_count()};
+			}
+		}
+		Group title="Mouse cursor" {
+			Radio $cursor value={int(app.mouse_cursor.enabled)} {
+				Item text="Terminal pointer";
+				Item text="Block cursor";
+			}
+		}
+		CheckBox $gradient text="Gradient window titles" checked={app.title_gradient};
+		Label text="Changes apply to this session.";
+		ButtonBar {
+			Button text=Apply changed={fn [theme, desktops, cursor, gradient] (mut _ vtk.Ctl, mut app vtk.App) {
+				app.theme = match theme.value {
+					1 { vtk.theme_preset(.dark) }
+					2 { vtk.theme_preset(.light) }
+					else { vtk.theme_preset(.borland) }
+				}
+				app.set_desktop_count(desktops.value)
+				app.set_mouse_cursor(vtk.MouseCursor{ enabled: cursor.value == 1 })
+				app.title_gradient = gradient.value != 0
+				app.notify('Preferences applied', 2000)
+			}};
+		}
+	}
+	-{
+		app.layout()
+		app.set_focus(theme)
+	}-
+}

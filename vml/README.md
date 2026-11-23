@@ -11,7 +11,21 @@ From the repository root:
 make vml
 ./build/vmlc vml/examples/hello/ui.vml
 ./build/vml-hello
+./build/vml-preferences
+./build/vml-markdown
 ```
+
+`make vml` builds all three examples, including their generated `.v` files:
+
+| Example | Demonstrates |
+| --- | --- |
+| [hello](examples/hello/ui.vml) | Tabs, named controls, forward references, and a greeting callback. |
+| [preferences](examples/preferences/ui.vml) | A grid form, combo/radio items, a spin control, and an inline callback that applies theme, desktop, and cursor preferences for the session. |
+| [markdown](examples/markdown/ui.vml) | A resizable split pane with a multiline editor and a live, read-only Markdown preview. |
+
+Each directory contains the markup, generated builder, and a V entry point.
+After editing markup, run `make vml` to regenerate and rebuild it. You can also
+run any example with `v run vml/examples/<name>` once its builder is generated.
 
 You can also use the compiler without building it first:
 
@@ -163,4 +177,4 @@ Combos and radios accept `Item text=...;` children. Menus, tree-node composition
 and terminal lifecycle setup remain ordinary V code in this first version.
 
 Run `v test vml` for parser, descriptor, CLI, and headless generated-UI tests.
-The checked-in example output is verified against its `.vml` input by the tests.
+The checked-in example outputs are verified against their `.vml` inputs by the tests.

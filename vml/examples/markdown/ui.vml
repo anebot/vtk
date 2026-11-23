@@ -1,0 +1,24 @@
+# Compile with: v run vml vml/examples/markdown/ui.vml
+Window title="VML Markdown preview" width=76 height=22 dismissable {
+	VBox expand {
+		Split share=500 {
+			VBox {
+				Label text="Markdown source";
+				# Edits update a control declared later in the markup.
+				Multiline $source text={sample_markdown} line-numbers scrollbar
+					changed={update_preview} link={preview};
+			}
+			VBox {
+				Label text=Preview;
+				Markdown $preview text={sample_markdown} scrollbar;
+			}
+		}
+		StatusBar text="Edit on the left | Drag the divider | Ctrl-C quits";
+	}
+	-{
+		preview.markdown_mode(.read)
+		preview.md.task_interactive = false
+		app.layout()
+		app.set_focus(source)
+	}-
+}

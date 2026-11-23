@@ -24,7 +24,8 @@ make test
 ./build/draw
 ```
 
-`make` builds all six examples, the VML compiler, and its UI example in `build/`.
+`make` builds all six native examples, the VML compiler, and three VML examples
+in `build/`.
 You can also run the original examples directly:
 
 ```sh
@@ -48,6 +49,8 @@ for constructors, properties, and child attachment:
 make vml
 ./build/vmlc path/to/dialog.vml
 ./build/vml-hello
+./build/vml-preferences
+./build/vml-markdown
 ```
 
 Compile the generated `.v` file alongside your application and call

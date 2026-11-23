@@ -4,6 +4,9 @@ EXAMPLES = htk word vim draw widgets terminal
 BINARIES = $(addprefix $(BUILD_DIR)/,$(EXAMPLES))
 SOURCES = $(wildcard lib/*.v examples/support/*.v) v.mod
 VML_SOURCES = vml/main.v vml/parser.v vml/generator.v vml/vtk.vmlt
+VML_EXAMPLES = hello preferences markdown
+VML_UIS = $(addsuffix /ui.v,$(addprefix vml/examples/,$(VML_EXAMPLES)))
+VML_BINARIES = $(addprefix $(BUILD_DIR)/vml-,$(VML_EXAMPLES))
 
 all: $(BINARIES) vml
 
@@ -15,21 +18,21 @@ $(BUILD_DIR)/vmlc: $(VML_SOURCES)
 	mkdir -p $(BUILD_DIR)
 	$(V) -o $@ vml
 
-vml/examples/hello/ui.v: vml/examples/hello/ui.vml $(BUILD_DIR)/vmlc
+$(VML_UIS): vml/examples/%/ui.v: vml/examples/%/ui.vml $(BUILD_DIR)/vmlc
 	$(BUILD_DIR)/vmlc $<
 
-$(BUILD_DIR)/vml-hello: vml/examples/hello/ui.v vml/examples/hello/main.v $(SOURCES)
-	$(V) -o $@ vml/examples/hello
+$(VML_BINARIES): $(BUILD_DIR)/vml-%: vml/examples/%/ui.v vml/examples/%/main.v $(SOURCES)
+	$(V) -o $@ vml/examples/$*
 
-vml: $(BUILD_DIR)/vmlc $(BUILD_DIR)/vml-hello
+vml: $(BUILD_DIR)/vmlc $(VML_BINARIES)
 
-test: vml/examples/hello/ui.v
+test: $(VML_UIS)
 	$(V) test .
 
-check-windows: vml/examples/hello/ui.v
+check-windows: $(VML_UIS)
 	@set -e; for example in $(EXAMPLES); do $(V) -os windows -check examples/$$example.v; done
 	$(V) -os windows -check vml
-	$(V) -os windows -check vml/examples/hello
+	@set -e; for example in $(VML_EXAMPLES); do $(V) -os windows -check vml/examples/$$example; done
 
 fmt:
 	$(V) fmt -w .
