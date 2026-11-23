@@ -645,6 +645,27 @@ frame and line primitives; canvas callbacks draw in absolute cell coordinates.
 use `screen.set_cursor(x, y, shape)` to place a caret within their clip rectangle.
 Timers (`after`, `every`, `cancel_hook`) run on the event-loop thread.
 
+Unicode font styles are text substitutions, so they can be used in labels,
+buttons, or any other text. They depend on the terminal font having the glyphs:
+
+```v
+styled := vtk.font_convert('Hello 123', .bold)
+label := vtk.label(styled)
+markup := vtk.font_format_tags('<italic>Hello</italic> <bold>world</bold>')
+plain := vtk.font_translate(styled, .bold, .none)
+style := vtk.font_style_from_name('sansserifbold') or { vtk.FontStyle.none }
+```
+
+The styles are `none`, `bold`, `italic`, `script`, `doublestruck`,
+`underline`, `strikethrough`, `fraktur`, `bolditalic`, `sansserif`,
+`sansserifitalic`, `monospace`, `boldscript`, `boldfraktur`, `sansserifbold`,
+`sansserifbolditalic`, `openface`, and `smallcaps`. Conversion follows aholyc:
+it styles ASCII letters and supported digits, leaving other characters intact.
+Translation requires the source style; unchanged characters and naturally
+occurring styled Unicode can be ambiguous. Tags are non-nested; unknown paired
+tags lose their wrapper, and unmatched tags remain literal. ASCII fallback
+replaces unsupported glyphs when displaying the text.
+
 The terminal control uses a Unix PTY or Windows ConPTY and an incremental
 xterm subset: cursor movement, erasing, insert/delete, scroll regions, SGR,
 16/256/RGB colors and UTF-8. Output is polled in bounded batches. Closing
