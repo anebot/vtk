@@ -38,6 +38,7 @@ pub enum Kind {
 	toolbutton
 	flow
 	markdown
+	date_picker
 }
 
 pub enum CtrlC {
@@ -157,6 +158,7 @@ mut:
 	app           &App = unsafe { nil }
 	modal_parent  &Ctl = unsafe { nil }
 	window_order  int
+	date_value    time.Time
 }
 
 pub struct Rect {
@@ -299,6 +301,7 @@ pub mut:
 	bar_always       bool = true
 	bar_top          bool
 	bar_clock        bool = true
+	clock_clicked    ?fn (Event, mut App)
 	window_shadow    bool = true
 	dim_inactive     bool = true
 	title_gradient   bool

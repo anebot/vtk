@@ -271,6 +271,7 @@ fn (mut app App) widget_key(mut c Ctl, event Event) bool {
 			c.term.key(e)
 			return true
 		}
+		.date_picker { return c.date_picker_key(e, mut app) }
 		.entry, .multiline, .markdown { return c.editor_key(e, mut app) }
 		.button, .toolbutton {
 			if e.key in [int(Key.enter), int(Key.space)] {
@@ -654,6 +655,7 @@ fn (mut app App) mouse(e Event) {
 		}
 	}
 	match c.kind {
+		.date_picker { c.date_picker_mouse(e) }
 		.button, .toolbutton { c.fire() }
 		.checkbox, .switch {
 			c.value = int(c.value == 0)

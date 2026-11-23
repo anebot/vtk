@@ -137,6 +137,10 @@ pub fn (mut c Ctl) measure() {
 			w = 24
 			h = 8
 		}
+		.date_picker {
+			w = 24
+			h = 9
+		}
 		.slider, .progress { w = 12 }
 		.spin { w = 10 }
 		.combo, .radio {

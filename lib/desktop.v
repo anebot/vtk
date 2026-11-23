@@ -36,6 +36,12 @@ fn (app &App) work_area() Rect {
 	return Rect{0, if app.bar_top { app.bar_height() } else { 0 }, app.width, max(0, app.height - app.bar_height())}
 }
 
+// The clock's drawing and hit area share the same clipped geometry.
+fn (app &App) bar_clock_rect() Rect {
+	if !app.desktop || !app.bar_clock || app.bar_height() == 0 { return Rect{} }
+	return Rect{max(0, app.width - 5), app.bar_y(), min(5, app.width), 1}
+}
+
 fn (app &App) bar_buttons_rect() Rect {
 	x := if app.desktop { 6 } else { 0 }
 	clock_width := if app.bar_clock && app.desktop { 6 } else { 0 }
@@ -67,8 +73,9 @@ fn (mut app App) draw_bar() {
 		x += text_width(text)
 	}
 	app.screen.restore_clip(old)
-	if app.bar_clock && app.desktop {
-		app.screen.text(max(0, app.width - 5), y, time.now().hhmm(), t.bar_fg, t.bar_bg, 0)
+	clock := app.bar_clock_rect()
+	if clock.w > 0 {
+		app.screen.text(clock.x, clock.y, time.now().hhmm(), t.bar_fg, t.bar_bg, 0)
 	}
 }
 
@@ -157,6 +164,15 @@ fn (mut app App) bar_mouse(e Event) bool {
 		return true
 	}
 	if !e.pressed || e.motion { return true }
+	if app.bar_clock_rect().contains(e.x, e.y) {
+		if e.button in [.left, .middle, .right] {
+			if f := app.clock_clicked {
+				app.dirty = true
+				f(e, mut app)
+			}
+		}
+		return true
+	}
 	if app.desktop && e.x < 5 {
 		app.app_menu(0, e.y)
 		return true

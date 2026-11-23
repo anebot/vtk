@@ -100,6 +100,7 @@ the window stack, theme, focus, clipboard, hooks and desktop settings.
 | Text fields | `entry(text, byte_limit)`, `multiline(text)` |
 | Markdown | `markdown(text)`, `control.markdown_mode(mode)` |
 | Boolean controls | `checkbox(text, checked)`, `switch_ctl(text, on)` |
+| Date picker | `date_picker(initial)`, `control.date()`, `control.set_date(date)` |
 | Value controls | `slider(low, high)`, `spin(low, high)`, `progress()`, `spinner(text)` |
 | Choices | `combo()`, `radio()`, `control.add_item(text)` |
 | Table | `table(cell_callback)`, `control.table_column(title)`, `control.high` row count |
@@ -193,6 +194,48 @@ inside the terminal; native pointer hiding requires the capability above.
 Terminals without motion reporting cannot provide idle movement or hover,
 and the protocol has no portable pointer-exit notification: leaving the
 terminal while it retains focus can leave the last pointer position visible.
+
+## Clock actions and dates
+
+Set `app.clock_clicked` to handle clock presses in the desktop bar. The callback
+receives the mouse event and app; left, middle and right presses are reported once,
+with zero-based screen coordinates. Releases, motion and wheel events do not
+activate it. It works at either bar position, only while the clock is visible,
+and respects application-modal dialogs. With no callback, clicks have no action.
+
+```v
+app.clock_clicked = fn (event vtk.Event, mut app vtk.App) {
+    mut menu := vtk.context_menu()
+    menu.menu_item('Calendar...', fn (mut _ vtk.Ctl, mut app vtk.App) {
+        if date := app.date_pick(app.top_window(), 'Choose date', time.now()) {
+            app.notify('Selected ${date.year:04}-${date.month:02}-${date.day:02}', 1500)
+        }
+    })
+    app.open_menu(menu, event.x, event.y)
+}
+```
+
+The examples in this section also need `import time`. A clock callback can launch
+an application directly instead of opening a menu. The widgets demo opens the
+calendar on a left click and its menu on a right click.
+
+`date_picker(initial time.Time)` is an embeddable Gregorian calendar, with Monday
+as the first weekday. `control.date()` returns the selected date at midnight,
+without a timezone. `control.text` contains its ISO `YYYY-MM-DD` representation.
+`set_date(date)` updates the selection, schedules a redraw and invokes `changed`
+when the date changes. Detached controls can be initialized safely. Time-of-day
+and timezone fields are ignored; invalid components are clamped to valid dates
+in years 1 through 9999, including leap years.
+
+Click a day to select it. The header arrows or Page Up/Down select the previous
+or next month, preserving the day where possible. Shift-click the arrows, or use
+Shift/Ctrl with Page Up/Down, to move a year. Arrow keys move one day or week;
+Home/End select the first/last day of the month. Click **Today** or press **T**
+to return to today. Read-only and disabled calendars ignore selection input.
+
+Use `app.date_pick(owner, title, initial)` for an OK/Cancel dialog. Enter/Space
+accept from the calendar; Escape, Cancel or closing the dialog return `none`.
+The inline widget uses the usual `changed` and `submit` callbacks.
 
 ## Windows, desktop and dialogs
 
