@@ -70,10 +70,9 @@ fn main() {
 	mut activity := vtk.spinner('Working')
 	body.add(mut activity)
 	mut tabs := vtk.tabs()
-	mut table := vtk.table(table_cell)
+	mut table := vtk.table(table_cell, 100)
 	table.table_column('Name')
 	table.table_column('Square')
-	table.high = 100
 	tabs.add_tab('Table', mut table)
 	mut tree := vtk.tree()
 	root := tree.tree_add(unsafe { nil }, 'Library')

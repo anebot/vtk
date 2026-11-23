@@ -253,8 +253,8 @@ pub fn (mut app App) dispatch(e Event) {
 		}
 		if e.key == int(Key.escape) && w.dismissable {
 			app.close(mut w)
-		} else if e.key == int(Key.enter) && !isnil(w.link) {
-			w.link.fire()
+		} else if e.key == int(Key.enter) && !isnil(w.default_button) {
+			w.default_button.fire()
 		}
 	}
 }
@@ -312,7 +312,7 @@ fn (mut app App) widget_key(mut c Ctl, event Event) bool {
 			}
 		}
 		.radio, .tabs, .table {
-			count := if c.kind == .table { c.high } else { c.kids.len }
+			count := if c.kind == .table { c.row_count } else { c.kids.len }
 			if count == 0 { return false }
 			step := if e.key == int(Key.page_up) {
 				-max(1, c.h - 2)
@@ -352,7 +352,7 @@ fn (mut app App) widget_key(mut c Ctl, event Event) bool {
 			if rows.len == 0 { return false }
 			mut at := 0
 			for i, row in rows {
-				if row.node == c.link {
+				if row.node == c.selected_node {
 					at = i
 					break
 				}
@@ -367,25 +367,21 @@ fn (mut app App) widget_key(mut c Ctl, event Event) bool {
 					int(Key.up) { at - 1 }
 					else { at + 1 }
 				}, 0, rows.len - 1)
-				c.link = rows[at].node
+				c.selected_node = rows[at].node
 				c.scroll_hold = false
 				c.fire()
 				return true
 			}
-			if e.key in [int(Key.left), int(Key.right), int(Key.enter)] && !isnil(c.link) {
+			if e.key in [int(Key.left), int(Key.right), int(Key.enter)] && !isnil(c.selected_node) {
 				if e.key == int(Key.enter) {
 					if f := c.submit {
 						f(mut c, mut app)
 						return true
 					}
 				}
-				c.link.value = if e.key == int(Key.left) {
-					0
-				} else if e.key == int(Key.right) {
-					1
-				} else {
-					int(c.link.value == 0)
-				}
+				c.selected_node.expanded = if e.key == int(Key.enter) {
+					!c.selected_node.expanded
+				} else { e.key == int(Key.right) }
 				c.fire()
 				return true
 			}
@@ -403,18 +399,11 @@ pub fn (mut app App) scroll_ctl(mut c Ctl, rows int) bool {
 			return true
 		}
 	}
-	mut consumed := false
-	match c.kind {
-		.scroll {
-			if c.kids.len > 0 { consumed = c.scroll_rows(rows, c.kids[0].ph, c.h) }
-		}
-		.table { consumed = c.scroll_rows(rows, c.high, c.h - 1) }
-		.tree { consumed = c.scroll_rows(rows, c.tree_rows().len, c.h) }
-		.multiline, .markdown {
-			consumed = c.scroll_rows(rows, c.editor_rows().len, c.editor_height())
-		}
-		else {}
+	if c.kind !in [.scroll, .table, .tree, .multiline, .markdown] || (c.kind == .scroll && c.kids.len == 0) {
+		return false
 	}
+	total, viewport := c.scroll_dimensions()
+	consumed := c.scroll_rows(rows, total, viewport)
 	if consumed { app.dirty = true }
 	return consumed
 }
@@ -517,7 +506,7 @@ fn (mut app App) mouse(e Event) {
 		mut p := app.popups.last()
 		if p.rect().contains(e.x, e.y) {
 			row := p.top + e.y - p.y - 1
-			if row >= 0 && row < p.link.kids.len {
+			if row >= 0 && row < p.popup_owner.kids.len {
 				p.value = row
 				if e.pressed && !e.motion && e.button == .left { app.choose_popup() }
 			}
@@ -684,17 +673,17 @@ fn (mut app App) mouse(e Event) {
 			}
 		}
 		.table {
-			if e.y > c.y && c.high > 0 {
+			if e.y > c.y && c.row_count > 0 {
 				c.scroll_hold = false
-				c.set_value(clamp(c.top + e.y - c.y - 1, 0, c.high - 1))
+				c.set_value(clamp(c.top + e.y - c.y - 1, 0, c.row_count - 1))
 			}
 		}
 		.tree {
 			rows := c.tree_rows()
 			at := c.top + e.y - c.y
 			if at >= 0 && at < rows.len {
-				c.link = rows[at].node
-				c.link.value = int(c.link.value == 0)
+				c.selected_node = rows[at].node
+				c.selected_node.expanded = !c.selected_node.expanded
 				c.scroll_hold = false
 				c.fire()
 			}

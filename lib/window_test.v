@@ -342,7 +342,7 @@ fn test_terminal_resize_keeps_windows_inside_the_workspace() {
 			app.raise(mut displaced)
 			app.redraw()
 			app.dispatch(Event{ kind: .mouse, x: displaced.x + 2, y: displaced.y, button: .left, pressed: true })
-			assert app.popups.len == 1 && app.popups[0].link.kids[0].link == displaced
+			assert app.popups.len == 1 && app.popups[0].popup_owner.kids[0].link == displaced
 			app.close_popups()
 			app.dispatch(Event{ kind: .resize, width: 100, height: 40 })
 			assert displaced.rect() == original_displaced && inside.rect() == original

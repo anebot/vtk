@@ -38,8 +38,8 @@ pub fn combo() &Ctl { return &Ctl{ kind: .combo, value: -1, focusable: true } }
 
 pub fn tree() &Ctl { return &Ctl{ kind: .tree, expand: true, focusable: true, scrollbar: true } }
 
-pub fn table(fetch CellCallback) &Ctl {
-	return &Ctl{ kind: .table, cellfn: fetch, value: -1, expand: true, focusable: true, scrollbar: true }
+pub fn table(fetch CellCallback, row_count int) &Ctl {
+	return &Ctl{ kind: .table, cellfn: fetch, row_count: max(0, row_count), value: -1, expand: true, focusable: true, scrollbar: true }
 }
 
 pub fn canvas(width int, height int, paint PaintCallback) &Ctl {
@@ -211,8 +211,8 @@ fn (mut app App) draw_ctl(mut c Ctl) {
 					app.screen.restore_clip(clip)
 				}
 				c.scroll_into_view(c.value, c.h - 1)
-				c.top = clamp(c.top, 0, c.high - max(1, c.h - 1))
-				for row := c.top; row < c.high && row < c.top + c.h - 1; row++ {
+				c.top = clamp(c.top, 0, c.row_count - max(1, c.h - 1))
+				for row := c.top; row < c.row_count && row < c.top + c.h - 1; row++ {
 					rowbg := if row == c.value {
 						if focused { t.focus_bg } else { t.sel_bg }
 					} else {
@@ -226,13 +226,13 @@ fn (mut app App) draw_ctl(mut c Ctl) {
 						app.screen.restore_clip(clip)
 					}
 				}
-				app.draw_scrollbar(c, c.high, max(1, c.h - 1), 1)
+				app.draw_scrollbar(c, c.row_count, max(1, c.h - 1), 1)
 			}
 		}
 		.tree {
 			rows := c.tree_rows()
 			for i, row in rows {
-				if row.node == c.link {
+				if row.node == c.selected_node {
 					c.scroll_into_view(i, c.h)
 					break
 				}
@@ -240,15 +240,15 @@ fn (mut app App) draw_ctl(mut c Ctl) {
 			c.top = clamp(c.top, 0, rows.len - c.h)
 			for i := c.top; i < rows.len && i < c.top + c.h; i++ {
 				row := rows[i]
-				rowbg := if row.node == c.link {
+				rowbg := if row.node == c.selected_node {
 					if focused { t.focus_bg } else { t.sel_bg }
 				} else {
 					bg
 				}
-				rowfg := if row.node == c.link { if focused { t.focus_fg } else { t.sel_fg } } else { fg }
+				rowfg := if row.node == c.selected_node { if focused { t.focus_fg } else { t.sel_fg } } else { fg }
 				app.screen.fill(Rect{c.x, c.y + i - c.top, c.w, 1}, ` `, rowfg, rowbg)
 				if row.node.kids.len > 0 {
-					app.screen.text(c.x + row.depth * 2, c.y + i - c.top, if row.node.value != 0 {
+					app.screen.text(c.x + row.depth * 2, c.y + i - c.top, if row.node.expanded {
 						'▾'
 					} else {
 						'▸'
@@ -336,7 +336,7 @@ fn (mut app App) draw_scrollbar(c &Ctl, total int, viewport int, inset int) {
 
 fn (c &Ctl) scroll_dimensions() (int, int) {
 	match c.kind {
-		.table { return c.high, max(1, c.h - 1) }
+		.table { return c.row_count, max(1, c.h - 1) }
 		.tree { return c.tree_rows().len, c.h }
 		.multiline, .markdown { return c.editor_rows().len, c.editor_height() }
 		.scroll {

@@ -4,6 +4,9 @@ import os
 
 fn test_utf8_entry_limits_selection_and_history() {
 	mut c := entry('é', 6)
+	c.min_w = 30
+	c.measure()
+	assert c.pw == 30
 	assert c.replace_selection('😀')
 	assert c.text == 'é😀'
 	assert !c.replace_selection('x')
@@ -249,7 +252,7 @@ fn modal_close_hook(mut app App) {
 		assert app.top_window() == dialog
 		app.close(mut other)
 	}
-	dialog.value = 42
+	dialog.dialog_result = 42
 	app.close(mut dialog)
 }
 
@@ -327,7 +330,7 @@ fn test_vim_selection_navigation_uses_arrows_and_respects_modifiers() {
 	mut app := new_app()
 	for kind in [Kind.table, .radio, .tabs] {
 		mut c := new_ctl(kind)
-		c.high = 3
+		c.row_count = 3
 		c.value = 0
 		for title in ['One', 'Two', 'Three'] { c.add_item(title) }
 		assert !app.widget_key(mut c, Event{ key: int(`j`) })
@@ -352,11 +355,11 @@ fn test_vim_selection_navigation_uses_arrows_and_respects_modifiers() {
 	mut tree := tree()
 	first := tree.tree_add(unsafe { nil }, 'First')
 	second := tree.tree_add(unsafe { nil }, 'Second')
-	tree.link = first
+	tree.selected_node = first
 	assert app.widget_key(mut tree, Event{ key: int(`j`) })
-	assert tree.link == second
+	assert tree.selected_node == second
 	assert app.widget_key(mut tree, Event{ key: int(`k`) })
-	assert tree.link == first
+	assert tree.selected_node == first
 	mut field := entry('', 0)
 	assert app.widget_key(mut field, Event{ key: int(`j`) })
 	assert app.widget_key(mut field, Event{ key: int(`k`) })

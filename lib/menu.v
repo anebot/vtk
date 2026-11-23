@@ -50,7 +50,7 @@ fn (mut app App) push_menu(owner &Ctl, x int, y int) {
 	mut p := &Ctl{
 		kind:  .popup
 		app:   app
-		link:  owner
+		popup_owner: owner
 		x:     clamp(x, 0, app.width - w)
 		y:     clamp(y, 0, app.height - h)
 		w:     w
@@ -75,7 +75,7 @@ pub fn (mut app App) close_popups() {
 }
 
 fn (mut app App) layout_popups() {
-	if app.popups.any(!app.can_access(it.link)) {
+	if app.popups.any(!app.can_access(it.popup_owner)) {
 		app.close_popups()
 		return
 	}
@@ -92,9 +92,9 @@ fn (mut app App) layout_popups() {
 	height := area.h
 	for i, mut p in app.popups {
 		mut width := 8
-		for item in p.link.kids { width = max(width, text_width(item.text) + 4) }
+		for item in p.popup_owner.kids { width = max(width, text_width(item.text) + 4) }
 		p.w = min(app.width, width)
-		p.h = min(height, p.link.kids.len + 2)
+		p.h = min(height, p.popup_owner.kids.len + 2)
 		if i == 0 && anchored {
 			if !isnil(app.app_popup) { p.x = 0 }
 			p.y = if app.bar_top { area.y } else { area.y + height - p.h }
@@ -110,8 +110,8 @@ fn (mut app App) layout_popups() {
 		p.x = clamp(p.x, 0, app.width - p.w)
 		p.y = clamp(p.y, area.y, area.y + height - p.h)
 		view := max(1, p.h - 2)
-		p.value = clamp(p.value, 0, p.link.kids.len - 1)
-		p.top = clamp(p.top, 0, p.link.kids.len - view)
+		p.value = clamp(p.value, 0, p.popup_owner.kids.len - 1)
+		p.top = clamp(p.top, 0, p.popup_owner.kids.len - view)
 		p.scroll_into_view(p.value, view)
 	}
 }
@@ -119,14 +119,14 @@ fn (mut app App) layout_popups() {
 fn (mut app App) choose_popup() {
 	if app.popups.len == 0 { return }
 	p := app.popups.last()
-	if p.value < 0 || p.value >= p.link.kids.len { return }
-	mut item := p.link.kids[p.value]
+	if p.value < 0 || p.value >= p.popup_owner.kids.len { return }
+	mut item := p.popup_owner.kids[p.value]
 	if item.disabled || item.kind == .separator { return }
 	if item.kind == .menu {
 		app.push_menu(item, p.x + p.w - 1, p.y + p.value)
 		return
 	}
-	mut owner := p.link
+	mut owner := p.popup_owner
 	app.close_popups()
 	if owner.kind == .combo {
 		owner.value = p.value
@@ -146,8 +146,8 @@ fn (mut app App) popup_key(e Event) {
 	if e.key in [int(Key.up), int(`k`), int(Key.down), int(`j`)] {
 		step := if e.key in [int(Key.up), int(`k`)] { -1 } else { 1 }
 		mut at := p.value + step
-		for at >= 0 && at < p.link.kids.len {
-			if p.link.kids[at].kind != .separator {
+		for at >= 0 && at < p.popup_owner.kids.len {
+			if p.popup_owner.kids[at].kind != .separator {
 				p.value = at
 				break
 			}
@@ -156,12 +156,12 @@ fn (mut app App) popup_key(e Event) {
 		p.scroll_into_view(p.value, p.h - 2)
 	} else if e.key in [int(Key.enter), int(Key.space)] {
 		app.choose_popup()
-	} else if e.key in [int(Key.right), int(`l`)] && p.value < p.link.kids.len && p.link.kids[p.value].kind == .menu {
+	} else if e.key in [int(Key.right), int(`l`)] && p.value < p.popup_owner.kids.len && p.popup_owner.kids[p.value].kind == .menu {
 		app.choose_popup()
-	} else if e.key in [int(Key.left), int(Key.right), int(`h`), int(`l`)] && !isnil(p.link.parent) && p.link.parent.kind == .window {
-		menus := p.link.parent.kids.filter(it.kind == .menu)
+	} else if e.key in [int(Key.left), int(Key.right), int(`h`), int(`l`)] && !isnil(p.popup_owner.parent) && p.popup_owner.parent.kind == .window {
+		menus := p.popup_owner.parent.kids.filter(it.kind == .menu)
 		for i, menu in menus {
-			if menu == p.link {
+			if menu == p.popup_owner {
 				next := menus[(i + (if e.key in [int(Key.left), int(`h`)] {
 					menus.len - 1
 				} else {
@@ -183,8 +183,8 @@ fn (mut app App) draw_popups() {
 		app.screen.fill(p.rect(), ` `, t.fg, t.bg)
 		app.screen.frame(p.rect(), false, t.frame, t.bg)
 		old := app.screen.set_clip(Rect{p.x + 1, p.y + 1, p.w - 2, p.h - 2})
-		for i := p.top; i < p.link.kids.len && i < p.top + p.h - 2; i++ {
-			item := p.link.kids[i]
+		for i := p.top; i < p.popup_owner.kids.len && i < p.top + p.h - 2; i++ {
+			item := p.popup_owner.kids[i]
 			y := p.y + 1 + i - p.top
 			fg := if item.disabled {
 				t.dim
@@ -200,8 +200,8 @@ fn (mut app App) draw_popups() {
 				` `
 			}, fg, bg)
 			if item.kind != .separator {
-				if p.link.kind == .combo {
-					app.screen.aligned_text(p.x + 2, y, p.w - 4, item.text, p.link.text_align, fg, bg, 0)
+				if p.popup_owner.kind == .combo {
+					app.screen.aligned_text(p.x + 2, y, p.w - 4, item.text, p.popup_owner.text_align, fg, bg, 0)
 				} else {
 					app.screen.text(p.x + 2, y, item.text, fg, bg, 0)
 				}

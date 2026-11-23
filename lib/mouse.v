@@ -56,8 +56,8 @@ fn (app &App) hover_target() &Ctl {
 		if !p.rect().contains(x, y) { return unsafe { nil } }
 		row := p.top + y - p.y - 1
 		if x > p.x && x < p.x + p.w - 1 && y > p.y && y < p.y + p.h - 1
-			&& row >= 0 && row < p.link.kids.len {
-			item := p.link.kids[row]
+			&& row >= 0 && row < p.popup_owner.kids.len {
+			item := p.popup_owner.kids[row]
 			if item.disabled || item.hidden || item.kind == .separator { return unsafe { nil } }
 			return item
 		}

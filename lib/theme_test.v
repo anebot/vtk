@@ -98,9 +98,8 @@ fn test_controls_use_matching_foreground_and_background_roles() {
 		status.layout(Rect{0, 0, 16, 1})
 		app.draw_ctl(mut status)
 		assert app.screen.cells[0].fg == t.bar_fg && app.screen.cells[0].bg == t.bar_bg
-		mut table := table(theme_test_cell)
+		mut table := table(theme_test_cell, 2)
 		table.table_column('Name')
-		table.high = 2
 		table.value = 0
 		mut tree := tree()
 		tree.tree_add(unsafe { nil }, 'Project')

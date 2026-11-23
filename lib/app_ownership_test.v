@@ -109,7 +109,7 @@ fn test_reparenting_clears_hover_and_stale_input_ownership() {
 	mut editor := multiline('initial')
 	editor.mouse_leave = fn (mut c Ctl, mut app App) {
 		assert c.root().app == &app
-		c.value++
+		c.data++
 		app.clipboard_set('leave')
 	}
 	editor.keyfn = fn (mut c Ctl, _ Event, mut app App) bool {
@@ -124,15 +124,15 @@ fn test_reparenting_clears_hover_and_stale_input_ownership() {
 	assert first.focus == editor && first.drag == editor && editor.hovered
 	first.scroll_drag = editor
 	w2.add(mut editor)
-	assert editor.value == 1 && !editor.hovered && isnil(first.hovered_ctl())
+	assert editor.data == 1 && !editor.hovered && isnil(first.hovered_ctl())
 	editor.anchor, editor.cursor = 0, 3
 	assert !first.copy_focus() && first.clipboard_text() == 'leave'
 	first.dispatch(Event{ key: int(`x`) })
-	assert editor.text == 'initial' && editor.data == 0
+	assert editor.text == 'initial' && editor.data == 1
 	assert isnil(first.focus) && isnil(first.drag) && isnil(first.scroll_drag)
 	second.set_focus(editor)
 	second.dispatch(Event{ key: int(`x`) })
-	assert editor.text != 'initial' && editor.data == 1
+	assert editor.text != 'initial' && editor.data == 2
 	assert second.clipboard_text() == 'key'
 }
 
@@ -161,14 +161,14 @@ fn test_modal_dialogs_reject_foreign_controls_without_entering_the_loop() {
 	mut owner := first.window('Owner', 30, 8)
 	mut foreign := first.window('Foreign dialog', 24, 6)
 	mut local := second.window('Local dialog', 24, 6)
-	foreign.value, local.value = 42, 42
+	foreign.dialog_result, local.dialog_result = 42, 42
 	// A regression must fail rather than block in a modal event loop.
 	second.after(0, fn (mut app App) { app.running = false })
 	first.dirty, second.dirty = false, false
 	assert second.modal_for(mut foreign, local) == -1
 	assert second.modal_for(mut local, owner) == -1
 	assert !foreign.modal && !local.modal && second.running
-	assert foreign.value == 42 && local.value == 42
+	assert foreign.dialog_result == 42 && local.dialog_result == 42
 	actions := [
 		fn (mut app App, owner &Ctl) { app.msgbox_for(owner, 'Message', 'Text') },
 		fn (mut app App, owner &Ctl) { app.confirm_for(owner, 'Confirm', 'Text') },
@@ -198,17 +198,17 @@ fn test_standalone_menu_transfer_clears_old_hover_and_input() {
 	})
 	item.mouse_leave = fn (mut c Ctl, mut app App) {
 		assert c.root().app == &app
-		c.value++
+		c.data++
 	}
 	first.open_menu(menu, 0, 0)
 	first.dispatch(Event{ kind: .mouse, x: 1, y: 1, motion: true })
 	assert item.hovered
 	second.open_menu(menu, 0, 0)
-	assert !item.hovered && item.value == 1 && isnil(first.hovered_ctl())
+	assert !item.hovered && item.data == 1 && isnil(first.hovered_ctl())
 	first.dispatch(Event{ key: int(Key.enter) })
-	assert first.popups.len == 0 && item.data == 0
+	assert first.popups.len == 0 && item.data == 1
 	second.dispatch(Event{ key: int(Key.enter) })
-	assert item.data == 1 && second.clipboard_text() == 'selected'
+	assert item.data == 2 && second.clipboard_text() == 'selected'
 }
 
 fn test_detached_adoption_explicit_transfer_and_notice_ownership() {

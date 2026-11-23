@@ -93,8 +93,8 @@ window.add(mut bar)
 bar.set_value(42)
 ```
 
-`Ctl` is the shared control model. Public fields correspond to HTK's control
-fields; constructors and methods use V naming conventions. `App` contains
+`Ctl` is the shared control model. Widget-specific state has explicit field
+names; constructors and methods use V naming conventions. `App` contains
 the window stack, theme, focus, clipboard, hooks and desktop settings.
 
 | HTK concept | VTK API |
@@ -111,8 +111,8 @@ the window stack, theme, focus, clipboard, hooks and desktop settings.
 | Date picker | `date_picker(initial)`, `control.date()`, `control.set_date(date)` |
 | Value controls | `slider(low, high)`, `spin(low, high)`, `progress()`, `spinner(text)` |
 | Choices | `combo()`, `radio()`, `control.add_item(text)` |
-| Table | `table(cell_callback)`, `control.table_column(title)`, `control.high` row count |
-| Tree | `tree()`, `control.tree_add(parent, text)`, `control.link` selection |
+| Table | `table(cell_callback, row_count)`, `control.table_column(title)`, `control.row_count` |
+| Tree | `tree()`, `control.tree_add(parent, text)`, `control.selected_node` selection |
 | Tabs / group | `tabs()`, `control.add_tab(title, mut child)`, `group(title)` |
 | Linear / grid / flow | `box(vertical)`, `grid()`, `flow()` |
 | Split / scroll | `split(vertical, share)`, `scroll()` |
@@ -120,6 +120,14 @@ the window stack, theme, focus, clipboard, hooks and desktop settings.
 | Canvas | `canvas(width, height, paint_callback)` |
 | Menus | `window.add_menu(title)`, `menu.menu_item(title, callback)` |
 | Context menu | `context_menu()`, `control.set_menu(mut menu)`, `app.open_menu(menu, x, y)` |
+
+`low` and `high` are numeric range bounds; `value` holds a widget value or
+selection index. Entries use `byte_limit` (zero means unlimited) and `min_w`
+for minimum preferred width. Tables use `row_count`. Trees use `selected_node`
+and each node's `expanded` flag. Dialogs use `dialog_result` and `default_button`;
+popups refer to their menu or combobox through `popup_owner`. `link` is reserved
+for an associated control used by callbacks; `user` and `data` hold application
+state.
 
 Grid children use `row` and `col`, both in `0..64`. Expanding children share
 spare space; horizontal boxes leave one cell between children. Button bars

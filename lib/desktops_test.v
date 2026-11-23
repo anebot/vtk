@@ -76,13 +76,13 @@ fn test_move_window_menu_moves_to_another_desktop_without_switching() {
 		app.dispatch(Event{ kind: .mouse, button: .left, pressed: true, x: title.menu + 1, y: moved.y })
 		assert app.popups.len == 1
 		mut p := app.popups[0]
-		p.value = p.link.kids.len - 1
-		assert p.link.kids[p.value].text == 'Move to desktop'
+		p.value = p.popup_owner.kids.len - 1
+		assert p.popup_owner.kids[p.value].text == 'Move to desktop'
 		app.dispatch(Event{ key: int(Key.right) })
 		assert app.popups.len == 2
 		mut submenu := app.popups[1]
-		assert submenu.link.kids.map(it.text) == ['Desktop 1', 'Desktop 2', 'Desktop 3', 'Desktop 4']
-		assert submenu.link.kids[0].disabled
+		assert submenu.popup_owner.kids.map(it.text) == ['Desktop 1', 'Desktop 2', 'Desktop 3', 'Desktop 4']
+		assert submenu.popup_owner.kids[0].disabled
 		submenu.value = 2
 		app.dispatch(Event{ key: int(Key.enter) })
 		assert moved.desktop_id == 3 && app.active_desktop == 1
@@ -99,7 +99,7 @@ fn test_move_window_menu_moves_to_another_desktop_without_switching() {
 			x:       app.bar_buttons_rect().x + 1
 			y:       app.bar_y()
 		})
-		assert app.popups[0].link.kids.last().text == 'Move to desktop'
+		assert app.popups[0].popup_owner.kids.last().text == 'Move to desktop'
 	}
 }
 

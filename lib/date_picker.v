@@ -135,7 +135,7 @@ fn (mut app App) draw_date_picker(c &Ctl) {
 
 fn date_picker_accept(mut c Ctl, mut app App) {
 	mut w := c.owner_window()
-	w.value = 1
+	w.dialog_result = 1
 	app.close(mut w)
 }
 
@@ -153,7 +153,7 @@ pub fn (mut app App) date_pick(owner &Ctl, title string, initial time.Time) ?tim
 	body.add(mut picker)
 	body.add(mut row)
 	mut w := app.dialog(title, mut body)
-	w.link = ok
+	w.default_button = ok
 	app.set_focus(picker)
 	accepted := app.modal_for(mut w, owner) == 1
 	result := picker.date()

@@ -21,7 +21,7 @@ fn update(mut doc Document) {
 	doc.window.text = name + (if doc.view.text != doc.saved { ' *' } else { '' }) + ' - VTK Word'
 	doc.status.text = '${doc.view.text.fields().len} words | ${doc.view.text.runes().len} chars | ${name}'
 	doc.outline.kids.clear()
-	doc.outline.link = unsafe { nil }
+	doc.outline.selected_node = unsafe { nil }
 	mut at := 0
 	for line in doc.view.text.split('\n') {
 		if line.starts_with('#') {
@@ -40,8 +40,8 @@ fn changed(mut c vtk.Ctl, mut app vtk.App) {
 
 fn outline_hit(mut c vtk.Ctl, mut app vtk.App) {
 	mut doc := unsafe { &Document(c.user) }
-	if !isnil(c.link) {
-		doc.view.cursor = int(c.link.data)
+	if !isnil(c.selected_node) {
+		doc.view.cursor = int(c.selected_node.data)
 		doc.view.anchor = -1
 		doc.view.scroll_hold = false
 		app.set_focus(doc.view)

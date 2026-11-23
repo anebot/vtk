@@ -32,8 +32,8 @@ pub fn (mut edit Edit) reset() {
 	edit.revision++
 }
 
-pub fn entry(text string, limit int) &Ctl {
-	return &Ctl{ kind: .entry, text: text, high: max(0, limit), cursor: text.len, expand: true, focusable: true }
+pub fn entry(text string, byte_limit int) &Ctl {
+	return &Ctl{ kind: .entry, text: text, byte_limit: max(0, byte_limit), cursor: text.len, expand: true, focusable: true }
 }
 
 pub fn multiline(text string) &Ctl {
@@ -70,7 +70,7 @@ pub fn (mut c Ctl) replace_range(from int, to int, text string) bool {
 	mut insertion := text
 	if c.kind == .entry { insertion = insertion.replace('\r', '').replace('\n', '') }
 	if !utf8.validate_str(insertion) { return false }
-	if c.kind == .entry && c.high > 0 && c.text.len - (to - from) + insertion.len > c.high {
+	if c.kind == .entry && c.byte_limit > 0 && c.text.len - (to - from) + insertion.len > c.byte_limit {
 		return false
 	}
 	before := c.text[from..to]

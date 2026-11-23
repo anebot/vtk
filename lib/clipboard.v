@@ -26,7 +26,7 @@ pub fn (mut app App) copy_focus() bool {
 			return true
 		}
 	}
-	if c.kind == .table && c.value >= 0 && c.value < c.high {
+	if c.kind == .table && c.value >= 0 && c.value < c.row_count {
 		mut cells := []string{}
 		for col in 0 .. c.kids.len { cells << c.table_cell(c.value, col) }
 		app.clipboard_set(cells.join('\t'))

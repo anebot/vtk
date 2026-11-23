@@ -11,7 +11,7 @@ fn test_close_checks_ownership_and_preserves_veto_and_focus() {
 	w.closing = fn (mut c Ctl, mut owner App) bool {
 		c.data++
 		owner.clipboard_set(c.text)
-		return c.value == 1
+		return c.data > 1
 	}
 	app.dirty = false
 	other.dirty = false
@@ -20,7 +20,6 @@ fn test_close_checks_ownership_and_preserves_veto_and_focus() {
 	assert !app.close(mut w)
 	assert !w.closed && app.focus == field && !app.dirty
 	assert app.clipboard_text() == 'Owner' && other.clipboard_text() == ''
-	w.value = 1
 	assert app.close(mut w)
 	assert w.closed && isnil(app.focus) && app.dirty
 	assert app.close(mut w) && w.data == 2
@@ -35,10 +34,10 @@ fn test_close_propagates_owned_dialog_veto_and_closes_nested_dialogs() {
 	child.modal_owner = owner
 	mut nested := app.window('Nested', 24, 6)
 	nested.modal_parent = child
-	child.closing = fn (mut c Ctl, mut _ App) bool { return c.value == 1 }
+	child.closing = fn (mut c Ctl, mut _ App) bool { return c.data == 1 }
 	assert !app.close(mut owner)
 	assert !owner.closed && !child.closed && !nested.closed
-	child.value = 1
+	child.data = 1
 	assert app.close(mut owner)
 	assert owner.closed && child.closed && nested.closed
 }

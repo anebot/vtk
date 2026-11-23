@@ -37,7 +37,7 @@ fn demo_start(mut app vtk.App, _ voidptr) {
 	mut check := vtk.checkbox('Bless this machine', true)
 	general.add(mut check)
 	mut code := vtk.entry('', 8)
-	code.low = 20
+	code.min_w = 20
 	code.submit = access_code_submit
 	mut frame := vtk.group('Access code')
 	frame.add(mut code)

@@ -87,6 +87,9 @@ pub mut:
 	parent        &Ctl = unsafe { nil }
 	kids          []&Ctl
 	link          &Ctl = unsafe { nil }
+	selected_node &Ctl = unsafe { nil }
+	default_button &Ctl = unsafe { nil }
+	popup_owner   &Ctl = unsafe { nil }
 	menu          &Ctl = unsafe { nil }
 	modal         bool
 	modal_owner   &Ctl = unsafe { nil }
@@ -107,10 +110,14 @@ pub mut:
 	user          voidptr
 	data          i64
 	value         int
+	expanded      bool
+	dialog_result int
 	blocky        bool
 	desktop_id    int = 1
 	low           int
 	high          int
+	byte_limit    int
+	row_count     int
 	top           int
 	left          int
 	cursor        int

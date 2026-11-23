@@ -407,7 +407,7 @@ fn (mut app App) focus_first(w &Ctl) {
 }
 
 fn (mut app App) enforce_modal_input() {
-	if app.popups.any(!app.can_access(it.link)) { app.close_popups() }
+	if app.popups.any(!app.can_access(it.popup_owner)) { app.close_popups() }
 	if !isnil(app.drag) && (!app.can_access(app.drag) || !app.drag.visible() || !isnil(app.blocker(app.drag.owner_window()))) {
 		app.drag = unsafe { nil }
 	}

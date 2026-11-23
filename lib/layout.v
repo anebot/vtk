@@ -132,7 +132,7 @@ pub fn (mut c Ctl) measure() {
 		.toolbutton { w = text_width(c.text) + 2 }
 		.switch { w = text_width(c.text) + 8 }
 		.spinner { w = text_width(c.text) + 2 }
-		.entry { w = max(16, c.low) }
+		.entry { w = 16 }
 		.multiline, .markdown {
 			w = 24
 			h = 8
@@ -365,15 +365,15 @@ fn (c &Ctl) walk_tree(depth int, mut rows []TreeRow) {
 	for node in c.kids {
 		if node.hidden { continue }
 		rows << TreeRow{node, depth}
-		if node.value != 0 { node.walk_tree(depth + 1, mut rows) }
+		if node.expanded { node.walk_tree(depth + 1, mut rows) }
 	}
 }
 
 pub fn (mut c Ctl) tree_add(parent &Ctl, text string) &Ctl {
-	mut node := &Ctl{ kind: .treenode, text: text, value: 1 }
+	mut node := &Ctl{ kind: .treenode, text: text, expanded: true }
 	mut p := if isnil(parent) { &c } else { unsafe { parent } }
 	p.add(mut node)
-	if isnil(c.link) { c.link = node }
+	if isnil(c.selected_node) { c.selected_node = node }
 	return node
 }
 

@@ -11,7 +11,7 @@ fn test_value_controls_inherit_app_and_notify_only_on_change() {
 	mut body := box(true)
 	mut controls := [progress(), slider(0, 10), spin(0, 10), checkbox('', false),
 		switch_ctl('', false), radio(), combo(), tabs(),
-		table(fn (_ &Ctl, _ int, _ int) string { return '' })]
+		table(fn (_ &Ctl, _ int, _ int) string { return '' }, 0)]
 	for mut c in controls {
 		c.changed = ownership_changed
 		c.set_value(1)

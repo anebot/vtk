@@ -4,7 +4,7 @@ import os
 
 fn dialog_accept(mut c Ctl, mut app App) {
 	mut w := c.owner_window()
-	w.value = int(c.data)
+	w.dialog_result = int(c.data)
 	app.close(mut w)
 }
 
@@ -23,7 +23,7 @@ pub fn (mut app App) dialog(title string, mut body Ctl) &Ctl {
 	w.y = area.y + max(0, (area.h - w.h) / 2)
 	w.dismissable = true
 	w.controls = window_close
-	w.value = -1
+	w.dialog_result = -1
 	w.add(mut body)
 	return w
 }
@@ -50,7 +50,7 @@ pub fn (mut app App) modal_for(mut dialog Ctl, owner &Ctl) int {
 	dialog.always_on_top = top
 	if !isnil(old_focus) && old_focus.visible() { app.set_focus(old_focus) }
 	app.dirty = true
-	return dialog.value
+	return dialog.dialog_result
 }
 
 fn dialog_body(body string) &Ctl {
@@ -68,7 +68,7 @@ pub fn (mut app App) msgbox_for(owner &Ctl, title string, text string) {
 	row.add(mut ok)
 	body.add(mut row)
 	mut w := app.dialog(title, mut body)
-	w.link = ok
+	w.default_button = ok
 	app.set_focus(ok)
 	app.modal_for(mut w, owner)
 	app.destroy_ctl(mut w)
@@ -88,7 +88,7 @@ pub fn (mut app App) confirm_for(owner &Ctl, title string, text string) bool {
 	row.add(mut no)
 	body.add(mut row)
 	mut w := app.dialog(title, mut body)
-	w.link = yes
+	w.default_button = yes
 	app.set_focus(no)
 	result := app.modal_for(mut w, owner) == 1
 	app.destroy_ctl(mut w)
@@ -103,7 +103,7 @@ pub fn (mut app App) prompt_for(owner &Ctl, title string, text string, initial s
 	if !app.can_access(owner) { return none }
 	mut body := dialog_body(text)
 	mut field := entry(initial, 0)
-	field.low = 30
+	field.min_w = 30
 	field.expand = false
 	mut row := button_bar()
 	mut ok := dialog_button('  OK  ', true)
@@ -113,7 +113,7 @@ pub fn (mut app App) prompt_for(owner &Ctl, title string, text string, initial s
 	row.add(mut cancel)
 	body.add(mut row)
 	mut w := app.dialog(title, mut body)
-	w.link = ok
+	w.default_button = ok
 	app.set_focus(field)
 	accepted := app.modal_for(mut w, owner) == 1
 	result := field.text
@@ -147,9 +147,9 @@ pub fn (mut app App) choice_for(owner &Ctl, title string, items []string, column
 
 fn list_accept(mut c Ctl, mut app App) {
 	mut list := if c.kind == .tree { &c } else { c.link }
-	if isnil(list.link) { return }
+	if isnil(list.selected_node) { return }
 	mut w := c.owner_window()
-	w.value = int(list.link.data)
+	w.dialog_result = int(list.selected_node.data)
 	app.close(mut w)
 }
 
@@ -163,7 +163,7 @@ pub fn (mut app App) list_choice_for(owner &Ctl, title string, items []string, s
 	for i, text in items {
 		mut node := list.tree_add(unsafe { nil }, text)
 		node.data = i
-		if i == selected { list.link = node }
+		if i == selected { list.selected_node = node }
 	}
 	mut apply := toolbutton('Apply')
 	apply.link = list
@@ -240,7 +240,7 @@ fn (mut pick FilePicker) fill(path string) ! {
 	pick.directory = directory
 	pick.field.set_text(directory)
 	pick.list.kids.clear()
-	pick.list.link = unsafe { nil }
+	pick.list.selected_node = unsafe { nil }
 	pick.list.top = 0
 	mut parent := pick.list.tree_add(unsafe { nil }, '..')
 	parent.text = '..'
@@ -249,7 +249,7 @@ fn (mut pick FilePicker) fill(path string) ! {
 
 fn file_select(mut list Ctl, mut app App) {
 	mut pick := unsafe { &FilePicker(list.user) }
-	if !isnil(list.link) { pick.field.set_text(os.join_path(pick.directory, list.link.text)) }
+	if !isnil(list.selected_node) { pick.field.set_text(os.join_path(pick.directory, list.selected_node.text)) }
 	app.dirty = true
 }
 
@@ -346,7 +346,7 @@ pub fn (mut app App) color_pick(owner &Ctl, title string, rgb int) ?int {
 	row.add(mut cancel)
 	body.add(mut row)
 	mut w := app.dialog(title, mut body)
-	w.link = ok
+	w.default_button = ok
 	accepted := app.modal_for(mut w, owner) == 1
 	result := r.value << 16 | g.value << 8 | b.value
 	app.destroy_ctl(mut w)
