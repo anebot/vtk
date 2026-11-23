@@ -642,7 +642,10 @@ fn (mut app App) mouse(e Event) {
 			if e.pressed && !e.motion { app.close_popups() }
 			return
 		}
-		// A click on a parent menu switches branches; only the popups below it
+		// Moving over a parent must not drop the submenu the pointer is heading
+		// for; only a press switches branches.
+		if e.motion && at < app.popups.len - 1 { return }
+		// A press on a parent menu switches branches; only the popups below it
 		// close, so sibling submenus stay one click away.
 		for i := at + 1; i < app.popups.len; i++ {
 			app.invalidate_area(app.popups[i].rect())

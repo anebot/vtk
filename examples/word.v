@@ -156,6 +156,9 @@ const view_ids = [17, 34, 18, 19, 20]
 const wrap_names = ['Disabled', 'Character', 'Word']
 const page_names = ['Line numbers', 'Top ruler', 'Left ruler']
 const align_names = ['Left', 'Center', 'Right', 'Justify']
+const font_styles = [vtk.FontStyle.none, .bold, .italic, .script, .doublestruck, .underline,
+	.strikethrough, .fraktur, .bolditalic, .sansserif, .sansserifitalic, .monospace, .boldscript,
+	.boldfraktur, .sansserifbold, .sansserifbolditalic, .openface, .smallcaps]
 
 fn ticked(name string, on bool) string {
 	return if on { '✓ ${name}' } else { '  ${name}' }
@@ -466,6 +469,29 @@ fn find_dialog(mut doc Document, mut app vtk.App, focus_replace bool) {
 	app.destroy_ctl(mut w)
 }
 
+fn choose_font(mut doc Document, mut app vtk.App) {
+	if doc.view.readonly {
+		app.notify('Read only', 1500)
+		return
+	}
+	mut names := []string{cap: font_styles.len}
+	for style in font_styles {
+		name := style.str()
+		names << vtk.font_convert(name, style)
+	}
+	at := app.choice_for(doc.window, 'Unicode text style', names, 2)
+	if at < 0 { return }
+	style := font_styles[at]
+	if style == .underline {
+		wrap(mut doc, '<u>', '</u>')
+	} else if style == .strikethrough {
+		wrap(mut doc, '~~', '~~')
+	} else {
+		a, b := doc.view.selection()
+		if a != b { doc.view.replace_selection(vtk.font_convert(doc.view.text[a..b], style)) }
+	}
+}
+
 fn insert_table(mut doc Document, mut app vtk.App) {
 	if doc.view.readonly {
 		app.notify('Read only', 1500)
@@ -607,6 +633,7 @@ fn action(mut c vtk.Ctl, mut app vtk.App) {
 		37 { doc.view.markdown_align(.right) }
 		38 { doc.view.markdown_align(.justify) }
 		39 { insert_table(mut doc, mut app) }
+		41 { choose_font(mut doc, mut app) }
 		else {}
 	}
 	sync_view_menu(mut doc)
@@ -765,6 +792,7 @@ fn new_document(mut app vtk.App, path string) {
 	for i, name in ['Bold', 'Italic', 'Code'] {
 		menu_item(mut format, doc, name, i + 11)
 	}
+	menu_item(mut format, doc, 'Font...', 41)
 	format.menu_separator()
 	mut align_menu := format.add_menu('Text align')
 	for i, name in align_names {

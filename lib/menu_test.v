@@ -269,6 +269,11 @@ fn test_clicking_a_parent_item_switches_submenus_instead_of_closing() {
 	// The release that follows the opening press must not close the submenu.
 	app.dispatch(Event{ kind: .mouse, x: parent.x + 2, y: wrap_y, button: .left })
 	assert app.popups.len == 2 && app.popups[1].popup_owner == wrap
+	// Moving across the parent towards the submenu keeps it open.
+	app.dispatch(Event{ kind: .mouse, x: parent.x + 2, y: page_y, motion: true })
+	assert app.popups.len == 2 && app.popups[1].popup_owner == wrap
+	app.dispatch(Event{ kind: .mouse, x: 0, y: 0, motion: true })
+	assert app.popups.len == 2 && app.popups[1].popup_owner == wrap
 	// The sibling item stays reachable while the Wrap submenu is open.
 	app.dispatch(Event{ kind: .mouse, x: parent.x + 2, y: page_y, button: .left, pressed: true })
 	assert app.popups.len == 2 && app.popups[1].popup_owner == page
@@ -302,6 +307,8 @@ fn test_mouse_press_and_release_open_window_submenus_without_closing_them() {
 	app.dispatch(Event{ kind: .mouse, x: p.x + 2, y: p.y + 1, button: .left, pressed: true })
 	assert app.popups.len == 2 && app.popups[1].popup_owner == wrap
 	app.dispatch(Event{ kind: .mouse, x: p.x + 2, y: p.y + 1, button: .left })
+	assert app.popups.len == 2 && app.popups[1].popup_owner == wrap
+	app.dispatch(Event{ kind: .mouse, x: p.x + 2, y: p.y + 2, motion: true })
 	assert app.popups.len == 2 && app.popups[1].popup_owner == wrap
 	app.dispatch(Event{ kind: .mouse, x: p.x + 2, y: p.y + 2, button: .left, pressed: true })
 	assert app.popups.len == 2 && app.popups[1].popup_owner == page
