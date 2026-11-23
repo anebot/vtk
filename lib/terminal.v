@@ -1,6 +1,7 @@
 module vtk
 
 import encoding.utf8
+import os
 
 // Terminal is an incremental xterm subset, independent of the PTY transport.
 // feed can be used on arbitrary chunks, including split UTF-8/CSI sequences.
@@ -37,15 +38,26 @@ pub fn new_terminal(cols int, rows int) &Terminal {
 	return t
 }
 
-pub fn terminal(cols int, rows int) !&Ctl {
+// TerminalOptions selects the child shell's starting directory and window title.
+// An empty directory inherits the application's current directory.
+@[params]
+pub struct TerminalOptions {
+pub:
+	directory string
+	title     string = 'Terminal'
+}
+
+pub fn terminal(cols int, rows int, options TerminalOptions) !&Ctl {
+	if options.directory.contains('\x00') { return error('terminal directory contains NUL') }
+	directory := if options.directory == '' { '' } else { os.abs_path(options.directory) }
 	mut t := new_terminal(cols, rows)
-	t.pty = spawn_pty(t.cols, t.rows)!
+	t.pty = spawn_pty(t.cols, t.rows, directory)!
 	return &Ctl{ kind: .terminal, term: t, pw: cols, ph: rows, expand: true, focusable: true }
 }
 
-pub fn (mut app App) terminal_window() !&Ctl {
-	mut control := terminal(72, 18)!
-	mut w := app.window('Terminal', 74, 20)
+pub fn (mut app App) terminal_window(options TerminalOptions) !&Ctl {
+	mut control := terminal(72, 18, options)!
+	mut w := app.window(options.title, 74, 20)
 	w.add(mut control)
 	app.set_focus(control)
 	return w

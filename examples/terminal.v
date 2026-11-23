@@ -1,5 +1,6 @@
 module main
 
+import os
 import vtk
 
 fn main() {
@@ -9,7 +10,10 @@ fn main() {
 		return
 	}
 	defer { app.fini() }
-	app.terminal_window() or {
+	app.terminal_window(
+		directory: if os.args.len > 1 { os.args[1] } else { '' }
+		title: if os.args.len > 2 { os.args[2] } else { 'Terminal' }
+	) or {
 		eprintln(err)
 		return
 	}

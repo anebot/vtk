@@ -22,7 +22,17 @@ mut:
 	reaped bool
 }
 
-fn spawn_pty(cols int, rows int) !Pty {
+fn spawn_pty(cols int, rows int, directory string) !Pty {
+	// EOF means exec succeeded; an errno reports chdir/exec failure to the caller.
+	mut startup := [2]i32{}
+	if C.pipe(&startup[0]) != 0 { return error('cannot create shell startup pipe') }
+	defer {
+		C.close(startup[0])
+		if startup[1] >= 0 { C.close(startup[1]) }
+	}
+	if C.fcntl(startup[1], C.F_SETFD, C.FD_CLOEXEC) < 0 {
+		return error('cannot configure shell startup pipe')
+	}
 	master := C.posix_openpt(C.O_RDWR | C.O_NOCTTY)
 	if master < 0 { return error('posix_openpt failed') }
 	if C.grantpt(master) != 0 || C.unlockpt(master) != 0 {
@@ -43,6 +53,7 @@ fn spawn_pty(cols int, rows int) !Pty {
 		return error('cannot fork shell')
 	}
 	if pid == 0 {
+		C.close(startup[0])
 		C.close(master)
 		C.setsid()
 		C.ioctl(slave, u64(C.TIOCSCTTY), 0)
@@ -51,13 +62,32 @@ fn spawn_pty(cols int, rows int) !Pty {
 		C.dup2(slave, 2)
 		if slave > 2 { C.close(slave) }
 		unsafe { C.setenv(c'TERM', c'xterm-256color', 1) }
-		C.execv(&char(path.str), &&char(argv.data))
+		if directory == '' || C.chdir(&char(directory.str)) == 0 {
+			C.execv(&char(path.str), &&char(argv.data))
+		}
+		failure := i32(C.errno)
+		for {
+			if C.write(startup[1], &failure, sizeof(i32)) >= 0 || C.errno != C.EINTR { break }
+		}
 		C._exit(127)
 	}
 	C.close(slave)
 	C.fcntl(master, C.F_SETFL, C.fcntl(master, C.F_GETFL, 0) | C.O_NONBLOCK)
 	C.fcntl(master, C.F_SETFD, C.FD_CLOEXEC)
 	mut p := Pty{ fd: master, pid: pid }
+	C.close(startup[1])
+	startup[1] = -1
+	mut failure := i32(0)
+	mut count := 0
+	for {
+		count = int(C.read(startup[0], &failure, sizeof(i32)))
+		if count >= 0 || C.errno != C.EINTR { break }
+	}
+	if count != 0 {
+		if count < 0 { failure = i32(C.errno) }
+		p.close()
+		return error('cannot start terminal shell: ${os.posix_get_error_msg(failure)}')
+	}
 	p.resize(cols, rows)
 	return p
 }

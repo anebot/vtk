@@ -42,7 +42,7 @@ mut:
 	active  bool
 }
 
-fn spawn_pty(cols int, rows int) !Pty {
+fn spawn_pty(cols int, rows int, directory string) !Pty {
 	mut in_read, mut in_write, mut out_read, mut out_write := voidptr(0), voidptr(0), voidptr(0), voidptr(0)
 	if !C.CreatePipe(&in_read, &in_write, 0, 0) { return error('cannot create ConPTY input pipe') }
 	if !C.CreatePipe(&out_read, &out_write, 0, 0) {
@@ -76,7 +76,8 @@ fn spawn_pty(cols int, rows int) !Pty {
 	startup.StartupInfo.cb = u32(sizeof(C.STARTUPINFOEXW))
 	mut info := C.PROCESS_INFORMATION{}
 	shell := if os.getenv('COMSPEC') != '' { os.getenv('COMSPEC') } else { 'cmd.exe' }
-	if !C.CreateProcessW(0, shell.to_wide(), 0, 0, false, 0x80000, 0, 0, &startup, &info) {
+	working_directory := if directory == '' { &u16(unsafe { nil }) } else { directory.to_wide() }
+	if !C.CreateProcessW(0, shell.to_wide(), 0, 0, false, 0x80000, 0, working_directory, &startup, &info) {
 		p.close()
 		return error('cannot start ConPTY shell')
 	}

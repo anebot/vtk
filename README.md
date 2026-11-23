@@ -440,6 +440,27 @@ xterm subset: cursor movement, erasing, insert/delete, scroll regions, SGR,
 16/256/RGB colors and UTF-8. Output is polled in bounded batches. Closing
 the window releases the child process and PTY. It is not a full VT emulator.
 
+Open a shell in a specific directory with a custom window title:
+
+```v
+mut window := app.terminal_window(
+	directory: '/path/to/worktree'
+	title: 'Shell: feature-worktree'
+)!
+window.set_text('Shell: renamed')
+```
+
+Both options are optional: `app.terminal_window()` inherits the application's
+current directory and uses `Terminal` as the title. The directory is applied to
+the child process without changing the application's working directory. Relative
+paths resolve against the application's current directory; paths are passed
+directly to the OS, so spaces and quotes need no shell escaping. Directory and
+shell startup failures return an error before creating a window. Embedded
+controls accept the same options: `vtk.terminal(72, 18, directory: worktree)!`;
+`title` only applies to `terminal_window`.
+
+Try `v run examples/terminal.v /path/to/worktree 'Shell: feature-worktree'`.
+
 ## Examples and validation
 
 `htk.v` translates `examples/htk.hc`. `draw.v` translates the HTK path of
