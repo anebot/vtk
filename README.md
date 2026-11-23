@@ -481,6 +481,26 @@ scrollbars and manual scrolling that leaves the caret stationary.
 `replace_range`, `replace_selection`, `undo`, `redo`, `begin_edit_group` and
 `end_edit_group` expose the edit model.
 
+Multiline and Markdown controls expose three wrapping modes:
+
+```v
+text.set_wrap_mode(.none)      // original lines with horizontal caret scrolling
+text.set_wrap_mode(.character) // wrap at display-character boundaries
+text.set_wrap_mode(.word)      // prefer whitespace boundaries; split overlong words
+mode := text.wrap_mode()
+```
+
+Wrapping changes display only: source text, selection, caret byte positions and
+undo history stay intact. Word wrapping preserves whitespace and whole Unicode
+graphemes; trailing whitespace can hang beyond the right edge. Tabs use the
+configured `md.tab_width` and recompute their stops on each display row.
+The default remains no wrapping for multiline controls and character wrapping
+for Markdown. Existing `wrap` and `md.no_wrap` flags remain supported. Entries
+are single-line controls and reject wrapping modes. VTK Word's View menu offers
+all three modes; VTK Vim accepts `:set nowrap`, `:set wrap` / `charwrap`, and
+`:set wordwrap`. The widgets example's Text tab demonstrates word wrapping.
+Rendered Markdown tables retain their separate column layout and wrapping.
+
 Set a multiline control's `syntax = .diff` to highlight unified diffs with
 red deletions, green additions, cyan hunks and bold file headers. Scrolling,
 wrapping and selection preserve the highlighting; `.plain` is the default.

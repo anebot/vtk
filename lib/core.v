@@ -163,6 +163,7 @@ mut:
 	ph            int
 	tab_x         int
 	tab_w         int
+	wrap_words    bool
 	closed        bool
 	closing_now   bool
 	destroyed     bool

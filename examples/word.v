@@ -169,6 +169,9 @@ fn action(mut c vtk.Ctl, mut app vtk.App) {
 		27 { wrap(mut doc, '\n- ', '') }
 		28 { wrap(mut doc, '\n> ', '') }
 		29 { wrap(mut doc, '\n```\n', '\n```\n') }
+		30 { doc.view.set_wrap_mode(.none) }
+		31 { doc.view.set_wrap_mode(.character) }
+		32 { doc.view.set_wrap_mode(.word) }
 		else {}
 	}
 	app.invalidate()
@@ -266,6 +269,8 @@ fn new_document(mut app vtk.App, path string) {
 	for i, name in ['Line numbers', 'Top ruler', 'Left ruler'] {
 		menu_item(mut view, doc, name, i + 22)
 	}
+	view.menu_separator()
+	for i, name in ['No wrap', 'Character wrap', 'Word wrap'] { menu_item(mut view, doc, name, i + 30) }
 	mut format := doc.window.add_menu('Format')
 	for i, name in ['Bold', 'Italic', 'Code', 'Emoji...', 'Link...', 'Find...'] {
 		menu_item(mut format, doc, name, i + 11)

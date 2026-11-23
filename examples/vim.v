@@ -107,7 +107,7 @@ fn make_pane(mut editor Editor, buffer &Buffer) &vtk.Ctl {
 	c.edit = buffer.history
 	c.user = pane
 	c.markdown_mode(.source)
-	c.md.no_wrap = true
+	c.set_wrap_mode(.none)
 	c.md.tab_width = 8
 	c.md.hide_status = true
 	c.md.task_interactive = false
@@ -249,8 +249,9 @@ fn command(mut c vtk.Ctl, source string, mut app vtk.App) {
 				match option {
 					'number', 'nu' { c.line_numbers = true }
 					'nonumber', 'nonu' { c.line_numbers = false }
-					'wrap' { c.md.no_wrap = false }
-					'nowrap' { c.md.no_wrap = true }
+					'wrap', 'charwrap' { c.set_wrap_mode(.character) }
+					'nowrap' { c.set_wrap_mode(.none) }
+					'wordwrap' { c.set_wrap_mode(.word) }
 					'readonly', 'ro' { c.readonly = true }
 					'noreadonly', 'noro' { c.readonly = false }
 					'vim' { c.vim_mode(true) }
@@ -260,7 +261,7 @@ fn command(mut c vtk.Ctl, source string, mut app vtk.App) {
 			}
 		}
 		'help' {
-			app.msgbox_for(editor.window, 'VTK Vim', ':split / :vsplit [path]  :new / :vnew\nCtrl-W w cycles; s/v splits; c closes\n:e[!] path  :w[!] [path]  :q[!]  :wq  :qa[!]\n:only[!]  :ls  :b id  :bn / :bp\n:set [no]number [no]wrap [no]readonly [no]vim\n/ and ? search; n/N repeat; :number jumps\nF10 menus; Alt-A desktop; Esc Normal mode')
+			app.msgbox_for(editor.window, 'VTK Vim', ':split / :vsplit [path]  :new / :vnew\nCtrl-W w cycles; s/v splits; c closes\n:e[!] path  :w[!] [path]  :q[!]  :wq  :qa[!]\n:only[!]  :ls  :b id  :bn / :bp\n:set [no]number [no]wrap [no]readonly [no]vim\n:set wordwrap / charwrap\n/ and ? search; n/N repeat; :number jumps\nF10 menus; Alt-A desktop; Esc Normal mode')
 		}
 		else {
 			if name.int() > 0 {

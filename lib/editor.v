@@ -2,6 +2,28 @@ module vtk
 
 import encoding.utf8
 
+pub enum TextWrapMode {
+	none
+	character
+	word
+}
+
+// Keep wrap/md.no_wrap source compatible; the setter controls all three modes.
+pub fn (c &Ctl) wrap_mode() TextWrapMode {
+	if c.kind !in [.multiline, .markdown] || !(c.wrap || (c.kind == .markdown && !c.md.no_wrap)) { return .none }
+	return if c.wrap_words { .word } else { .character }
+}
+
+pub fn (mut c Ctl) set_wrap_mode(mode TextWrapMode) bool {
+	if c.destroyed || c.kind !in [.multiline, .markdown] { return false }
+	c.wrap = mode != .none
+	c.wrap_words = mode == .word
+	if c.kind == .markdown { c.md.no_wrap = mode == .none }
+	if mode != .none { c.left = 0 }
+	c.invalidate()
+	return true
+}
+
 pub struct Change {
 pub:
 	at           int
@@ -213,33 +235,46 @@ fn (c &Ctl) editor_rows() []TextRow {
 	} else {
 		plain_rows(c.text)
 	}
-	if c.kind == .entry { return lines }
+	mode := c.wrap_mode()
+	if mode == .none { return lines }
 	mut width := max(1, c.w - c.editor_gutter() - int(c.scrollbar))
 	if c.kind == .markdown && c.md.column_width > 0 { width = min(width, c.md.column_width) }
-	if !(c.wrap || (c.kind == .markdown && !c.md.no_wrap)) { return lines }
 	mut result := []TextRow{}
 	for row in lines {
-		if row.no_wrap { result << row; continue }
-		mut part := TextRow{ start: row.start, end: row.end, line: row.line, code: row.code, element: row.element, color: row.color, attr: row.attr }
-		mut col := 0
-		for glyph in row.glyphs {
-			gw := if glyph.r == `\t` {
-				max(1, c.md.tab_width) - col % max(1, c.md.tab_width)
-			} else {
-				glyph_width(glyph)
-			}
-			if col > 0 && col + gw > width {
-				part.end = glyph.at
-				result << part
-				part = TextRow{ start: glyph.at, end: row.end, line: row.line, code: row.code, element: row.element, color: row.color, attr: row.attr }
-				col = 0
-			}
-			part.glyphs << glyph
-			col += gw
+		if row.no_wrap || row.glyphs.len == 0 { result << row; continue }
+		mut start := 0
+		for start < row.glyphs.len {
+			end := text_wrap_end(row.glyphs, start, width, max(1, c.md.tab_width), mode)
+			result << TextRow{ ...row,
+				start: if start == 0 { row.start } else { row.glyphs[start].at },
+				end: if end == row.glyphs.len { row.end } else { row.glyphs[end].at },
+				glyphs: row.glyphs[start..end].clone() }
+			start = end
 		}
-		result << part
 	}
 	return result
+}
+
+fn wrap_space(r rune) bool {
+	// NBSP and narrow NBSP join words rather than providing a soft break.
+	return utf8.is_space(r) && r !in [rune(0x00a0), rune(0x202f)]
+}
+
+fn text_wrap_end(glyphs []Glyph, start int, width int, tab_width int, mode TextWrapMode) int {
+	mut col, mut last_break := 0, start
+	for i := start; i < glyphs.len; i++ {
+		glyph := glyphs[i]
+		space := wrap_space(glyph.r)
+		gw := if glyph.r == `\t` { tab_width - col % tab_width } else { glyph_width(glyph) }
+		// Trailing whitespace may hang past the edge in word mode. Keep its
+		// original glyph/span so selection and copying never lose source bytes.
+		if col > 0 && col + gw > width && !(mode == .word && space) {
+			return if mode == .word && last_break > start { last_break } else { i }
+		}
+		col += gw
+		if space { last_break = i + 1 }
+	}
+	return glyphs.len
 }
 
 fn plain_rows(text string) []TextRow {
@@ -308,6 +343,8 @@ fn (c &Ctl) caret_row(rows []TextRow) int {
 		}
 	}
 	for i, row in rows {
+		if caret == row.end && i + 1 < rows.len && rows[i + 1].start == row.end
+			&& rows[i + 1].line == row.line { continue }
 		if caret >= row.start && (caret <= row.end || i == rows.len - 1) { return i }
 	}
 	return max(0, rows.len - 1)
@@ -346,7 +383,7 @@ fn (mut app App) draw_editor(mut c Ctl) {
 	tab_width := max(1, c.md.tab_width)
 	caret_col := row_column(rows[caret], c.caret_position(), tab_width, c.secret)
 	view_w := max(1, c.w - margin - int(c.scrollbar))
-	if c.kind == .entry || (!c.wrap && (c.kind != .markdown || c.md.no_wrap))
+	if c.wrap_mode() == .none
 		|| (rows[caret].no_wrap && markdown_glyph_width(rows[caret].glyphs) > view_w) {
 		if !c.scroll_hold {
 			if caret_col < c.left { c.left = caret_col }
@@ -413,7 +450,8 @@ fn (mut app App) draw_editor(mut c Ctl) {
 	}
 	app.draw_scrollbar(&c, rows.len, height, inset)
 	if app.focus == &c && !c.disabled && caret >= c.top && caret < c.top + height {
-		app.screen.cursor_x = c.x + margin + caret_col - c.left
+		visible_col := if c.wrap_mode() != .none && !rows[caret].no_wrap { min(caret_col, view_w - 1) } else { caret_col - c.left }
+		app.screen.cursor_x = c.x + margin + visible_col
 		app.screen.cursor_y = c.y + inset + caret - c.top
 		app.screen.cursor_shape = if c.vim.enabled && c.vim.mode != .insert {
 			CursorShape.block
@@ -437,7 +475,8 @@ fn (mut c Ctl) move_cursor(at int, selecting bool) {
 fn (mut c Ctl) vertical_move(direction int, selecting bool) {
 	rows := c.editor_rows()
 	at := c.caret_row(rows)
-	col := row_column(rows[at], c.cursor, max(1, c.md.tab_width), c.secret)
+	mut col := row_column(rows[at], c.cursor, max(1, c.md.tab_width), c.secret)
+	if c.wrap_mode() != .none && !rows[at].no_wrap { col = min(col, max(0, c.w - c.editor_gutter() - int(c.scrollbar) - 1)) }
 	target := clamp(at + direction, 0, rows.len - 1)
 	c.move_cursor(row_hit(rows[target], col, max(1, c.md.tab_width), c.secret), selecting)
 }
