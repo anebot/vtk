@@ -631,18 +631,31 @@ fn (mut app App) mouse(e Event) {
 		return
 	}
 	if app.popups.len > 0 {
-		mut p := app.popups.last()
-		if p.rect().contains(e.x, e.y) {
-			row := p.top + e.y - p.y - 1
-			if row >= 0 && row < p.popup_owner.kids.len {
-				if p.value != row {
-					p.value = row
-					app.invalidate_area(p.rect())
-				}
-				if e.pressed && !e.motion && e.button == .left { app.choose_popup() }
+		// The release belongs to the press that opened or chose an item; it must
+		// not re-target or close the popups it just opened.
+		if !e.pressed && e.button == .left { return }
+		mut at := app.popups.len - 1
+		for at >= 0 && !app.popups[at].rect().contains(e.x, e.y) {
+			at--
+		}
+		if at < 0 {
+			if e.pressed && !e.motion { app.close_popups() }
+			return
+		}
+		// A click on a parent menu switches branches; only the popups below it
+		// close, so sibling submenus stay one click away.
+		for i := at + 1; i < app.popups.len; i++ {
+			app.invalidate_area(app.popups[i].rect())
+		}
+		if at + 1 < app.popups.len { app.popups = app.popups[..at + 1] }
+		mut p := app.popups[at]
+		row := p.top + e.y - p.y - 1
+		if row >= 0 && row < p.popup_owner.kids.len {
+			if p.value != row {
+				p.value = row
+				app.invalidate_area(p.rect())
 			}
-		} else if e.pressed && !e.motion {
-			app.close_popups()
+			if e.pressed && !e.motion && e.button == .left { app.choose_popup() }
 		}
 		return
 	}

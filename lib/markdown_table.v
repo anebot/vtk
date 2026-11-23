@@ -146,10 +146,12 @@ fn markdown_wrap_cell(glyphs []Glyph, width int) [][]Glyph {
 	return lines
 }
 
-fn markdown_table_border(widths []int, left rune, middle rune, right rune, source MarkdownTableRow) TextRow {
+fn markdown_table_border(widths []int, left rune, middle rune, right rune, source MarkdownTableRow, pad int) TextRow {
 	mut glyphs := [Glyph{ r: left, at: source.at, end: source.at, element: .table_border }]
 	for i, width in widths {
-		for _ in 0 .. width + 2 { glyphs << Glyph{ r: `─`, at: source.at, end: source.at, element: .table_border } }
+		for _ in 0 .. width + 2 * pad {
+			glyphs << Glyph{ r: `─`, at: source.at, end: source.at, element: .table_border }
+		}
 		glyphs << Glyph{ r: if i + 1 == widths.len { right } else { middle }, at: source.at, end: source.at, element: .table_border }
 	}
 	return TextRow{ start: source.at, end: source.end, line: source.line, glyphs: glyphs, no_wrap: true }
@@ -168,21 +170,31 @@ fn (c &Ctl) render_markdown_table(table MarkdownTable) []TextRow {
 		}
 		content << cells
 	}
-	mut viewport := max(1, c.w - c.editor_gutter() - int(c.scrollbar))
-	if c.md.column_width > 0 { viewport = min(viewport, c.md.column_width) }
+	viewport := c.editor_view_width()
+	adjust := !c.md.no_wrap || c.md.column_width > 0
+	// Drop cell padding before letting a wide table overflow the page.
+	pad := if adjust && viewport < count * 4 + 1 { 0 } else { 1 }
 	mut widths := natural.clone()
-	if !c.md.no_wrap {
-		// Preserve naturally short columns and share space among wrapping ones.
-		mut order := []MarkdownColumnWidth{}
-		for i, width in natural { order << MarkdownColumnWidth{ index: i, width: width } }
-		order.sort(a.width < b.width)
-		mut remaining := max(count * 2, viewport - count * 3 - 1)
-		for i, column in order {
-			widths[column.index] = min(column.width, max(2, remaining / (count - i)))
-			remaining -= widths[column.index]
+	if adjust {
+		// Preserve naturally short columns and share the remaining page width
+		// among the others. Never reserve more content cells than the table
+		// budget can hold, otherwise a wide table would paint past the page.
+		budget := max(0, viewport - count * (2 * pad + 1) - 1)
+		mut total := 0
+		for width in natural { total += width }
+		if total > budget {
+			mut order := []MarkdownColumnWidth{}
+			for i, width in natural { order << MarkdownColumnWidth{ index: i, width: width } }
+			order.sort(a.width < b.width)
+			mut remaining := budget
+			for i, column in order {
+				share := max(1, remaining / (count - i))
+				widths[column.index] = min(column.width, share)
+				remaining -= widths[column.index]
+			}
 		}
 	}
-	mut result := [markdown_table_border(widths, `┌`, `┬`, `┐`, table.rows[0])]
+	mut result := [markdown_table_border(widths, `┌`, `┬`, `┐`, table.rows[0], pad)]
 	for row_index, row in table.rows {
 		mut wrapped := [][][]Glyph{}
 		mut height := 1
@@ -202,9 +214,9 @@ fn (c &Ctl) render_markdown_table(table MarkdownTable) []TextRow {
 					.center { space / 2 }
 					else { 0 }
 				}
-				for _ in 0 .. before + 1 { glyphs << Glyph{ r: ` `, at: cell.at, end: cell.at } }
+				for _ in 0 .. before + pad { glyphs << Glyph{ r: ` `, at: cell.at, end: cell.at } }
 				glyphs << part
-				for _ in 0 .. space - before + 1 {
+				for _ in 0 .. space - before + pad {
 					glyphs << Glyph{ r: ` `, at: cell.end, end: cell.end }
 				}
 				glyphs << Glyph{ r: `│`, at: cell.end, end: cell.end, element: .table_border }
@@ -212,10 +224,10 @@ fn (c &Ctl) render_markdown_table(table MarkdownTable) []TextRow {
 			result << TextRow{ start: row.at, end: row.end, line: row.line, glyphs: glyphs, no_wrap: true, element: if row_index == 0 { .table_header } else { .text } }
 		}
 		if row_index == 0 {
-			result << markdown_table_border(widths, `├`, `┼`, `┤`, table.separator)
+			result << markdown_table_border(widths, `├`, `┼`, `┤`, table.separator, pad)
 		}
 	}
-	result << markdown_table_border(widths, `└`, `┴`, `┘`, table.rows.last())
+	result << markdown_table_border(widths, `└`, `┴`, `┘`, table.rows.last(), pad)
 	return result
 }
 

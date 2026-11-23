@@ -6,3 +6,5 @@
 /examples/widgets
 /examples/terminal
 /examples/*.exe
+
+/examples/*/out

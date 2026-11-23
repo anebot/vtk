@@ -178,7 +178,7 @@ ascending/descending sorting, column resizing/reordering, row dragging, cell
 editing, TSV copy/paste and cell colors. Each behavior has source-level options;
 existing tables retain single-row selection and fixed column order by default.
 See [the table API](lib/TABLES.md) and the runnable
-[spreadsheet example](examples/spreadsheet/README.md), including formulas,
+[spreadsheet example](examples/spread/README.md), including formulas,
 undo/redo, colored cells, workbook save/load and reorderable sheet tabs.
 
 Charts support grouped columns, horizontal bars and connected lines, with
@@ -561,7 +561,7 @@ configured `md.tab_width` and recompute their stops on each display row.
 The default remains no wrapping for multiline controls and character wrapping
 for Markdown. Existing `wrap` and `md.no_wrap` flags remain supported. Entries
 are single-line controls and reject wrapping modes. VTK Word's View menu offers
-all three modes; VTK Vim accepts `:set nowrap`, `:set wrap` / `charwrap`, and
+all three modes and stores its View settings in `~/.vtk-word.ini`; VTK Vim accepts `:set nowrap`, `:set wrap` / `charwrap`, and
 `:set wordwrap`. The widgets example's Text tab demonstrates word wrapping.
 Rendered Markdown tables retain their separate column layout and wrapping.
 
@@ -586,8 +586,9 @@ presentation. The V renderer handles headings, emphasis, inline code, links,
 lists, task checkboxes, quotes, fenced code and pipe tables. Tables support
 left/center/right alignment, inline formatting and links, escaped pipes and
 code spans containing pipes. Short columns keep their natural widths while
-long cells wrap to the available width; resizing recomputes the layout. Set
-`md.no_wrap` for natural table widths and horizontal scrolling. Table borders
+long cells wrap to the available or page width; resizing recomputes the layout.
+Set `md.no_wrap` for natural table widths and horizontal scrolling; an explicit
+`md.column_width` still caps the table and shrinks its columns to fit. Table borders
 are display glyphs: selection, mouse hit testing and copying retain the original
 UTF-8 Markdown source. Fenced examples and source modes stay literal.
 Inline code accepts matching runs of multiple backticks. Fences retain source rows.
@@ -601,6 +602,11 @@ the task's state byte as one undo entry. Code blocks are inert. Set
 `md.task_interactive = false` for strict source viewers. `md.linkfn` receives
 clicked links in read-only views or with Ctrl-click. Rulers, column width,
 page separators and current-section layout are configurable through `md`.
+`md.column_width` caps wrapped rows and the top ruler; `0` uses the whole view.
+`markdown_align` wraps the selected paragraphs in htk's Pandoc fenced divs
+(`::: {.htk-align-center style="text-align:center"}` ... `:::`), and rendering
+shifts or justifies the rows inside them; `markdown_align_at` reports the fence
+containing an offset. Code blocks and tables are never rewritten.
 
 Markdown appearance is configured per control through `md.styles`, separately
 from parsing and layout. Inline code uses normal text colors and a slight

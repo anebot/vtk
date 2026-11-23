@@ -147,5 +147,5 @@ override stored cell styles; unset fields inherit them. `table_clear_cell_styles
 clears stored styles, retaining the callback. Selection colors take precedence to
 keep the selected area readable; the active cell also receives bold underline.
 
-The [spreadsheet example](../examples/spreadsheet/README.md) demonstrates this API
+The [spreadsheet example](../examples/spread/README.md) demonstrates this API
 with formulas, undo/redo, workbook persistence, editable colors and sheet tabs.

@@ -14,7 +14,7 @@ $(BUILD_DIR)/%: examples/%.v $(SOURCES)
 	mkdir -p $(BUILD_DIR)
 	$(V) -o $@ $<
 
-$(BUILD_DIR)/spreadsheet: $(wildcard examples/spreadsheet/*.v)
+$(BUILD_DIR)/spreadsheet: $(wildcard examples/spread/*.v)
 
 $(BUILD_DIR)/vmlc: $(VML_SOURCES)
 	mkdir -p $(BUILD_DIR)

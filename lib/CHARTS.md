@@ -57,5 +57,5 @@ application data sources; applications decide when to refresh them.
 VML supports `Chart options={chart_options};`, where `chart_options` is a V
 `vtk.Chart` expression (the default is an empty chart).
 
-The [spreadsheet example](../examples/spreadsheet/README.md) plots selected
+The [spreadsheet example](../examples/spread/README.md) plots selected
 cells, evaluates formulas and exposes type, title, axis and series color controls.

@@ -184,6 +184,10 @@ mut:
 	modal_parent  &Ctl = unsafe { nil }
 	window_order  int
 	date_value    time.Time
+	click_time    i64
+	click_count   int
+	click_x       int
+	click_y       int
 }
 
 pub struct Rect {

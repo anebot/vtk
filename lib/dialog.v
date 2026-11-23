@@ -260,6 +260,17 @@ fn file_select(mut list Ctl, mut app App) {
 	app.dirty = true
 }
 
+// Clicking the selected row opens it: folders are entered, files are accepted.
+fn file_list_click(mut list Ctl, e Event, mut app App) bool {
+	if e.button != .left || !e.pressed || e.motion || !list.content_rect().contains(e.x, e.y) { return false }
+	if list.scrollbar && e.x == list.x + list.w - 1 { return false }
+	rows := list.tree_rows()
+	at := list.top + e.y - list.y
+	if at < 0 || at >= rows.len || rows[at].node != list.selected_node { return false }
+	file_accept(mut list, mut app)
+	return true
+}
+
 fn file_accept(mut c Ctl, mut app App) {
 	mut pick := unsafe { &FilePicker(c.user) }
 	if c.kind == .tree { file_select(mut c, mut app) }
@@ -286,6 +297,7 @@ pub fn (mut app App) file_pick_for(owner ?&Ctl, directory string) ?string {
 	pick.list.user = pick
 	pick.list.changed = file_select
 	pick.list.submit = file_accept
+	pick.list.mousefn = file_list_click
 	mut open := button('Open file / enter folder')
 	open.user = pick
 	open.changed = file_accept

@@ -1,4 +1,4 @@
-module spreadsheet
+module spread
 
 import math
 import strconv

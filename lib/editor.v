@@ -178,6 +178,32 @@ fn word_back(text string, at int, big bool) int {
 	return i
 }
 
+// Word and line bounds back the double and triple click selections.
+fn word_bounds(text string, at int) (int, int) {
+	if text.len == 0 { return 0, 0 }
+	mut pos := clamp(at, 0, text.len - 1)
+	if text[pos] == `\n` && pos > 0 { pos = prev_char(text, pos) }
+	class := word_class(text, pos, false)
+	mut start := pos
+	for start > 0 {
+		previous := prev_char(text, start)
+		if text[previous] == `\n` || word_class(text, previous, false) != class { break }
+		start = previous
+	}
+	mut end := next_char(text, pos)
+	for end < text.len && text[end] != `\n` && word_class(text, end, false) == class {
+		end = next_char(text, end)
+	}
+	return start, end
+}
+
+fn line_bounds(text string, at int) (int, int) {
+	start := line_start(text, at)
+	mut end := line_end(text, at)
+	if end < text.len { end++ }
+	return start, end
+}
+
 fn word_class(text string, at int, big bool) int {
 	if at >= text.len { return 0 }
 	r, _ := utf8.decode_rune_at(text, at)
@@ -209,14 +235,22 @@ mut:
 	no_wrap bool
 	color   ?int
 	attr    int
+	align   MarkdownAlign
+	pad     int
+	gapw    []int
 }
 
 fn (c &Ctl) editor_gutter() int {
-	return (if c.line_numbers { 5 } else { 0 }) + (if c.kind == .markdown && c.md.ruler_left {
-		3
-	} else {
-		0
-	})
+	if c.kind == .markdown && c.md.ruler_left { return 8 }
+	return if c.line_numbers { 5 } else { 0 }
+}
+
+// The page width caps the editor viewport, not just wrapped row lengths, so
+// tables and other no-wrap rows cannot paint past the page.
+fn (c &Ctl) editor_view_width() int {
+	mut width := max(1, c.w - c.editor_gutter() - int(c.scrollbar))
+	if c.kind == .markdown && c.md.column_width > 0 { width = min(width, c.md.column_width) }
+	return width
 }
 
 fn (c &Ctl) editor_height() int {
@@ -233,6 +267,7 @@ struct EditorRowsKey {
 	syntax           TextSyntax
 	wrap             TextWrapMode
 	width            int
+	column_width     int
 	tab_width        int
 	markdown_mode    MarkdownMode
 	markdown_no_wrap bool
@@ -249,6 +284,8 @@ struct TextCheckpoint {
 	line int
 	fence string
 	fence_len int
+	align MarkdownAlign
+	align_depth int
 	highlighter CodeHighlighter = CodeHighlighter{auto_diff: true}
 }
 
@@ -260,13 +297,13 @@ struct EditorRowsCache {
 
 fn (mut c Ctl) editor_rows() []TextRow {
 	mode := c.wrap_mode()
-	mut width := max(1, c.w - c.editor_gutter() - int(c.scrollbar))
-	if c.kind == .markdown && c.md.column_width > 0 { width = min(width, c.md.column_width) }
+	width := c.editor_view_width()
 	key := EditorRowsKey{
 		text: c.text
 		syntax: c.syntax
 		wrap: mode
-		width: if mode != .none { width } else { 0 }
+		width: width
+		column_width: c.md.column_width
 		tab_width: max(1, c.md.tab_width)
 		markdown_mode: c.md.mode
 		markdown_no_wrap: c.md.no_wrap
@@ -298,7 +335,8 @@ fn (mut c Ctl) editor_rows() []TextRow {
 		lines = plain_rows(c.text, resume.offset, resume.line)
 		resume = TextCheckpoint{offset: lines.last().start, line: lines.last().line}
 	}
-	rows := if mode == .none { lines } else { wrap_rows(lines, key) }
+	mut rows := if mode == .none { lines } else { wrap_rows(lines, key) }
+	align_rows(mut rows, key.width, key.tab_width)
 	if prefix.len == 0 {
 		c.editor_cache = &EditorRowsCache{key, rows, resume}
 		return rows
@@ -312,9 +350,10 @@ fn wrap_rows(lines []TextRow, key EditorRowsKey) []TextRow {
 	mut result := []TextRow{}
 	for row in lines {
 		if row.no_wrap || row.glyphs.len == 0 { result << row; continue }
+		width := if row.align == .none { key.width } else { max(1, key.width - markdown_align_indent) }
 		mut start := 0
 		for start < row.glyphs.len {
-			end := text_wrap_end(row.glyphs, start, key.width, key.tab_width, key.wrap)
+			end := text_wrap_end(row.glyphs, start, width, key.tab_width, key.wrap)
 			result << TextRow{ ...row,
 				start: if start == 0 { row.start } else { row.glyphs[start].at },
 				end: if end == row.glyphs.len { row.end } else { row.glyphs[end].at },
@@ -370,8 +409,8 @@ fn plain_rows(text string, start int, line int) []TextRow {
 }
 
 fn row_column(row TextRow, at int, tab_width int, secret bool) int {
-	mut col := 0
-	for g in row.glyphs {
+	mut col := row.pad
+	for i, g in row.glyphs {
 		if g.at >= at { break }
 		col += if secret {
 			1
@@ -380,13 +419,14 @@ fn row_column(row TextRow, at int, tab_width int, secret bool) int {
 		} else {
 			glyph_width(g)
 		}
+		if i < row.gapw.len { col += row.gapw[i] }
 	}
 	return col
 }
 
 fn row_hit(row TextRow, column int, tab_width int, secret bool) int {
-	mut col := 0
-	for g in row.glyphs {
+	mut col := row.pad
+	for i, g in row.glyphs {
 		width := if secret {
 			1
 		} else if g.r == `\t` {
@@ -396,6 +436,7 @@ fn row_hit(row TextRow, column int, tab_width int, secret bool) int {
 		}
 		if column < col + max(1, width) { return g.at }
 		col += width
+		if i < row.gapw.len { col += row.gapw[i] }
 	}
 	return row.end
 }
@@ -425,6 +466,10 @@ fn (c &Ctl) caret_row(rows []TextRow) int {
 			&& rows[i + 1].line == row.line { continue }
 		if caret >= row.start && (caret <= row.end || i == rows.len - 1) { return i }
 	}
+	// A hidden alignment fence may end before the first visible row.
+	for i, row in rows {
+		if row.start >= caret { return i }
+	}
 	return max(0, rows.len - 1)
 }
 
@@ -434,6 +479,48 @@ pub fn (c &Ctl) caret_position() int {
 	} else {
 		c.cursor
 	}
+}
+
+// Put the visual row containing `at` at the top of the editor. Wrapped rows
+// are resolved through the editor layout, so this also works in word wrap.
+pub fn (mut c Ctl) scroll_to_offset(at int) {
+	pos := boundary(c.text, clamp(at, 0, c.text.len))
+	c.cursor = pos
+	c.anchor = -1
+	rows := c.editor_rows()
+	mut target := 0
+	for i, row in rows {
+		if pos >= row.start && (pos <= row.end || i == rows.len - 1) {
+			target = i
+			break
+		}
+	}
+	c.top = target
+	c.scroll_hold = false
+	c.invalidate()
+}
+
+// Caret position as a 1-based visual row and display column.
+pub fn (mut c Ctl) caret_line_column() (int, int) {
+	rows := c.editor_rows()
+	if rows.len == 0 { return 1, 1 }
+	row := c.caret_row(rows)
+	col := row_column(rows[row], c.caret_position(), max(1, c.md.tab_width), c.secret)
+	return row + 1, col + 1
+}
+
+fn markdown_ruler(width int) string {
+	mut ruler := ''
+	mut column := 1
+	for column <= width {
+		marker := column.str()
+		if column - 1 + marker.len > width { break }
+		for ruler.len < column - 1 { ruler += '-' }
+		ruler += marker
+		column = if column == 1 { 5 } else { column + 5 }
+	}
+	if ruler.len < width { ruler += '-'.repeat(width - ruler.len) }
+	return ruler
 }
 
 fn (mut app App) draw_editor(mut c Ctl) {
@@ -462,7 +549,7 @@ fn (mut app App) draw_editor(mut c Ctl) {
 	inset := if c.kind == .markdown { int(c.md.ruler_top) } else { 0 }
 	tab_width := max(1, c.md.tab_width)
 	caret_col := row_column(rows[caret], c.caret_position(), tab_width, c.secret)
-	view_w := max(1, c.w - margin - int(c.scrollbar))
+	view_w := c.editor_view_width()
 	if c.wrap_mode() == .none
 		|| (rows[caret].no_wrap && markdown_glyph_width(rows[caret].glyphs) > view_w) {
 		if !c.scroll_hold {
@@ -478,8 +565,19 @@ fn (mut app App) draw_editor(mut c Ctl) {
 	for i in first .. last {
 		row := rows[i]
 		y := c.y + inset + i - c.top
-		if c.line_numbers { app.screen.text(c.x, y, '${row.line + 1:4} ', t.dim, bg, 0) }
-		if c.kind == .markdown && c.md.ruler_left {
+		left_ruler := c.kind == .markdown && c.md.ruler_left
+		if c.line_numbers || left_ruler {
+			// Plain line numbers stay dense. The left ruler instead marks every
+			// fifth visual row, so wrapped source lines never repeat a label.
+			visual := i + 1
+			n := if c.line_numbers { row.line + 1 } else { visual }
+			if c.line_numbers || visual == 1 || visual % 5 == 0 {
+				app.screen.text(c.x, y, '${n:4} ', t.dim, bg, 0)
+			} else {
+				app.screen.text(c.x, y, '     ', t.dim, bg, 0)
+			}
+		}
+		if left_ruler {
 			app.screen.text(c.x + margin - 3, y, ' | ', t.dim, bg, 0)
 		}
 		old := app.screen.set_clip(Rect{c.x + margin, y, view_w, 1})
@@ -488,8 +586,8 @@ fn (mut app App) draw_editor(mut c Ctl) {
 			paint := c.md.styles.paint(.code_block, t, text_paint)
 			app.screen.fill(Rect{c.x + margin, y, view_w, 1}, ` `, paint.fg, paint.bg)
 		}
-		mut col := 0
-		for g in row.glyphs {
+		mut col := row.pad
+		for gi, g in row.glyphs {
 			if col - c.left >= view_w { break }
 			selected := g.at >= a && g.at < b
 			mut paint := MarkdownPaint{ fg: fg, bg: bg, attr: g.attr | row.attr }
@@ -519,12 +617,16 @@ fn (mut app App) draw_editor(mut c Ctl) {
 					col += width
 				}
 			}
+			if gi < row.gapw.len && row.gapw[gi] > 0 {
+				app.screen.fill(Rect{c.x + margin + col - c.left, y, row.gapw[gi], 1}, ` `, gfg, gbg)
+				col += row.gapw[gi]
+			}
 		}
 		app.screen.restore_clip(old)
 	}
 	if c.kind == .markdown {
 		if c.md.ruler_top {
-			app.screen.text(c.x + margin, c.y, '1---5----10---15---20---25---30---35---40---45---50---55---60---65---70---75---80', t.dim, bg, 0)
+			app.screen.text(c.x + margin, c.y, markdown_ruler(view_w), t.dim, bg, 0)
 		}
 		if !c.md.hide_status {
 			mode := if c.md.mode in [.read, .source_read] { 'View' } else { 'Edit' }
@@ -678,9 +780,38 @@ fn (mut c Ctl) editor_mouse(e Event, mut app App) {
 		if c.anchor < 0 { c.anchor = c.cursor }
 		c.cursor = at
 	} else {
-		c.move_cursor(at, e.shift)
-		if !e.shift { c.anchor = at }
+		if e.pressed && e.button == .left { c.count_click(e, app.now()) }
+		match c.click_count {
+			2 {
+				start, end := word_bounds(c.text, at)
+				c.select_bounds(start, end)
+			}
+			3 {
+				start, end := line_bounds(c.text, at)
+				c.select_bounds(start, end)
+			}
+			else {
+				c.move_cursor(at, e.shift)
+				if !e.shift { c.anchor = at }
+			}
+		}
 	}
 	c.scroll_hold = false
 	c.invalidate_paint()
+}
+
+// Rapid presses in the same cell count as double or triple clicks, cycling back
+// to a single click on the fourth press.
+fn (mut c Ctl) count_click(e Event, now i64) {
+	if now - c.click_time < 400 && e.x == c.click_x && e.y == c.click_y {
+		c.click_count = if c.click_count >= 3 { 1 } else { c.click_count + 1 }
+	} else {
+		c.click_count = 1
+	}
+	c.click_time, c.click_x, c.click_y = now, e.x, e.y
+}
+
+fn (mut c Ctl) select_bounds(start int, end int) {
+	c.move_cursor(end, false)
+	c.anchor = start
 }

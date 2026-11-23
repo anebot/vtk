@@ -251,6 +251,64 @@ fn test_bar_menu_targets_follow_scrolling_and_ignore_clipped_buttons() {
 	assert app.popups.len == 0
 }
 
+fn test_clicking_a_parent_item_switches_submenus_instead_of_closing() {
+	mut app := new_app()
+	app.desktop = false
+	mut menu := context_menu()
+	mut wrap := menu.add_menu('Wrap')
+	wrap.menu_item('Word', menu_test_launcher_action)
+	mut page := menu.add_menu('Page')
+	page.menu_item('Ruler', menu_test_launcher_action)
+	app.open_menu(menu, 10, 5)
+	assert app.popups.len == 1
+	parent := app.popups[0]
+	wrap_y := parent.y + 1
+	page_y := parent.y + 2
+	app.dispatch(Event{ kind: .mouse, x: parent.x + 2, y: wrap_y, button: .left, pressed: true })
+	assert app.popups.len == 2 && app.popups[1].popup_owner == wrap
+	// The release that follows the opening press must not close the submenu.
+	app.dispatch(Event{ kind: .mouse, x: parent.x + 2, y: wrap_y, button: .left })
+	assert app.popups.len == 2 && app.popups[1].popup_owner == wrap
+	// The sibling item stays reachable while the Wrap submenu is open.
+	app.dispatch(Event{ kind: .mouse, x: parent.x + 2, y: page_y, button: .left, pressed: true })
+	assert app.popups.len == 2 && app.popups[1].popup_owner == page
+	app.dispatch(Event{ kind: .mouse, x: parent.x + 2, y: page_y, button: .left })
+	assert app.popups.len == 2 && app.popups[1].popup_owner == page
+	app.dispatch(Event{ kind: .mouse, x: 0, y: 0, button: .left, pressed: true })
+	assert app.popups.len == 0
+}
+
+fn test_mouse_press_and_release_open_window_submenus_without_closing_them() {
+	mut app := new_app()
+	app.desktop = false
+	app.width = 60
+	app.height = 20
+	mut w := app.window('Doc', 40, 12)
+	mut text := label('Body')
+	w.add(mut text)
+	mut menu := w.add_menu('View')
+	mut wrap := menu.add_menu('Wrap')
+	wrap.menu_item('Word', menu_test_launcher_action)
+	mut page := menu.add_menu('Page')
+	page.menu_item('Ruler', menu_test_launcher_action)
+	app.redraw()
+	assert menu.y == w.y + 1
+	app.dispatch(Event{ kind: .mouse, x: menu.x + 1, y: menu.y, button: .left, pressed: true })
+	assert app.popups.len == 1 && app.popups[0].popup_owner == menu
+	// The release that ends the opening click must not close the menu.
+	app.dispatch(Event{ kind: .mouse, x: menu.x + 1, y: menu.y, button: .left })
+	assert app.popups.len == 1
+	p := app.popups[0]
+	app.dispatch(Event{ kind: .mouse, x: p.x + 2, y: p.y + 1, button: .left, pressed: true })
+	assert app.popups.len == 2 && app.popups[1].popup_owner == wrap
+	app.dispatch(Event{ kind: .mouse, x: p.x + 2, y: p.y + 1, button: .left })
+	assert app.popups.len == 2 && app.popups[1].popup_owner == wrap
+	app.dispatch(Event{ kind: .mouse, x: p.x + 2, y: p.y + 2, button: .left, pressed: true })
+	assert app.popups.len == 2 && app.popups[1].popup_owner == page
+	app.dispatch(Event{ kind: .mouse, x: p.x + 2, y: p.y + 2, button: .left })
+	assert app.popups.len == 2 && app.popups[1].popup_owner == page
+}
+
 fn test_context_menus_and_submenus_leave_the_bar_row_available_at_both_edges() {
 	for bar_top in [false, true] {
 		mut app := new_app()

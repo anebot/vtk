@@ -1,4 +1,4 @@
-module spreadsheet
+module spread
 
 import io.util
 import os

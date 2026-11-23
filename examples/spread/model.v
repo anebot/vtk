@@ -1,4 +1,4 @@
-module spreadsheet
+module spread
 
 import encoding.csv
 import json2

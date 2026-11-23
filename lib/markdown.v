@@ -58,6 +58,8 @@ fn (c &Ctl) markdown_rows_from(resume TextCheckpoint) ([]TextRow, TextCheckpoint
 	mut fence := resume.fence
 	mut fence_len := resume.fence_len
 	mut highlighter := resume.highlighter
+	mut align := resume.align
+	mut align_depth := resume.align_depth
 	section_a, section_b := c.markdown_section_range()
 	source := c.md.mode in [.source, .source_read]
 	lines := c.text[offset..].split('\n')
@@ -66,7 +68,7 @@ fn (c &Ctl) markdown_rows_from(resume TextCheckpoint) ([]TextRow, TextCheckpoint
 		line := lines[index]
 		line_no := resume.line + index
 		if index + 2 < lines.len {
-			next = TextCheckpoint{offset, line_no, fence, fence_len, highlighter}
+			next = TextCheckpoint{offset, line_no, fence, fence_len, align, align_depth, highlighter}
 		}
 		mut row := TextRow{ start: offset, end: offset + line.len, line: line_no }
 		trim := line.trim_left(' ')
@@ -90,6 +92,24 @@ fn (c &Ctl) markdown_rows_from(resume TextCheckpoint) ([]TextRow, TextCheckpoint
 		}
 		row.code = was_code || line.starts_with('\t') || line.starts_with('    ')
 		if row.code && !is_fence { row.element = .code_block }
+		if !source && !row.code && !is_fence {
+			fence_align := markdown_align_open(line)
+			if fence_align != .none
+				&& (align_depth > 0 || markdown_align_closes(c.text, offset + line.len + 1)) {
+				if align_depth == 0 { align = fence_align }
+				align_depth++
+				offset += line.len + 1
+				index++
+				continue
+			}
+			if align_depth > 0 && trim.trim_space() == ':::' {
+				align_depth--
+				if align_depth == 0 { align = .none }
+				offset += line.len + 1
+				index++
+				continue
+			}
+		}
 		if !source && !row.code && !is_fence {
 			if table := parse_markdown_table(lines, index, offset, resume.line) {
 				if offset >= section_a && offset <= section_b {
@@ -150,6 +170,7 @@ fn (c &Ctl) markdown_rows_from(resume TextCheckpoint) ([]TextRow, TextCheckpoint
 		} else if !is_fence {
 			highlighter = code_highlighter('')
 		}
+		if align != .none && !row.code { row.align = align }
 		if offset >= section_a && offset <= section_b { rows << row }
 		if c.md.layout == .pages && (line_no + 1) % max(1, c.md.page_lines) == 0 {
 			rows << TextRow{ start: offset + line.len, end: offset + line.len, line: line_no, glyphs: line_glyphs('──── Page ${(line_no + 1) / max(1, c.md.page_lines) + 1} ────', offset + line.len, 0, -1) }
