@@ -177,6 +177,24 @@ are right-aligned and bottom-docked. A split's `value` in `1..999` specifies
 the first pane's share in thousandths; zero uses its preferred size. Layout
 and hit testing exclude hidden controls and inactive tab pages.
 
+Split dividers are fixed by default. Set `panes.resizable = true` to let users
+drag the divider with the left mouse button. The panes resize live, preserve
+their controls and focus, and keep the new ratio when the window changes size.
+`split(false, share)` arranges panes left/right with a vertical divider;
+`split(true, share)` arranges them top/bottom with a horizontal divider:
+
+```v
+mut panes := vtk.split(false, 500)
+panes.resizable = true
+```
+
+Dragging updates `value` in `1..999` and emits `changed` after laying out the
+new sizes. Each pane retains at least one cell, respecting its `min_w` or `min_h`
+when space permits. If the minimums cannot fit, dragging leaves the split alone.
+Clicking the divider without moving preserves the current ratio or preferred-size
+mode. Standalone `separator()` controls are decorative lines; use a split to
+resize adjacent panes.
+
 Tabs use a two-row header with rounded UTF-8 outlines (ASCII borders in
 Serial mode). The selected tab opens into its page and uses bold accent text,
 keeping the page's background even when focused. Narrow strips keep the

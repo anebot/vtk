@@ -136,6 +136,7 @@ pub mut:
 	scroll_hold   bool
 	readonly      bool
 	reorderable   bool
+	resizable     bool
 	dismissable   bool
 	controls      int         = window_default_controls
 	cursor_shape  CursorShape = .bar

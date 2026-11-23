@@ -276,14 +276,7 @@ fn (mut app App) draw_ctl(mut c Ctl) {
 		}
 		.terminal { app.draw_terminal(mut c) }
 		.split {
-			if c.kids.len > 0 {
-				first := c.kids[0]
-				if c.vertical {
-					app.screen.fill(Rect{c.x, first.y + first.h, c.w, 1}, `─`, t.dim, bg)
-				} else {
-					app.screen.fill(Rect{first.x + first.w, c.y, 1, c.h}, `│`, t.dim, bg)
-				}
-			}
+			app.screen.fill(c.split_divider(), if c.vertical { `─` } else { `│` }, t.dim, bg)
 			for mut child in c.kids { app.draw_ctl(mut child) }
 		}
 		.scroll {

@@ -497,6 +497,17 @@ fn (mut app App) mouse(e Event) {
 	}
 	if !isnil(app.drag) {
 		mut c := app.drag
+		if c.kind == .split {
+			if e.button == .none && !e.pressed { app.drag = unsafe { nil }; return }
+			if e.button != .left { return }
+			if !e.pressed { app.drag = unsafe { nil } }
+			if !c.resizable || app.popups.len > 0 || c.split_divider().w == 0 {
+				app.drag = unsafe { nil }
+				return
+			}
+			c.resize_split(e)
+			return
+		}
 		if c.kind == .tabpage {
 			if e.button == .none && !e.pressed { app.drag = unsafe { nil }; return }
 			if e.button != .left { return }
@@ -691,6 +702,9 @@ fn (mut app App) mouse(e Event) {
 		}
 	}
 	match c.kind {
+		.split {
+			if c.resizable && c.split_divider().contains(e.x, e.y) { app.drag = c }
+		}
 		.date_picker { c.date_picker_mouse(e) }
 		.button, .toolbutton { c.fire() }
 		.checkbox, .switch {
