@@ -195,6 +195,43 @@ Terminals without motion reporting cannot provide idle movement or hover,
 and the protocol has no portable pointer-exit notification: leaving the
 terminal while it retains focus can leave the last pointer position visible.
 
+## Virtual desktops and progress blocks
+
+The appbar starts with **Start** and a slot for each configured virtual desktop.
+The active slot shows its one-based desktop number; the others show underscores:
+`[Start] [1][_][_][_]`. Click a slot to switch. New windows open on the active
+desktop; inactive windows are absent from drawing, input, window cycling and the
+window buttons. Focus is remembered separately on each desktop.
+
+In **Start > Settings**, **Virtual desktops** has **-** and **+** buttons around a
+block-style progress bar and a numeric count. It allows 1 through 4 desktops.
+**Apply** changes the count, **Save** also persists it in `vtk.ini`, and **Reset**
+returns to one. Reducing the count moves windows from removed desktops to the
+last remaining desktop; windows are kept open.
+
+The window's `[=]` menu, also available from its appbar button, has a **Move to
+desktop** submenu when multiple desktops exist. Moving a window leaves the
+current desktop active. Raising an existing window on another desktop switches
+to it. Owned modal dialogs follow their owner; application-modal dialogs prevent
+switching until dismissed. Tiling, cascading and shared-edge resizing keep
+desktops independent.
+
+```v
+app.set_desktop_count(4)
+app.switch_desktop(2)
+app.move_window_to_desktop(mut window, 3)
+```
+
+`app.desktop_count`, `app.active_desktop` and `window.desktop_id` expose the
+current state. Use the methods above to change it so focus, menus and capture
+are updated together. Desktop numbers are one-based; invalid switch/move
+requests return false. The default count is one.
+
+Set `bar.blocky = true` to draw a progress bar as two-cell square blocks with
+one-cell empty gaps. The default remains continuous. Both styles respect
+`low` and `high`; the Settings count uses a 0..4 range so one desktop fills one
+block, with the buttons enforcing a minimum count of one.
+
 ## Clock actions and dates
 
 Set `app.clock_clicked` to handle clock presses in the desktop bar. The callback

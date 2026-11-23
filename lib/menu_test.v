@@ -141,15 +141,15 @@ fn test_top_bar_window_menu_and_window_dropdowns_open_below_their_controls() {
 	w.add(mut dropdown)
 	app.maximize(mut w)
 	app.redraw()
-	app.dispatch(Event{ kind: .mouse, x: 9, y: 0, button: .left, pressed: true })
-	assert app.popups.len == 1 && app.popups[0].x == 9 && app.popups[0].y == 1
+	app.dispatch(Event{ kind: .mouse, x: 13, y: 0, button: .left, pressed: true })
+	assert app.popups.len == 1 && app.popups[0].x == 13 && app.popups[0].y == 1
 	assert isnil(app.hovered_ctl())
 	app.dispatch(Event{ key: int(Key.enter) })
 	assert w.minimized
-	app.dispatch(Event{ kind: .mouse, x: 9, y: 0, button: .left, pressed: true })
+	app.dispatch(Event{ kind: .mouse, x: 13, y: 0, button: .left, pressed: true })
 	assert app.popups.len == 1 && w.minimized
 	app.dispatch(Event{ key: int(Key.escape) })
-	app.dispatch(Event{ kind: .mouse, x: 11, y: 0, button: .left, pressed: true })
+	app.dispatch(Event{ kind: .mouse, x: 15, y: 0, button: .left, pressed: true })
 	assert !w.minimized
 	app.redraw()
 	app.dispatch(Event{ key: int(Key.f10) })
@@ -169,11 +169,11 @@ fn test_bar_window_menu_targets_the_clicked_window_without_raising_it() {
 		mut second := app.window('Two', 30, 8)
 		app.redraw()
 		at := app.bar_y() * app.width
-		assert app.screen.cells[at..at + 24].map(it.glyph).join('') == '[Start] [= 界e\u0301] [= Two] '
+		assert app.screen.cells[at..at + 28].map(it.glyph).join('') == '[Start] [1] [= 界e\u0301] [= Two] '
 		app.window_menu(mut first, first.x, first.y + 1)
 		actions := app.popups[0].link.kids.map(it.text)
 		app.close_popups()
-		app.dispatch(Event{ kind: .mouse, x: 9, y: app.bar_y(), button: .left, pressed: true })
+		app.dispatch(Event{ kind: .mouse, x: 13, y: app.bar_y(), button: .left, pressed: true })
 		assert app.top_window() == second && app.popups.len == 1
 		p := app.popups[0]
 		assert p.link.kids[0].link == first && p.link.kids.map(it.text) == actions
@@ -183,12 +183,12 @@ fn test_bar_window_menu_targets_the_clicked_window_without_raising_it() {
 			assert p.y + p.h == app.height - 1
 		}
 		app.dispatch(Event{ key: int(Key.escape) })
-		app.dispatch(Event{ kind: .mouse, x: 17, y: app.bar_y(), button: .left, pressed: true })
+		app.dispatch(Event{ kind: .mouse, x: 21, y: app.bar_y(), button: .left, pressed: true })
 		assert app.popups[0].link.kids[0].link == second
 		app.dispatch(Event{ key: int(Key.escape) })
-		app.dispatch(Event{ kind: .mouse, x: 11, y: app.bar_y(), button: .left, pressed: true })
+		app.dispatch(Event{ kind: .mouse, x: 15, y: app.bar_y(), button: .left, pressed: true })
 		assert app.top_window() == first && app.popups.len == 0
-		app.dispatch(Event{ kind: .mouse, x: 17, y: app.bar_y(), button: .left, pressed: true })
+		app.dispatch(Event{ kind: .mouse, x: 21, y: app.bar_y(), button: .left, pressed: true })
 		for _ in 0 .. 5 { app.dispatch(Event{ key: int(Key.down) }) }
 		app.dispatch(Event{ key: int(Key.enter) })
 		assert second.closed && !first.closed && app.top_window() == first
@@ -207,47 +207,47 @@ fn test_window_bar_keeps_creation_order_when_windows_are_raised_minimized_or_pin
 			app.raise(mut window)
 			app.redraw()
 			row := app.bar_y() * app.width
-			assert app.screen.cells[row + 8..row + 32].map(it.glyph).join('') == '[= One] [= Two] [= Tri] '
+			assert app.screen.cells[row + 12..row + 36].map(it.glyph).join('') == '[= One] [= Two] [= Tri] '
 		}
 		app.minimize(mut first)
-		app.dispatch(Event{ kind: .mouse, x: 11, y: app.bar_y(), button: .left, pressed: true })
+		app.dispatch(Event{ kind: .mouse, x: 15, y: app.bar_y(), button: .left, pressed: true })
 		assert app.top_window() == first && !first.minimized
 		app.always_on_top(mut first, true)
 		app.raise(mut third)
 		app.redraw()
 		row := app.bar_y() * app.width
-		assert app.screen.cells[row + 8..row + 32].map(it.glyph).join('') == '[= One] [= Two] [= Tri] '
-		app.dispatch(Event{ kind: .mouse, x: 17, y: app.bar_y(), button: .left, pressed: true })
+		assert app.screen.cells[row + 12..row + 36].map(it.glyph).join('') == '[= One] [= Two] [= Tri] '
+		app.dispatch(Event{ kind: .mouse, x: 21, y: app.bar_y(), button: .left, pressed: true })
 		assert app.popups[0].link.kids[0].link == second
 		app.close_popups()
 		app.close(mut first)
 		app.redraw()
-		assert app.screen.cells[row + 8..row + 24].map(it.glyph).join('') == '[= Two] [= Tri] '
+		assert app.screen.cells[row + 12..row + 28].map(it.glyph).join('') == '[= Two] [= Tri] '
 		app.destroy_ctl(mut second)
 		app.window('New', 30, 8)
 		app.redraw()
-		assert app.screen.cells[row + 8..row + 24].map(it.glyph).join('') == '[= Tri] [= New] '
+		assert app.screen.cells[row + 12..row + 28].map(it.glyph).join('') == '[= Tri] [= New] '
 	}
 }
 
 fn test_bar_menu_targets_follow_scrolling_and_ignore_clipped_buttons() {
 	mut app := new_app()
-	app.width = 28
+	app.width = 32
 	app.window('First界!', 20, 8)
 	second := app.window('Two', 20, 8)
 	app.redraw()
-	for x in [7, 22, 25] {
+	for x in [11, 26, 29] {
 		app.dispatch(Event{ kind: .mouse, x: x, y: app.bar_y(), button: .left, pressed: true })
 		assert app.popups.len == 0 && app.top_window() == second
 	}
-	app.dispatch(Event{ kind: .mouse, x: 12, y: app.bar_y(), button: .wheel_down, pressed: true })
+	app.dispatch(Event{ kind: .mouse, x: 16, y: app.bar_y(), button: .wheel_down, pressed: true })
 	app.redraw()
-	app.dispatch(Event{ kind: .mouse, x: 19, y: app.bar_y(), button: .left, pressed: true })
+	app.dispatch(Event{ kind: .mouse, x: 23, y: app.bar_y(), button: .left, pressed: true })
 	assert app.popups.len == 1 && app.popups[0].link.kids[0].link == second
 	app.dispatch(Event{ key: int(Key.escape) })
 	app.bar_offset = 2
 	app.redraw()
-	app.dispatch(Event{ kind: .mouse, x: 7, y: app.bar_y(), button: .left, pressed: true })
+	app.dispatch(Event{ kind: .mouse, x: 11, y: app.bar_y(), button: .left, pressed: true })
 	assert app.popups.len == 0
 }
 

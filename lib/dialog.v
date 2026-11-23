@@ -29,6 +29,7 @@ pub fn (mut app App) dialog(title string, mut body Ctl) &Ctl {
 }
 
 pub fn (mut app App) modal_for(mut dialog Ctl, owner &Ctl) int {
+	if !isnil(owner) { dialog.desktop_id = owner.desktop_id }
 	app.close_popups()
 	app.drag = unsafe { nil }
 	app.scroll_drag = unsafe { nil }

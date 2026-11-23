@@ -207,6 +207,11 @@ fn (mut app App) draw_popups() {
 	}
 }
 
+fn window_desktop_action(mut item Ctl, mut app App) {
+	mut w := item.link
+	app.move_window_to_desktop(mut w, int(item.data))
+}
+
 fn window_menu_action(mut item Ctl, mut app App) {
 	mut w := item.link
 	match item.data {
@@ -227,7 +232,7 @@ fn window_menu_action(mut item Ctl, mut app App) {
 }
 
 pub fn (mut app App) window_menu(mut w Ctl, x int, y int) {
-	if w.hidden || w.closed || w.disabled || !isnil(app.blocker(&w)) { return }
+	if !app.on_desktop(&w) || w.hidden || w.closed || w.disabled || !isnil(app.blocker(&w)) { return }
 	mut menu := context_menu()
 	names := ['Minimize', if w.maximized { 'Restore' } else { 'Maximize' }, 'Move', 'Resize',
 		(if w.always_on_top { '[x] ' } else { '[ ] ' }) + 'Always on top', 'Close']
@@ -241,6 +246,16 @@ pub fn (mut app App) window_menu(mut w Ctl, x int, y int) {
 		mut item := tile.menu_item(name, window_menu_action)
 		item.link = &w
 		item.data = i64(i + 7)
+	}
+	if app.desktop_count > 1 {
+		mut desktops := menu.add_menu('Move to desktop')
+		desktops.disabled = w.modal
+		for desktop_id in 1 .. app.desktop_count + 1 {
+			mut item := desktops.menu_item('Desktop ${desktop_id}', window_desktop_action)
+			item.link = &w
+			item.data = desktop_id
+			item.disabled = desktop_id == w.desktop_id
+		}
 	}
 	app.open_menu(menu, x, y)
 	if y == app.bar_y() && app.bar_height() > 0 && app.popups.len > 0 {

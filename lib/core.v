@@ -108,6 +108,7 @@ pub mut:
 	data          i64
 	value         int
 	blocky        bool
+	desktop_id    int = 1
 	low           int
 	high          int
 	top           int
@@ -254,6 +255,7 @@ pub fn (c &Ctl) visible() bool {
 	mut p := unsafe { c }
 	for !isnil(p) {
 		if p.hidden || p.closed || p.minimized || p.disabled { return false }
+		if p.kind == .window && !isnil(p.app) && !p.app.on_desktop(p) { return false }
 		p = p.parent
 	}
 	return true
@@ -299,6 +301,8 @@ pub mut:
 	width            int  = 80
 	height           int  = 24
 	desktop          bool = true
+	desktop_count    int = 1
+	active_desktop   int = 1
 	bar_always       bool = true
 	bar_top          bool
 	bar_clock        bool = true
@@ -343,6 +347,7 @@ mut:
 	placement_resize bool
 	placement_start  Rect
 	window_layout    WindowLayout
+	desktop_focus    [4]&Ctl
 	settings_path    string
 	bar_offset       int
 	next_window_order int
@@ -407,7 +412,7 @@ fn (mut app App) tick() {
 	if now / 125 != app.last_animation {
 		app.last_animation = now / 125
 		for w in app.windows {
-			if has_spinner(w) {
+			if app.on_desktop(w) && has_spinner(w) {
 				app.dirty = true
 				break
 			}

@@ -11,6 +11,7 @@ mut:
 
 struct WindowPlacement {
 	window       &Ctl
+	desktop_id   int
 	rect         Rect
 	participates bool
 	min_w        int
@@ -34,7 +35,7 @@ fn (layout &WindowLayout) matches(windows []&Ctl, area Rect) bool {
 		mut found := false
 		for p in layout.windows {
 			if p.window != w { continue }
-			if p.applied != w.rect() || p.participates != w.joins_window_layout()
+			if p.desktop_id != w.desktop_id || p.applied != w.rect() || p.participates != w.joins_window_layout()
 				|| p.min_w != w.min_w || p.min_h != w.min_h
 				|| p.max_w != w.max_w || p.max_h != w.max_h {
 				return false
@@ -54,6 +55,7 @@ fn (mut app App) resize_windows(old_area Rect) {
 			if w.closed { continue }
 			placements << WindowPlacement{
 				window:       w
+				desktop_id:   w.desktop_id
 				rect:         w.rect()
 				applied:      w.rect()
 				participates: w.joins_window_layout()
@@ -85,10 +87,14 @@ struct WindowEdgeJoin {
 }
 
 fn (layout &WindowLayout) resize_axis(area Rect, vertical bool) {
+	for desktop_id in 1 .. 5 { layout.resize_desktop_axis(area, vertical, desktop_id) }
+}
+
+fn (layout &WindowLayout) resize_desktop_axis(area Rect, vertical bool, desktop_id int) {
 	origin, size := window_axis(area, vertical)
 	old_origin, old_size := window_axis(layout.area, vertical)
 	if old_size <= 0 || size <= 0 { return }
-	placements := layout.windows.filter(it.participates)
+	placements := layout.windows.filter(it.participates && it.desktop_id == desktop_id)
 	n := placements.len * 2 + 1 // Node zero is the workspace origin.
 	mut attached := []bool{len: n}
 	mut joins := []WindowEdgeJoin{}

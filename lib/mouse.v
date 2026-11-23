@@ -71,7 +71,7 @@ fn (app &App) hover_target() &Ctl {
 	}
 	for i := app.windows.len - 1; i >= 0; i-- {
 		w := app.windows[i]
-		if w.hidden || w.closed || w.minimized || !w.rect().contains(x, y) { continue }
+		if !app.on_desktop(w) || w.hidden || w.closed || w.minimized || !w.rect().contains(x, y) { continue }
 		if !w.visible() || !isnil(app.blocker(w)) { return unsafe { nil } }
 		// The frame and menubar cover any children extending beyond the body.
 		if x == w.x || x == w.x + w.w - 1 || y == w.y || y == w.y + w.h - 1 {

@@ -42,14 +42,20 @@ fn (app &App) bar_clock_rect() Rect {
 	return Rect{max(0, app.width - 5), app.bar_y(), min(5, app.width), 1}
 }
 
+fn (app &App) bar_desktops_rect() Rect {
+	if !app.desktop || app.bar_height() == 0 { return Rect{} }
+	clock_width := if app.bar_clock { 6 } else { 0 }
+	return Rect{8, app.bar_y(), min(app.desktop_count * 3, max(0, app.width - 8 - clock_width)), 1}
+}
+
 fn (app &App) bar_buttons_rect() Rect {
-	x := if app.desktop { 8 } else { 0 }
+	x := if app.desktop { 9 + app.desktop_count * 3 } else { 0 }
 	clock_width := if app.bar_clock && app.desktop { 6 } else { 0 }
 	return Rect{x, app.bar_y(), max(0, app.width - x - clock_width), 1}
 }
 
 fn (app &App) bar_windows() []&Ctl {
-	mut windows := app.windows.filter(!it.closed && (app.desktop || it.minimized))
+	mut windows := app.windows.filter(it.desktop_id == app.active_desktop && !it.closed && (app.desktop || it.minimized))
 	windows.sort(a.window_order < b.window_order)
 	return windows
 }
@@ -59,7 +65,16 @@ fn (mut app App) draw_bar() {
 	t := app.theme
 	y := app.bar_y()
 	app.screen.fill(Rect{0, y, app.width, 1}, ` `, t.bar_fg, t.bar_bg)
-	if app.desktop { app.screen.text(0, y, '[Start]', t.bar_fg, t.bar_bg, bold) }
+	if app.desktop {
+		app.screen.text(0, y, '[Start]', t.bar_fg, t.bar_bg, bold)
+		old := app.screen.set_clip(app.bar_desktops_rect())
+		for i in 1 .. app.desktop_count + 1 {
+			active := i == app.active_desktop
+			app.screen.text(8 + (i - 1) * 3, y, if active { '[${i}]' } else { '[_]' },
+				if active { t.sel_fg } else { t.bar_fg }, if active { t.sel_bg } else { t.bar_bg }, 0)
+		}
+		app.screen.restore_clip(old)
+	}
 	buttons := app.bar_buttons_rect()
 	mut x := buttons.x - app.bar_offset
 	old := app.screen.set_clip(buttons)
@@ -177,6 +192,10 @@ fn (mut app App) bar_mouse(e Event) bool {
 		app.app_menu(0, e.y)
 		return true
 	}
+	if e.button == .left && app.bar_desktops_rect().contains(e.x, e.y) {
+		app.switch_desktop((e.x - 8) / 3 + 1)
+		return true
+	}
 	buttons := app.bar_buttons_rect()
 	if !buttons.contains(e.x, e.y) { return true }
 	mut x := buttons.x - app.bar_offset
@@ -226,6 +245,7 @@ pub fn (mut app App) settings_load() ! {
 			'bar_always' { app.bar_always = value == '1' }
 			'bar_top' { app.bar_top = value == '1' }
 			'bar_clock' { app.bar_clock = value == '1' }
+			'desktop_count' { app.set_desktop_count(value.int()) }
 			'window_shadow' { app.window_shadow = value == '1' }
 			'dim_inactive' { app.dim_inactive = value == '1' }
 			'title_gradient' { app.title_gradient = value == '1' }
@@ -280,6 +300,7 @@ pub fn (app &App) settings_saved() bool { return os.exists(app.settings_filename
 pub fn (app &App) settings_save() ! {
 	mut lines := ['[vtk]', 'move_key = ${app.move_key}', 'resize_key = ${app.resize_key}',
 		'bar_always = ${int(app.bar_always)}', 'bar_top = ${int(app.bar_top)}',
+		'desktop_count = ${app.desktop_count}',
 		'bar_clock = ${int(app.bar_clock)}', 'window_shadow = ${int(app.window_shadow)}',
 		'dim_inactive = ${int(app.dim_inactive)}', 'mouse_cursor = ${int(app.mouse_cursor.enabled)}',
 		'title_gradient = ${int(app.title_gradient)}',
@@ -303,6 +324,7 @@ pub fn (mut app App) settings_reset() ! {
 	app.dim_inactive = true
 	app.title_gradient = false
 	app.macos_buttons = false
+	app.set_desktop_count(1)
 	app.set_mouse_cursor(MouseCursor{ ...app.mouse_cursor, enabled: false })
 	app.move_key = Binding{ key: int(Key.f7), alt: true }
 	app.resize_key = Binding{ key: int(Key.f8), alt: true }
@@ -321,6 +343,10 @@ mut:
 	bar          &Ctl = unsafe { nil }
 	bar_top      &Ctl = unsafe { nil }
 	clock        &Ctl = unsafe { nil }
+	desktops     &Ctl = unsafe { nil }
+	desktops_minus &Ctl = unsafe { nil }
+	desktops_plus &Ctl = unsafe { nil }
+	desktops_label &Ctl = unsafe { nil }
 	shadow       &Ctl = unsafe { nil }
 	dim          &Ctl = unsafe { nil }
 	gradient     &Ctl = unsafe { nil }
@@ -353,6 +379,18 @@ fn settings_desktop_color(mut c Ctl, mut app App) {
 	}
 }
 
+fn (mut s Settings) update_desktops(count int) {
+	s.desktops.set_value(clamp(count, 1, 4))
+	s.desktops_minus.disabled = s.desktops.value == 1
+	s.desktops_plus.disabled = s.desktops.value == 4
+	s.desktops_label.set_text(s.desktops.value.str())
+}
+
+fn settings_desktops_changed(mut c Ctl, mut _ App) {
+	mut s := unsafe { &Settings(c.user) }
+	s.update_desktops(s.desktops.value + int(c.data))
+}
+
 fn settings_apply(mut c Ctl, mut app App) {
 	mut s := unsafe { &Settings(c.user) }
 	if c.data == 2 {
@@ -363,6 +401,7 @@ fn settings_apply(mut c Ctl, mut app App) {
 		s.bar.value = int(app.bar_always)
 		s.bar_top.value = int(app.bar_top)
 		s.clock.value = int(app.bar_clock)
+		s.update_desktops(app.desktop_count)
 		s.shadow.value = int(app.window_shadow)
 		s.dim.value = int(app.dim_inactive)
 		s.gradient.value = int(app.title_gradient)
@@ -393,6 +432,7 @@ fn settings_apply(mut c Ctl, mut app App) {
 	app.dim_inactive = s.dim.value != 0
 	app.title_gradient = s.gradient.value != 0
 	app.macos_buttons = s.macos_buttons.value != 0
+	app.set_desktop_count(s.desktops.value)
 	app.set_mouse_cursor(MouseCursor{ ...app.mouse_cursor, enabled: s.mouse_cursor.value != 0 })
 	app.vim_set(s.vim.value != 0)
 	if c.data == 1 {
@@ -456,6 +496,28 @@ pub fn (mut app App) settings_dialog() {
 	s.resize.row = 1
 	mut controls := [s.bar, s.bar_top, s.clock, s.shadow, s.dim, s.gradient, s.macos_buttons, s.mouse_cursor, s.vim]
 	for mut ctl in controls { body.add(mut ctl) }
+	mut desktop_count_row := box(false)
+	mut desktop_count_label := label('Virtual desktops:')
+	s.desktops_minus = button('-')
+	s.desktops_minus.user = s
+	s.desktops_minus.data = -1
+	s.desktops_minus.changed = settings_desktops_changed
+	s.desktops = progress()
+	s.desktops.blocky = true
+	s.desktops.high = 4
+	s.desktops.expand = false
+	s.desktops_plus = button('+')
+	s.desktops_plus.user = s
+	s.desktops_plus.data = 1
+	s.desktops_plus.changed = settings_desktops_changed
+	s.desktops_label = label('')
+	s.update_desktops(app.desktop_count)
+	desktop_count_row.add(mut desktop_count_label)
+	desktop_count_row.add(mut s.desktops_minus)
+	desktop_count_row.add(mut s.desktops)
+	desktop_count_row.add(mut s.desktops_plus)
+	desktop_count_row.add(mut s.desktops_label)
+	body.add(mut desktop_count_row)
 	mut shortcuts := grid()
 	mut move_label := label('Move shortcut')
 	shortcuts.add(mut move_label)

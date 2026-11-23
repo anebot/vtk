@@ -11,9 +11,9 @@ pub enum TileSide {
 }
 
 pub fn (mut app App) window(title string, width int, height int) &Ctl {
-	offset := (app.windows.len * 2) % 10
+	offset := (app.windows.filter(it.desktop_id == app.active_desktop && !it.closed).len * 2) % 10
 	app.next_window_order++
-	mut w := &Ctl{ kind: .window, app: app, text: title, x: 2 + offset, y: 1 + offset / 2, w: max(minimum_window_width, width), h: max(minimum_window_height, height), min_w: minimum_window_width, min_h: minimum_window_height, window_order: app.next_window_order }
+	mut w := &Ctl{ kind: .window, app: app, desktop_id: app.active_desktop, text: title, x: 2 + offset, y: 1 + offset / 2, w: max(minimum_window_width, width), h: max(minimum_window_height, height), min_w: minimum_window_width, min_h: minimum_window_height, window_order: app.next_window_order }
 	app.windows << w
 	app.raise(mut w)
 	return w
@@ -22,19 +22,20 @@ pub fn (mut app App) window(title string, width int, height int) &Ctl {
 pub fn (app &App) top_window() &Ctl {
 	for i := app.windows.len - 1; i >= 0; i-- {
 		w := app.windows[i]
-		if !w.closed && !w.minimized && !w.hidden { return w }
+		if app.on_desktop(w) && !w.closed && !w.minimized && !w.hidden { return w }
 	}
 	return unsafe { nil }
 }
 
 fn (app &App) blocker(w &Ctl) &Ctl {
+	desktop_id := if isnil(w) { app.active_desktop } else { w.desktop_id }
 	for i := app.windows.len - 1; i >= 0; i-- {
 		d := app.windows[i]
 		if d == w {
 			if d.modal { return unsafe { nil } }
 			continue
 		}
-		if d.closed || d.minimized || !d.modal { continue }
+		if d.closed || d.minimized || !d.modal || d.desktop_id != desktop_id { continue }
 		// A nested dialog is allowed above the modal which owns it.
 		mut ancestor := unsafe { w }
 		mut descendant := false
@@ -52,6 +53,9 @@ fn (app &App) blocker(w &Ctl) &Ctl {
 }
 
 pub fn (mut app App) raise(mut w Ctl) {
+	if !isnil(w.app) && w.app != &app { return }
+	if isnil(w.app) { w.app = app; w.desktop_id = app.active_desktop }
+	if !app.on_desktop(&w) && !app.switch_desktop(w.desktop_id) { return }
 	mut blocked := app.blocker(&w)
 	if !isnil(blocked) {
 		mut dialog := blocked
@@ -147,8 +151,8 @@ pub fn (mut app App) minimize(mut w Ctl) {
 	if w.modal || !isnil(app.blocker(&w)) { return }
 	w.minimized = true
 	app.clear_hover_within(&w)
-	app.focus = unsafe { nil }
-	app.focus_first(app.top_window())
+	if !isnil(app.focus) && app.focus.owner_window() == &w { app.focus = unsafe { nil } }
+	if isnil(app.focus) { app.focus_first(app.top_window()) }
 	app.dirty = true
 }
 
@@ -267,7 +271,7 @@ pub fn (mut app App) tile_side(mut w Ctl, side TileSide) {
 }
 
 pub fn (mut app App) tile() {
-	mut windows := app.windows.filter(!it.closed && !it.minimized)
+	mut windows := app.windows.filter(it.desktop_id == app.active_desktop && !it.closed && !it.minimized)
 	if windows.len == 0 { return }
 	mut cols := 1
 	for cols * cols < windows.len { cols++ }
@@ -286,7 +290,7 @@ pub fn (mut app App) tile() {
 
 pub fn (mut app App) cascade() {
 	area := app.work_area()
-	for i, mut w in app.windows.filter(!it.closed && !it.minimized) {
+	for i, mut w in app.windows.filter(it.desktop_id == app.active_desktop && !it.closed && !it.minimized) {
 		w.maximized = false
 		w.x = (i * 3) % max(1, app.width / 3)
 		w.y = area.y + i % max(1, area.h / 3)
@@ -432,7 +436,7 @@ fn (mut app App) focus_next(back bool) {
 }
 
 pub fn (mut app App) begin_placement(mut w Ctl, resize bool) {
-	if w.maximized || w.minimized { return }
+	if !app.on_desktop(&w) || w.maximized || w.minimized { return }
 	w.fit_window(app.work_area())
 	app.placement = &w
 	app.placement_resize = resize

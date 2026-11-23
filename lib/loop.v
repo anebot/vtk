@@ -77,7 +77,7 @@ pub fn (mut app App) redraw() {
 	area := app.work_area()
 	app.fit_windows()
 	for mut w in app.windows {
-		if w.closed || w.minimized || w.hidden { continue }
+		if !app.on_desktop(w) || w.closed || w.minimized || w.hidden { continue }
 		w.measure()
 		w.layout(w.rect())
 	}
@@ -86,7 +86,7 @@ pub fn (mut app App) redraw() {
 	app.update_hover()
 	workspace_clip := app.screen.set_clip(area)
 	for mut w in app.windows {
-		if w.closed || w.minimized || w.hidden { continue }
+		if !app.on_desktop(w) || w.closed || w.minimized || w.hidden { continue }
 		if app.window_shadow {
 			for y in max(area.y, w.y + 1) .. min(area.y + area.h, w.y + w.h + 1) {
 				for x in max(area.x, w.x + 2) .. min(area.x + area.w, w.x + w.w + 2) {
@@ -536,7 +536,7 @@ fn (mut app App) mouse(e Event) {
 	mut w := &Ctl(unsafe { nil })
 	for i := app.windows.len - 1; i >= 0; i-- {
 		candidate := app.windows[i]
-		if !candidate.closed && !candidate.minimized && !candidate.hidden && candidate.rect().contains(e.x, e.y) {
+		if app.on_desktop(candidate) && !candidate.closed && !candidate.minimized && !candidate.hidden && candidate.rect().contains(e.x, e.y) {
 			w = candidate
 			break
 		}
@@ -741,7 +741,7 @@ fn (mut app App) placement_key(e Event) {
 }
 
 fn (mut app App) cycle_window(back bool) {
-	windows := app.windows.filter(!it.closed && !it.minimized && isnil(app.blocker(it)))
+	windows := app.windows.filter(it.desktop_id == app.active_desktop && !it.closed && !it.minimized && !it.hidden && isnil(app.blocker(it)))
 	if windows.len < 2 { return }
 	mut next := if back { windows[windows.len - 2] } else { windows[0] }
 	app.raise(mut next)
