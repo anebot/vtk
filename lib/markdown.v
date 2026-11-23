@@ -45,20 +45,29 @@ pub fn (mut c Ctl) markdown_mode(mode MarkdownMode) {
 	c.invalidate()
 }
 
-// Parsing and hit testing share byte positions. Fences retain a display row
-// even when their syntax is hidden, so source navigation stays stable.
+// Parsing and hit testing share the same source spans.
 fn (c &Ctl) markdown_rows() []TextRow {
+	rows, _ := c.markdown_rows_from(TextCheckpoint{})
+	return rows
+}
+
+fn (c &Ctl) markdown_rows_from(resume TextCheckpoint) ([]TextRow, TextCheckpoint) {
 	mut rows := []TextRow{}
-	mut offset := 0
-	mut fence := ''
-	mut fence_len := 0
-	mut highlighter := code_highlighter('')
+	mut next := resume
+	mut offset := resume.offset
+	mut fence := resume.fence
+	mut fence_len := resume.fence_len
+	mut highlighter := resume.highlighter
 	section_a, section_b := c.markdown_section_range()
 	source := c.md.mode in [.source, .source_read]
-	lines := c.text.split('\n')
-	mut line_no := 0
-	for line_no < lines.len {
-		line := lines[line_no]
+	lines := c.text[offset..].split('\n')
+	mut index := 0
+	for index < lines.len {
+		line := lines[index]
+		line_no := resume.line + index
+		if index + 2 < lines.len {
+			next = TextCheckpoint{offset, line_no, fence, fence_len, highlighter}
+		}
 		mut row := TextRow{ start: offset, end: offset + line.len, line: line_no }
 		trim := line.trim_left(' ')
 		indent := line.len - trim.len
@@ -82,12 +91,12 @@ fn (c &Ctl) markdown_rows() []TextRow {
 		row.code = was_code || line.starts_with('\t') || line.starts_with('    ')
 		if row.code && !is_fence { row.element = .code_block }
 		if !source && !row.code && !is_fence {
-			if table := parse_markdown_table(lines, line_no, offset) {
+			if table := parse_markdown_table(lines, index, offset, resume.line) {
 				if offset >= section_a && offset <= section_b {
 					rows << c.render_markdown_table(table)
 				}
-				for consumed in lines[line_no..line_no + table.lines] { offset += consumed.len + 1 }
-				line_no += table.lines
+				for consumed in lines[index..index + table.lines] { offset += consumed.len + 1 }
+				index += table.lines
 				continue
 			}
 		}
@@ -146,10 +155,10 @@ fn (c &Ctl) markdown_rows() []TextRow {
 			rows << TextRow{ start: offset + line.len, end: offset + line.len, line: line_no, glyphs: line_glyphs('──── Page ${(line_no + 1) / max(1, c.md.page_lines) + 1} ────', offset + line.len, 0, -1) }
 		}
 		offset += line.len + 1
-		line_no++
+		index++
 	}
 	if rows.len == 0 { rows << TextRow{ start: section_a, end: section_a } }
-	return rows
+	return rows, next
 }
 
 fn (c &Ctl) markdown_section_range() (int, int) {

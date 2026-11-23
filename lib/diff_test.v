@@ -75,7 +75,7 @@ fn test_diff_colors_preserve_headers_context_scrolling_and_selection() {
 
 fn test_diff_counts_handle_no_newline_markers_and_deletions() {
 	text := '@@ -1 +1 @@\n-old\n\\ No newline at end of file\n+new\n\\ No newline at end of file\n--- a/b\n+++ /dev/null\n@@ -1 +0,0 @@\n-gone'
-	rows := diff_rows(text)
+	rows, _ := diff_rows_from(text, TextCheckpoint{})
 	assert (rows[1].color or { -1 }) == red
 	assert (rows[3].color or { -1 }) == green
 	assert rows[5].attr == bold && rows[6].attr == bold

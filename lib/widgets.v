@@ -76,9 +76,12 @@ pub fn (mut c Ctl) set_value(value int) {
 }
 
 pub fn (mut c Ctl) scroll_rows(rows int, total int, viewport int) bool {
-	c.top = clamp(c.top + rows, 0, total - max(1, viewport))
-	c.scroll_hold = true
-	c.invalidate()
+	top := clamp(c.top + rows, 0, total - max(1, viewport))
+	if top != c.top || !c.scroll_hold {
+		c.top = top
+		c.scroll_hold = true
+		if c.kind == .scroll { c.invalidate() } else { c.invalidate_paint() }
+	}
 	return true
 }
 
@@ -91,6 +94,10 @@ fn (mut c Ctl) scroll_into_view(row int, height int) {
 fn (mut app App) draw_ctl(mut c Ctl) {
 	if c.hidden || c.closed || c.minimized || c.rect().w <= 0 || c.rect().h <= 0 { return }
 	old := app.screen.set_clip(c.rect())
+	if !app.screen.paints(app.screen.clip) {
+		app.screen.restore_clip(old)
+		return
+	}
 	t := app.theme
 	focused := app.focus == &c && !c.disabled
 	mut fg := if c.disabled { t.dim } else { t.fg }
@@ -163,7 +170,7 @@ fn (mut app App) draw_ctl(mut c Ctl) {
 		}
 		.spinner {
 			app.screen.set_clip(c.content_rect())
-			c.value = int(time.ticks() / 125) & 3
+			c.value = int(time.ticks() / app.animation_period()) & 3
 			app.screen.text(c.x, c.y, '|/-\\'[c.value].ascii_str() + ' ' + c.text, t.accent, bg, 0)
 		}
 		.separator { app.screen.set_clip(c.content_rect()); app.screen.fill(Rect{c.x, c.y, c.w, 1}, `─`, t.dim, bg) }
@@ -300,7 +307,7 @@ fn (mut app App) draw_scrollbar(c &Ctl, total int, viewport int, inset int) {
 	app.screen.fill(Rect{c.x + c.w - 1, c.y + inset + at, 1, thumb}, `█`, t.frame, t.bg)
 }
 
-fn (c &Ctl) scroll_dimensions() (int, int) {
+fn (mut c Ctl) scroll_dimensions() (int, int) {
 	match c.kind {
 		.table { return c.row_count, max(1, c.h - 1) }
 		.tree { return c.tree_rows().len, c.h }

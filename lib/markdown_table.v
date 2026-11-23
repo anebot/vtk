@@ -84,16 +84,16 @@ fn markdown_table_alignments(line string) ?[]TextAlign {
 	return alignments
 }
 
-fn parse_markdown_table(lines []string, first int, offset int) ?MarkdownTable {
+fn parse_markdown_table(lines []string, first int, offset int, line_base int) ?MarkdownTable {
 	if first + 1 >= lines.len { return none }
 	alignments := markdown_table_alignments(lines[first + 1]) or { return none }
 	header := markdown_cells(lines[first], offset)
 	if header.len != alignments.len || header.len == 0 { return none }
-	mut rows := [MarkdownTableRow{ cells: header, at: offset, end: offset + lines[first].len, line: first }]
+	mut rows := [MarkdownTableRow{ cells: header, at: offset, end: offset + lines[first].len, line: line_base + first }]
 	divider := MarkdownTableRow{
 		at:   offset + lines[first].len + 1
 		end:  offset + lines[first].len + 1 + lines[first + 1].len
-		line: first + 1
+		line: line_base + first + 1
 	}
 	mut at := divider.end + 1
 	mut cursor := first + 2
@@ -110,7 +110,7 @@ fn parse_markdown_table(lines []string, first int, offset int) ?MarkdownTable {
 		for cells.len < header.len {
 			cells << MarkdownCell{ at: at + line.len, end: at + line.len }
 		}
-		rows << MarkdownTableRow{ cells: cells, at: at, end: at + line.len, line: cursor }
+		rows << MarkdownTableRow{ cells: cells, at: at, end: at + line.len, line: line_base + cursor }
 		at += line.len + 1
 		cursor++
 	}

@@ -37,15 +37,14 @@ pub fn (app &App) mouse_position() (int, int) { return app.mouse_x, app.mouse_y 
 pub fn (app &App) hovered_ctl() ?&Ctl { return ctl_option(app.hover) }
 
 fn (mut app App) sync_mouse_motion() {
-	app.driver.set_mouse_motion(app.mouse_motion || app.mouse_cursor.enabled)
+	app.driver.set_mouse_motion((app.mouse_motion && !app.rendering.slow_terminal) || app.mouse_cursor.enabled)
 	app.sync_mouse_pointer()
 }
 
 fn (mut d Driver) set_mouse_motion(enabled bool) {
 	if !d.active || d.mouse_motion == enabled { return }
 	d.mouse_motion = enabled
-	print(if enabled { '\x1b[?1002l\x1b[?1003h' } else { '\x1b[?1003l\x1b[?1002h' })
-	flush_stdout()
+	d.output(if enabled { '\x1b[?1002l\x1b[?1003h' } else { '\x1b[?1003l\x1b[?1002h' })
 }
 
 fn (app &App) hover_target() &Ctl {
@@ -93,8 +92,11 @@ fn (mut app App) clear_hover() {
 	app.hover = unsafe { nil }
 	if isnil(old) { return }
 	old.hovered = false
-	app.dirty = true
-	if f := old.mouse_leave { f(mut old, mut app) }
+	if old.kind == .canvas { old.invalidate_paint() }
+	if f := old.mouse_leave {
+		f(mut old, mut app)
+		app.dirty = true
+	}
 }
 
 fn (mut app App) clear_hover_within(c &Ctl) {
@@ -127,16 +129,19 @@ fn (mut app App) update_hover() {
 	if isnil(target) { return }
 	app.hover = target
 	target.hovered = true
-	if f := target.mouse_enter { f(mut target, mut app) }
-	// Reconcile callback changes even if it performed a nested redraw.
-	app.dirty = true
+	if target.kind == .canvas { target.invalidate_paint() }
+	if f := target.mouse_enter {
+		f(mut target, mut app)
+		// Reconcile callback changes even if it performed a nested redraw.
+		app.dirty = true
+	}
 }
 
 fn (mut app App) clear_mouse() {
+	if app.mouse_cursor.enabled { app.invalidate_area(Rect{app.mouse_x, app.mouse_y, 1, 1}) }
 	app.mouse_x = -1
 	app.mouse_y = -1
 	app.clear_hover()
-	app.dirty = true
 }
 
 fn (mut app App) draw_mouse_cursor() {

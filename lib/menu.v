@@ -181,6 +181,7 @@ fn (mut app App) popup_key(e Event) {
 fn (mut app App) draw_popups() {
 	t := app.theme
 	for p in app.popups {
+		if !app.screen.paints(p.rect()) { continue }
 		app.screen.fill(p.rect(), ` `, t.fg, t.bg)
 		app.screen.frame(p.rect(), false, t.frame, t.bg)
 		old := app.screen.set_clip(Rect{p.x + 1, p.y + 1, p.w - 2, p.h - 2})

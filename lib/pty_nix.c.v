@@ -20,6 +20,7 @@ mut:
 	fd     int = -1
 	pid    int = -1
 	reaped bool
+	drained bool
 	read_buffer []u8
 }
 
@@ -100,10 +101,11 @@ fn (mut p Pty) resize(cols int, rows int) {
 }
 
 fn (mut p Pty) read(capacity int) string {
-	if p.fd < 0 { return '' }
+	if p.fd < 0 || p.drained { return '' }
 	size := max(1, capacity)
 	if p.read_buffer.len < size { p.read_buffer = []u8{len: size} }
 	n := int(C.read(p.fd, p.read_buffer.data, uint(size)))
+	if n == 0 || (n < 0 && C.errno == C.EIO) { p.drained = true }
 	return if n > 0 { p.read_buffer[..n].bytestr() } else { '' }
 }
 

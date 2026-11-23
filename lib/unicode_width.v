@@ -1,5 +1,7 @@
 module vtk
 
+import encoding.utf8
+
 struct RuneRange {
 	first rune
 	last  rune
@@ -26,7 +28,10 @@ fn grapheme_width(text string) int {
 	if text.len == 1 { return rune_width(rune(text[0])) }
 	mut width := 0
 	mut emoji, mut presentation := false, false
-	for r in text.runes() {
+	mut at := 0
+	for at < text.len {
+		r, n := utf8.decode_rune_at(text, at)
+		at += max(1, n)
 		width = max(width, rune_width(r))
 		emoji = emoji || in_rune_ranges(r, emoji_base)
 		presentation = presentation || r == 0xfe0f || r == 0x20e3
@@ -34,7 +39,7 @@ fn grapheme_width(text string) int {
 	return if emoji && presentation { 2 } else { width }
 }
 
-fn glyph_text(g Glyph) string { return if g.text == '' { g.r.str() } else { g.text } }
+fn glyph_text(g Glyph) string { return if g.text == '' { display_rune(g.r) } else { g.text } }
 
 fn glyph_width(g Glyph) int {
 	return if g.text == '' { rune_width(g.r) } else { grapheme_width(g.text) }

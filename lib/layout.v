@@ -33,8 +33,17 @@ fn (c &Ctl) content_kids() []&Ctl {
 	return c.kids.filter(!it.hidden && it.kind != .menu)
 }
 
+fn label_size(text string) (int, int) {
+	lines := text.split('\n')
+	mut width := 0
+	for line in lines { width = max(width, text_width(line)) }
+	return width, lines.len
+}
+
 pub fn (mut c Ctl) measure() {
-	for mut child in c.kids { child.measure() }
+	for mut child in c.kids {
+		if !child.hidden || c.kind in [.tabs, .group] { child.measure() }
+	}
 	mut kids := c.content_kids()
 	mut w, mut h := 0, 1
 	match c.kind {
@@ -125,8 +134,7 @@ pub fn (mut c Ctl) measure() {
 			h = 6
 		}
 		.label {
-			h = c.text.split('\n').len
-			for line in c.text.split('\n') { w = max(w, text_width(line)) }
+			w, h = label_size(c.text)
 		}
 		.button, .checkbox { w = text_width(c.text) + 4 }
 		.toolbutton { w = text_width(c.text) + 2 }
@@ -193,6 +201,7 @@ fn (c &Ctl) grid_dims() ([]int, []int) {
 
 fn (mut c Ctl) layout(r Rect) {
 	c.layout_bounds(r)
+	if !isnil(c.term) { c.term.resize(c.w, c.h) }
 	mut kids := c.content_kids()
 	if kids.len == 0 { return }
 	match c.kind {

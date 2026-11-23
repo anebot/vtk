@@ -52,7 +52,7 @@ pub fn (mut app App) modal_for(mut dialog Ctl, owner ?&Ctl) int {
 	old_focus := app.focus
 	dialog.always_on_top = true
 	app.raise(mut dialog)
-	for app.running && !dialog.closed { app.step(20) }
+	for app.running && !dialog.closed { app.advance(if app.driver.active { -1 } else { 20 }) }
 	dialog.modal = false
 	dialog.modal_owner = unsafe { nil }
 	dialog.modal_parent = unsafe { nil }

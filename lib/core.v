@@ -168,6 +168,7 @@ mut:
 	tab_w         int
 	wrap_words    bool
 	padding_used  Insets
+	editor_cache  ?&EditorRowsCache
 	intrinsic_w   int
 	intrinsic_h   int
 	closed        bool
@@ -227,13 +228,17 @@ pub fn (mut c Ctl) add(mut child Ctl) {
 	if !c.can_adopt(&child) { return }
 	child.parent = c
 	c.kids << &child
+	c.sources_changed()
 	c.invalidate()
 }
 
 pub fn (mut c Ctl) detach() {
 	c.invalidate()
 	mut app := c.root().app
-	if !isnil(app) { app.release_ctl(&c) }
+	if !isnil(app) {
+		app.sources_dirty = true
+		app.release_ctl(&c)
+	}
 	mut ancestor := c.parent
 	for !isnil(ancestor) {
 		if c.contains_ctl(ancestor.selected_node) { ancestor.selected_node = unsafe { nil } }
@@ -274,6 +279,7 @@ pub fn (mut c Ctl) replace(mut child Ctl, mut replacement Ctl) bool {
 	if !c.can_adopt(&replacement) || !isnil(replacement.parent) { return false }
 	replacement.parent = &c
 	c.kids.insert(clamp(at, 0, c.kids.len), &replacement)
+	c.sources_changed()
 	c.invalidate()
 	return true
 }
@@ -285,11 +291,23 @@ fn (c &Ctl) owner_window_ptr() &Ctl {
 }
 
 pub fn (mut c Ctl) set_text(text string) {
+	cursor := boundary(text, clamp(c.cursor, 0, text.len))
+	changed := c.text != text || cursor != c.cursor || (c.anchor >= 0 && c.anchor != c.cursor)
+	mut paint_only := c.kind in [.entry, .multiline, .markdown]
+	if changed && c.kind == .label {
+		old_width, old_height := label_size(c.text)
+		new_width, new_height := label_size(text)
+		paint_only = old_width == new_width && old_height == new_height
+	}
+	if cache := c.editor_cache {
+		if !text.starts_with(cache.key.text) { c.editor_cache = none }
+	}
 	c.text = text
-	c.cursor = boundary(text, clamp(c.cursor, 0, text.len))
+	c.cursor = cursor
 	c.anchor = -1
 	c.edit.reset()
-	c.invalidate()
+	if !changed { return }
+	if paint_only { c.invalidate_paint() } else { c.invalidate() }
 }
 
 // root resolves ownership dynamically so entire subtrees can be reparented.
@@ -316,8 +334,14 @@ pub fn (c &Ctl) invalidate() {
 pub fn (mut c Ctl) fire() {
 	mut app := c.root().app
 	if isnil(app) { return }
-	app.dirty = true
-	if f := c.changed { f(mut c, mut app) }
+	if f := c.changed {
+		app.dirty = true
+		f(mut c, mut app)
+	} else if c.kind in [.entry, .multiline, .markdown, .table, .slider, .spin, .progress, .checkbox, .switch, .radio, .date_picker, .tree] {
+		c.invalidate_paint()
+	} else {
+		app.dirty = true
+	}
 }
 
 pub fn (c &Ctl) visible() bool {
@@ -360,6 +384,7 @@ mut:
 pub struct App {
 pub mut:
 	theme            Theme = theme_default()
+	rendering        RenderOptions
 	desktop          bool = true
 	bar_always       bool = true
 	bar_top          bool
@@ -387,6 +412,8 @@ mut:
 	screen           Screen
 	running          bool = true
 	dirty            bool = true
+	damage           PaintDamage
+	cursor_dirty     bool
 	width            int  = 80
 	height           int  = 24
 	desktop_count    int = 1
@@ -397,8 +424,13 @@ mut:
 	driver           Driver
 	input            Input
 	events           []Event
+	event_index      int
+	terminals        []&Ctl
+	spinners         []&Ctl
+	sources_dirty    bool = true
 	last_clock       i64
 	last_animation   i64
+	next_frame       i64
 	ctrl_c_active    bool
 	started          bool
 	quitting         bool
@@ -465,7 +497,7 @@ pub fn (mut app App) cancel_hook(id int) {
 fn (mut app App) tick() {
 	now := time.ticks()
 	// Remove or reschedule before calling: callbacks may add/cancel hooks.
-	due := app.hooks.filter(it.due <= now)
+	due := if app.hooks.any(it.due <= now) { app.hooks.filter(it.due <= now) } else { []Hook{} }
 	for hook in due {
 		if !app.hooks.any(it.id == hook.id) { continue }
 		app.cancel_hook(hook.id)
@@ -482,20 +514,19 @@ fn (mut app App) tick() {
 			app.dirty = true
 		}
 	}
-	if app.bar_clock && now / 60000 != app.last_clock {
-		app.last_clock = now / 60000
-		app.dirty = true
-	}
-	if now / 125 != app.last_animation {
-		app.last_animation = now / 125
-		for w in app.windows {
-			if app.on_desktop(w) && has_spinner(w) {
-				app.dirty = true
-				break
-			}
+	clock := app.bar_clock_rect()
+	if clock.w > 0 {
+		minute := time.now().unix_milli() / 60000
+		if minute != app.last_clock {
+			app.last_clock = minute
+			app.invalidate_area(clock)
 		}
 	}
-	for mut w in app.windows { app.pump_terminals(mut w) }
+	period := app.animation_period()
+	if now / period != app.last_animation {
+		app.last_animation = now / period
+		for spinner in app.spinners { app.invalidate_area(app.spinner_rect(spinner)) }
+	}
 }
 
 fn min(a int, b int) int { return if a < b { a } else { b } }
@@ -503,10 +534,3 @@ fn min(a int, b int) int { return if a < b { a } else { b } }
 fn max(a int, b int) int { return if a > b { a } else { b } }
 
 fn abs(a int) int { return if a < 0 { -a } else { a } }
-
-fn has_spinner(c &Ctl) bool {
-	if c.hidden || c.closed || c.minimized { return false }
-	if c.kind == .spinner { return true }
-	for child in c.kids { if has_spinner(child) { return true } }
-	return false
-}

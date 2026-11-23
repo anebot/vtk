@@ -109,7 +109,7 @@ fn (mut app App) layout_notices() {
 fn (mut app App) draw_notices() {
 	t := app.theme
 	for notice in app.notices {
-		if notice.closed { continue }
+		if notice.closed || !app.screen.paints(notice.rect) { continue }
 		y, w := notice.rect.y, notice.rect.w
 		if y >= 0 {
 			app.screen.fill(notice.rect, ` `, t.fg, t.bg)
@@ -176,7 +176,11 @@ fn (mut app App) bar_mouse(e Event) bool {
 	if !isnil(app.blocker(unsafe { nil })) { return true }
 	if e.button in [.wheel_left, .wheel_right] { return true }
 	if e.button in [.wheel_up, .wheel_down] {
-		app.bar_offset = max(0, app.bar_offset + if e.button == .wheel_up { -3 } else { 3 })
+		offset := max(0, app.bar_offset + if e.button == .wheel_up { -3 } else { 3 })
+		if offset != app.bar_offset {
+			app.bar_offset = offset
+			app.invalidate_area(Rect{0, app.bar_y(), app.width, 1})
+		}
 		return true
 	}
 	if !e.pressed || e.motion { return true }

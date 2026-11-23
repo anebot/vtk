@@ -8,9 +8,8 @@ fn (app &App) now() i64 { return time.ticks() }
 // V strings retain explicit byte lengths, including embedded NUL bytes.
 pub fn (mut app App) clipboard_set(text string) {
 	app.clipboard = text
-	if app.native_clipboard && app.started {
-		print('\x1b]52;c;${base64.encode_str(text)}\x07')
-		flush_stdout()
+	if app.native_clipboard && app.driver.active {
+		app.driver.output('\x1b]52;c;${base64.encode_str(text)}\x07')
 	}
 }
 

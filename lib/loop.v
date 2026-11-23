@@ -5,13 +5,22 @@ import time
 
 pub fn (mut app App) init() ! {
 	if app.started { return }
-	app.driver.start()!
+	if app.rendering == RenderOptions{} {
+		app.rendering = RenderOptions{
+			backend: if os.getenv('VTK_RENDERER') == 'conservative' { .conservative } else { .ansi }
+			slow_terminal: os.getenv('VTK_SLOW_TERMINAL') == '1'
+		}
+	}
+	if app.rendering.backend != .memory {
+		app.driver.conservative = app.rendering.backend == .conservative
+		app.driver.start()!
+		app.width, app.height = app.driver.size()
+	}
 	app.started = true
-	app.width, app.height = app.driver.size()
 	app.terminal_focused = true
 	app.clear_mouse()
 	app.touch_titles = os.getenv('TERMUX_VERSION') != ''
-	if app.desktop { app.settings_load() or {} }
+	if app.driver.active && app.desktop { app.settings_load() or {} }
 	app.fit_windows()
 	app.sync_mouse_motion()
 	app.screen.resize(app.width, app.height)
@@ -33,6 +42,7 @@ pub fn (mut app App) fini() {
 	app.focus = unsafe { nil }
 	app.desktop_focus = [4]?&Ctl{}
 	app.hooks = []
+	app.terminals, app.spinners = [], []
 	app.events = []
 	for mut notice in app.notices { notice.closed = true }
 	app.notices = []
@@ -50,41 +60,62 @@ pub fn (mut app App) fini() {
 pub fn (mut app App) run() ! {
 	app.init()!
 	defer { app.fini() }
-	for app.running { app.step(30) }
+	for app.running { app.advance(-1) }
 }
 
 // step also works headlessly: dispatch events yourself and inspect screen.
 pub fn (mut app App) step(timeout_ms int) bool {
+	return app.advance(max(0, timeout_ms))
+}
+
+fn (mut app App) advance(timeout_ms int) bool {
 	if !app.running { return false }
-	if app.started {
+	app.update_sources()
+	wait := app.wait_time(timeout_ms)
+	if app.driver.active {
 		app.sync_mouse_motion()
-		width, height := app.driver.size()
-		if width != app.width || height != app.height {
-			app.dispatch(Event{ kind: .resize, width: width, height: height })
+		bytes := app.driver.read(wait, app.terminals)
+		if app.driver.resize_pending() {
+			width, height := app.driver.size()
+			if width != app.width || height != app.height {
+				app.dispatch(Event{kind: .resize, width: width, height: height})
+			}
 		}
-		mut timeout := max(0, timeout_ms)
-		for hook in app.hooks { timeout = min(timeout, max(0, int(hook.due - time.ticks()))) }
-		bytes := app.driver.read(if app.events.len > 0 { 0 } else { timeout })
 		if app.driver.eof {
 			app.running = false
 			return false
 		}
-		app.events << app.input.feed(bytes)
-		for app.events.len > 0 && app.running {
-			e := app.events[0]
-			app.events.delete(0)
+		if bytes != '' || app.input.buffer == '\x1b' {
+			app.events << app.input.feed(bytes)
+		}
+		// Process the queue by index instead of copying it on every event.
+		// A callback may enter a modal loop, which can consume the remaining events.
+		for app.event_index < app.events.len && app.running {
+			e := app.events[app.event_index]
+			app.events[app.event_index] = Event{}
+			app.event_index++
 			app.dispatch(e)
 		}
+		app.event_index = 0
+		app.events.clear()
+	} else if wait > 0 {
+		time.sleep(wait * time.millisecond)
 	}
+	app.update_sources()
 	app.tick()
+	app.update_sources()
+	if !app.driver.active || app.driver.terminals_ready {
+		for mut terminal in app.terminals { app.pump_terminal(mut terminal) }
+	}
 	if app.windows.any(it.closed) {
 		for mut w in app.windows.filter(it.closed) { app.dispose_ctl(mut w) }
 	}
-	if app.dirty {
-		app.redraw()
-		if app.started {
-			print(app.screen.diff())
-			flush_stdout()
+	if app.needs_frame() && (!app.driver.active || (!app.driver.output_busy() && time.ticks() >= app.next_frame)) {
+		if app.dirty || app.damage.count > 0 { app.repaint() }
+		app.cursor_dirty = false
+		if app.driver.active {
+			app.driver.output(app.screen.present(app.rendering))
+			if app.rendering.slow_terminal { app.next_frame = time.ticks() + 80 }
 		}
 	}
 	if !app.windows.any(!it.closed) && app.launchers.len == 0 { app.running = false }
@@ -101,24 +132,42 @@ pub fn (mut app App) layout() {
 	app.dirty = true
 }
 
+// redraw synchronously recomputes geometry and the whole screen snapshot.
 pub fn (mut app App) redraw() {
+	app.dirty = true
+	app.repaint()
+}
+
+fn (mut app App) repaint() {
 	app.screen.resize(app.width, app.height)
-	app.screen.ascii = app.theme.ascii
-	app.screen.cursor_x = -1
-	app.screen.cursor_y = -1
+	app.screen.ascii = app.theme.ascii || app.rendering.slow_terminal
+	size := Rect{0, 0, app.width, app.height}
+	damage := app.damage
+	app.damage.count = 0
+	if app.dirty {
+		app.screen.cursor_x, app.screen.cursor_y = -1, -1
+		app.layout()
+		app.dirty = false
+		app.layout_notices()
+		app.layout_popups()
+		app.update_hover()
+		app.paint_band(size)
+	} else {
+		for i in 0 .. damage.count { app.paint_band(damage.bands[i]) }
+	}
+}
+
+fn (mut app App) paint_band(band Rect) {
 	app.screen.restore_clip(Rect{0, 0, app.width, app.height})
-	app.screen.fill(Rect{0, 0, app.width, app.height}, `▒`, app.theme.desk_fg, app.theme.desk_bg)
+	app.screen.paint_y, app.screen.paint_end = band.y, band.y + band.h
+	defer { app.screen.paint_y, app.screen.paint_end = 0, app.height }
+	app.screen.fill(band, `▒`, app.theme.desk_fg, app.theme.desk_bg)
 	area := app.work_area()
-	app.layout()
-	app.dirty = false
-	app.layout_notices()
-	app.layout_popups()
-	app.update_hover()
 	workspace_clip := app.screen.set_clip(area)
-	for mut w in app.windows {
-		if !app.on_desktop(w) || w.closed || w.minimized || w.hidden { continue }
+	for i, mut w in app.windows {
+		if !app.paints_window(w) { continue }
 		if app.window_shadow {
-			for y in max(area.y, w.y + 1) .. min(area.y + area.h, w.y + w.h + 1) {
+			for y in max(band.y, max(area.y, w.y + 1)) .. min(band.y + band.h, min(area.y + area.h, w.y + w.h + 1)) {
 				for x in max(area.x, w.x + 2) .. min(area.x + area.w, w.x + w.w + 2) {
 					at := y * app.width + x
 					app.screen.cells[at].fg = gray
@@ -126,13 +175,16 @@ pub fn (mut app App) redraw() {
 				}
 			}
 		}
-		app.draw_ctl(mut w)
+		visible := w.rect().intersection(area).intersection(band)
+		if visible.h > 0 && visible.w > 0 && !app.covered_by_window(i + 1, visible) {
+			app.draw_ctl(mut w)
+		}
 	}
 	app.screen.restore_clip(workspace_clip)
 	app.draw_notices()
-	app.draw_bar()
+	if band.contains(0, app.bar_y()) { app.draw_bar() }
 	app.draw_popups()
-	if !isnil(app.placement) {
+	if !isnil(app.placement) && band.contains(0, app.bar_y()) {
 		app.screen.fill(Rect{0, app.bar_y(), app.width, 1}, ` `, app.theme.bar_fg, app.theme.bar_bg)
 		app.screen.text(0, app.bar_y(), (if app.placement_resize { 'Resize' } else { 'Move' }) + ': arrows / Shift+arrows, Enter accepts, Esc cancels', app.theme.bar_fg, app.theme.bar_bg, 0)
 	}
@@ -177,6 +229,10 @@ pub fn (mut app App) dispatch(e Event) {
 	}
 	app.enforce_modal_input()
 	if e.kind == .mouse {
+		if app.mouse_cursor.enabled && (e.x != app.mouse_x || e.y != app.mouse_y) {
+			app.invalidate_area(Rect{app.mouse_x, app.mouse_y, 1, 1})
+			app.invalidate_area(Rect{e.x, e.y, 1, 1})
+		}
 		app.mouse_x = e.x
 		app.mouse_y = e.y
 		app.update_hover()
@@ -272,7 +328,11 @@ pub fn (mut app App) dispatch(e Event) {
 			if f(mut c, e, mut app) { return }
 		}
 		if app.widget_key(mut c, e) {
-			app.dirty = true
+			if c.kind in [.entry, .multiline, .markdown, .table, .terminal] {
+				c.invalidate_paint()
+			} else {
+				app.dirty = true
+			}
 			return
 		}
 	}
@@ -437,13 +497,12 @@ pub fn (mut app App) scroll_ctl(mut c Ctl, rows int) bool {
 		return false
 	}
 	total, viewport := c.scroll_dimensions()
-	consumed := c.scroll_rows(rows, total, viewport)
-	if consumed { app.dirty = true }
-	return consumed
+	return c.scroll_rows(rows, total, viewport)
 }
 
 fn (mut app App) mouse(e Event) {
-	app.dirty = true
+	passive := e.motion && !e.pressed && e.button == .none && isnil(app.drag)
+		&& isnil(app.scroll_drag)
 	if e.button.is_wheel() {
 		if !e.pressed { return }
 		// Wheel reports are not left-button drag/motion events. Retain capture
@@ -479,6 +538,7 @@ fn (mut app App) mouse(e Event) {
 				w.fit_window(app.work_area())
 			}
 			app.placement = unsafe { nil }
+			app.dirty = true
 		}
 		return
 	}
@@ -495,13 +555,17 @@ fn (mut app App) mouse(e Event) {
 		} else {
 			0
 		}
-		c.top = clamp((e.y - c.y - inset) * max(0, app.scroll_total - app.scroll_view) / max(1, app.scroll_view - 1), 0, app.scroll_total - app.scroll_view)
-		c.scroll_hold = true
+		top := clamp((e.y - c.y - inset) * max(0, app.scroll_total - app.scroll_view) / max(1, app.scroll_view - 1), 0, app.scroll_total - app.scroll_view)
+		c.scroll_rows(top - c.top, app.scroll_total, app.scroll_view)
 		return
 	}
 	if !isnil(app.drag) {
 		mut c := app.drag
-		if c.kind == .table { c.table_drag(e, mut app); return }
+		if c.kind == .table {
+			c.table_drag(e, mut app)
+			c.invalidate_paint()
+			return
+		}
 		if c.kind == .split {
 			if e.button == .none && !e.pressed { app.drag = unsafe { nil }; return }
 			if e.button != .left { return }
@@ -542,6 +606,7 @@ fn (mut app App) mouse(e Event) {
 			return
 		}
 		if e.motion {
+			old := c.rect()
 			dx, dy := e.x - app.drag_x, e.y - app.drag_y
 			if c.maximized && dx == 0 && dy == 0 { return }
 			if app.drag_mode == 0 {
@@ -561,6 +626,7 @@ fn (mut app App) mouse(e Event) {
 				c.resize_window(width, height, app.work_area(), app.drag_mode & 1 != 0, app.drag_mode & 2 != 0)
 				if was_maximized && c.rect() == app.drag_start { c.maximized = true }
 			}
+			app.window_geometry_changed(mut c, old)
 		}
 		return
 	}
@@ -569,7 +635,10 @@ fn (mut app App) mouse(e Event) {
 		if p.rect().contains(e.x, e.y) {
 			row := p.top + e.y - p.y - 1
 			if row >= 0 && row < p.popup_owner.kids.len {
-				p.value = row
+				if p.value != row {
+					p.value = row
+					app.invalidate_area(p.rect())
+				}
 				if e.pressed && !e.motion && e.button == .left { app.choose_popup() }
 			}
 		} else if e.pressed && !e.motion {
@@ -602,7 +671,7 @@ fn (mut app App) mouse(e Event) {
 		if e.pressed && !e.motion { app.raise(mut blocked) }
 		return
 	}
-	if e.pressed && !e.motion { app.raise(mut w) }
+	if e.pressed && !e.motion && app.top_window_ptr() != w { app.raise(mut w) }
 	if e.y == w.y || e.x == w.x || e.x == w.x + w.w - 1 || e.y == w.y + w.h - 1 {
 		if e.button == .right && e.pressed && w.controls & window_menu != 0 {
 			app.window_menu(mut w, e.x, e.y)
@@ -681,8 +750,13 @@ fn (mut app App) mouse(e Event) {
 		}
 	}
 	if f := c.mousefn {
-		if f(mut c, e, mut app) { return }
+		if f(mut c, e, mut app) {
+			// Handled callbacks can mutate public fields and other controls.
+			app.dirty = true
+			return
+		}
 	}
+	if passive { return }
 	if !e.button.is_wheel() && !c.content_rect().contains(e.x, e.y)
 		&& c.kind !in [.button, .toolbutton, .checkbox, .switch] {
 		if e.button == .left && e.pressed && !e.motion { app.set_focus(c) }
@@ -707,8 +781,8 @@ fn (mut app App) mouse(e Event) {
 			app.scroll_drag = c
 			app.scroll_total = total
 			app.scroll_view = view
-			c.top = clamp((e.y - c.y) * max(0, total - view) / max(1, view - 1), 0, total - view)
-			c.scroll_hold = true
+			top := clamp((e.y - c.y) * max(0, total - view) / max(1, view - 1), 0, total - view)
+			c.scroll_rows(top - c.top, total, view)
 			return
 		}
 	}

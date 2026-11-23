@@ -13,7 +13,7 @@ fn test_detach_releases_desktop_and_resize_cache_references() {
 	app.destroy_ctl(mut w)
 	assert app.desktop_focus[0] == none && app.window_layout.windows.len == 0
 	app.fini()
-	assert app.windows.cap == 0 && app.screen.cells.len == 0 && app.screen.front.len == 0
+	assert app.windows.cap == 0 && app.screen.cells.len == 0 && app.screen.ansi.front.len == 0
 }
 
 fn test_disposal_releases_callback_context_without_destroying_associations() {

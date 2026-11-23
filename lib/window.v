@@ -83,6 +83,7 @@ pub fn (mut app App) raise(mut w Ctl) {
 		}
 	}
 	app.windows.insert(at, &w)
+	if previous < 0 { app.sources_dirty = true }
 	w.fit_window(app.work_area())
 	if isnil(app.focus) || app.focus.owner_window_ptr() != &w || !app.focus.visible() {
 		app.focus_first(&w)
@@ -166,6 +167,7 @@ fn (mut app App) dispose_ctl(mut c Ctl) {
 	c.cellfn = none
 	c.table = Table{}
 	c.chart = Chart{}
+	c.editor_cache = none
 	c.reordered = none
 	c.paint = none
 	c.md.linkfn = none
@@ -183,9 +185,10 @@ pub fn (mut app App) set_default_button(mut w Ctl, button ?&Ctl) bool {
 
 pub fn (mut app App) move(mut w Ctl, x int, y int) {
 	if !app.can_manage(&w) { return }
+	old := w.rect()
 	w.x, w.y = x, y
 	w.fit_window(app.work_area())
-	app.dirty = true
+	app.window_geometry_changed(mut w, old)
 }
 
 pub fn (mut app App) quit() {
@@ -405,7 +408,7 @@ fn (mut app App) draw_window(mut w Ctl) {
 	}
 	if title.minimize >= 0 { app.screen.text(title.minimize, w.y, '[_]', title_fg, title_bg, 0) }
 	app.screen.aligned_text(title.start, w.y, max(0, title.end - title.start), ' ${w.text} ', .left, title_fg, title_bg, bold)
-	if app.title_gradient && w.y >= 0 && w.y < app.screen.height {
+	if app.title_gradient && app.screen.paints(Rect{w.x, w.y, w.w, 1}) {
 		rgb := color_as_rgb(title_bg)
 		end := color_as_rgb(if active || !app.dim_inactive { t.title_bg_end } else { t.inactive_title_bg_end })
 		for column in max(0, w.x) .. min(app.screen.width, w.x + w.w) {
@@ -435,8 +438,13 @@ fn (mut app App) draw_window(mut w Ctl) {
 
 pub fn (mut app App) set_focus(c &Ctl) {
 	if isnil(c) || c.root().app != &app || !c.focusable || !c.visible() || !isnil(app.blocker(c.owner_window_ptr())) { return }
+	if app.focus == c { return }
+	old := app.focus
 	app.focus = c
-	app.dirty = true
+	app.screen.cursor_x = -1
+	app.cursor_dirty = true
+	if !isnil(old) { old.invalidate_paint() }
+	c.invalidate_paint()
 }
 
 fn focusable(c &Ctl, mut found []&Ctl) {
@@ -483,8 +491,7 @@ fn (mut app App) focus_next(back bool) {
 			break
 		}
 	}
-	app.focus = found[(at + (if back { found.len - 1 } else { 1 })) % found.len]
-	app.dirty = true
+	app.set_focus(found[(at + (if back { found.len - 1 } else { 1 })) % found.len])
 }
 
 pub fn (mut app App) begin_placement(mut w Ctl, resize bool) {

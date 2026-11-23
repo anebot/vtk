@@ -6,13 +6,18 @@ fn diff_range_count(range string) int {
 
 // Hunk counts distinguish file headers from removed/added text starting --/++.
 // This also handles concatenated unified diffs without diff --git separators.
-fn diff_rows(text string) []TextRow {
-	mut rows := plain_rows(text)
-	mut diff := DiffHighlighter{}
-	for mut row in rows {
+fn diff_rows_from(text string, resume TextCheckpoint) ([]TextRow, TextCheckpoint) {
+	mut rows := plain_rows(text, resume.offset, resume.line)
+	mut diff := resume.highlighter.diff_state
+	mut next := resume
+	for i, mut row in rows {
+		if i == rows.len - 1 {
+			next = TextCheckpoint{offset: row.start, line: row.line,
+				highlighter: CodeHighlighter{diff_state: diff}}
+		}
 		diff.highlight(text[row.start..row.end], mut row)
 	}
-	return rows
+	return rows, next
 }
 
 struct DiffHighlighter {

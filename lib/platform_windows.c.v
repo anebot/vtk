@@ -12,8 +12,10 @@ mut:
 	output_mode  u32
 	active       bool
 	mouse_motion bool
+	conservative bool
 	pointer      MousePointer
 	eof          bool
+	terminals_ready bool
 	read_buffer  []u8
 }
 
@@ -33,13 +35,13 @@ fn (mut d Driver) start() ! {
 	d.active = true
 	d.mouse_motion = false
 	d.pointer = MousePointer{}
-	print('\x1b[?1049h\x1b[?25l\x1b[?1002h\x1b[?1004h\x1b[?1006h\x1b[?2004h\x1b[2J')
+	print(tty_setup)
 	flush_stdout()
 }
 
 fn (mut d Driver) stop() {
 	if !d.active { return }
-	print(d.pointer.restore() + '\x1b[0m\x1b[?2004l\x1b[?1006l\x1b[?1004l\x1b[?1003l\x1b[?1002l\x1b[0 q\x1b[?25h\x1b[?1049l')
+	print(d.pointer.restore() + tty_restore(d.conservative))
 	flush_stdout()
 	C.SetConsoleMode(d.input, d.input_mode)
 	C.SetConsoleMode(d.output, d.output_mode)
@@ -47,8 +49,11 @@ fn (mut d Driver) stop() {
 	d.read_buffer = []
 }
 
-fn (mut d Driver) read(timeout int) string {
-	if C.WaitForSingleObject(d.input, u32(max(0, timeout))) != 0 { return '' }
+fn (mut d Driver) read(timeout int, terminals []&Ctl) string {
+	// Console mode does not expose resize events or readable pipe events.
+	wait := limit_wait(timeout, if terminals.len > 0 { 25 } else { 100 })
+	d.terminals_ready = terminals.len > 0
+	if C.WaitForSingleObject(d.input, u32(wait)) != 0 { return '' }
 	if d.read_buffer.len == 0 { d.read_buffer = []u8{len: 16384} }
 	mut n := u32(0)
 	if !C.ReadFile(d.input, d.read_buffer.data, u32(d.read_buffer.len), &n, unsafe { nil }) {
@@ -61,3 +66,13 @@ fn (mut d Driver) read(timeout int) string {
 fn (d &Driver) size() (int, int) {
 	return term.get_terminal_size()
 }
+
+fn (mut d Driver) output(sequence string) {
+	if sequence == '' { return }
+	print(sequence)
+	flush_stdout()
+}
+
+fn (d &Driver) output_busy() bool { return false }
+
+fn (mut d Driver) resize_pending() bool { return true }

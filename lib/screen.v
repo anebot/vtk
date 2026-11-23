@@ -1,16 +1,9 @@
 module vtk
 
 import encoding.utf8
-import strings
+import vtk.render
 
-pub struct Cell {
-pub mut:
-	glyph        string = ' '
-	fg           int    = white
-	bg           int
-	attr         int
-	continuation bool
-}
+pub type Cell = render.Cell
 
 pub struct Screen {
 pub mut:
@@ -22,8 +15,13 @@ mut:
 	cursor_x     int = -1
 	cursor_y     int = -1
 	cursor_shape CursorShape
-	front []Cell
+	ansi render.Ansi
+	damage []render.Span
+	damage_first int
+	damage_end int
 	clip  Rect
+	paint_y int
+	paint_end int
 }
 
 pub fn (mut s Screen) resize(width int, height int) {
@@ -32,12 +30,15 @@ pub fn (mut s Screen) resize(width int, height int) {
 	s.width = w
 	s.height = h
 	s.cells = []Cell{len: w * h}
-	s.front = []Cell{}
+	s.ansi.reset()
+	s.damage = []render.Span{len: h}
+	s.damage_first, s.damage_end = h, 0
 	s.clip = Rect{0, 0, w, h}
+	s.paint_y, s.paint_end = 0, h
 	s.set_cursor(s.cursor_x, s.cursor_y, s.cursor_shape)
 }
 
-pub fn (mut s Screen) invalidate() { s.front = []Cell{} }
+pub fn (mut s Screen) invalidate() { s.ansi.reset() }
 
 pub fn (mut s Screen) set_cursor(x int, y int, shape CursorShape) bool {
 	s.cursor_x, s.cursor_y = -1, -1
@@ -68,10 +69,33 @@ pub fn rune_width(r rune) int {
 	return 1
 }
 
+// ASCII is common in borders, tables, diffs and shell output.
+const printable_ascii = [' ', '!', '"', '#', '$', '%', '&', '\'', '(', ')', '*', '+', ',', '-', '.', '/', '0', '1', '2', '3', '4', '5', '6', '7', '8', '9', ':', ';', '<', '=', '>', '?', '@', 'A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J', 'K', 'L', 'M', 'N', 'O', 'P', 'Q', 'R', 'S', 'T', 'U', 'V', 'W', 'X', 'Y', 'Z', '[', '\\', ']', '^', '_', '`', 'a', 'b', 'c', 'd', 'e', 'f', 'g', 'h', 'i', 'j', 'k', 'l', 'm', 'n', 'o', 'p', 'q', 'r', 's', 't', 'u', 'v', 'w', 'x', 'y', 'z', '{', '|', '}', '~']!
+
+fn display_rune(r rune) string {
+	if r >= 32 && r < 127 { return printable_ascii[int(r) - 32] }
+	return r.str()
+}
+
 pub fn text_width(text string) int {
 	mut width := 0
-	for cluster in text.graphemes() { width += grapheme_width(cluster) }
+	for i in 0 .. text.len {
+		ch := text[i]
+		if ch >= 128 {
+			width = 0
+			for cluster in text.graphemes() { width += grapheme_width(cluster) }
+			return width
+		}
+		if ch >= 32 && ch < 127 { width++ }
+	}
 	return width
+}
+
+fn is_ascii(text string) bool {
+	for i in 0 .. text.len {
+		if text[i] >= 128 { return false }
+	}
+	return true
 }
 
 fn ascii_glyph(r rune) rune {
@@ -93,20 +117,28 @@ fn ascii_glyph(r rune) rune {
 }
 
 pub fn (mut s Screen) put(x int, y int, r rune, fg int, bg int, attr int) {
-	s.put_grapheme(x, y, r.str(), rune_width(r), fg, bg, attr)
+	s.put_grapheme(x, y, display_rune(r), rune_width(r), fg, bg, attr)
 }
 
 fn (mut s Screen) put_grapheme(x int, y int, text string, columns int, fg int, bg int, attr int) {
-	if y < 0 || y >= s.height || x < 0 || x > s.width { return }
-	r, _ := utf8.decode_rune_at(text, 0)
+	if y < s.paint_y || y >= s.paint_end || x < 0 || x > s.width { return }
+	mut r := rune(0)
+	if text.len == 1 {
+		r = rune(text[0])
+	} else if text.len > 1 {
+		r, _ = utf8.decode_rune_at(text, 0)
+	}
 	if r < 32 || (r >= 0x7f && r < 0xa0) { return }
-	actual := if s.ascii { ascii_glyph(r).str() } else { text }
+	actual := if s.ascii && r > 126 { display_rune(ascii_glyph(r)) } else { text }
 	width := if s.ascii { 1 } else { columns }
 	if width == 0 {
 		if x > 0 && s.clip.contains(x - 1, y) {
 			mut at := y * s.width + x - 1
 			if s.cells[at].continuation && x > 1 { at-- }
-			if s.clip.contains(at % s.width, y) { s.cells[at].glyph += actual }
+			if s.clip.contains(at % s.width, y) {
+				s.cells[at].glyph += actual
+				s.mark(at % s.width, x, y)
+			}
 		}
 		return
 	}
@@ -114,24 +146,51 @@ fn (mut s Screen) put_grapheme(x int, y int, text string, columns int, fg int, b
 	if width == 2 && (!s.clip.contains(x + 1, y) || x + 1 >= s.width) { return }
 	at := y * s.width + x
 	// Overwriting either half of a wide character clears its partner.
-	if s.cells[at].continuation && x > 0 { s.cells[at - 1] = Cell{ fg: fg, bg: bg } }
-	if x + 1 < s.width && s.cells[at + 1].continuation { s.cells[at + 1] = Cell{ fg: fg, bg: bg } }
+	mut first, mut end := x, x + width
+	if s.cells[at].continuation && x > 0 {
+		s.cells[at - 1] = Cell{fg: fg, bg: bg}
+		first = x - 1
+	}
+	if x + width < s.width && s.cells[at + width].continuation {
+		s.cells[at + width] = Cell{fg: fg, bg: bg}
+		end++
+	}
 	s.cells[at] = Cell{actual, fg, bg, attr, false}
 	if width == 2 { s.cells[at + 1] = Cell{'', fg, bg, attr, true} }
+	s.mark(first, end, y)
 }
 
 pub fn (mut s Screen) text(x int, y int, text string, fg int, bg int, attr int) {
+	if y < s.paint_y || y >= s.paint_end || !s.clip.contains(s.clip.x, y)
+		|| x > s.clip.x + s.clip.w { return }
+	right := s.clip.x + s.clip.w
 	mut at := x
+	if is_ascii(text) {
+		for i in 0 .. text.len {
+			ch := text[i]
+			if ch == `\n` || ch == `\r` || at >= right { break }
+			if ch >= 32 && ch < 127 {
+				s.put_grapheme(at, y, printable_ascii[int(ch) - 32], 1, fg, bg, attr)
+				at++
+			} else if s.ascii {
+				at++
+			}
+		}
+		return
+	}
 	if s.ascii {
-		for r in text.runes() {
+		mut i := 0
+		for i < text.len && at < right {
+			r, n := utf8.decode_rune_at(text, i)
 			if r == `\n` || r == `\r` { break }
 			s.put(at, y, r, fg, bg, attr)
 			at++
+			i += max(1, n)
 		}
 		return
 	}
 	for cluster in text.graphemes() {
-		if cluster.starts_with('\n') || cluster.starts_with('\r') { break }
+		if cluster[0] == `\n` || cluster[0] == `\r` || at > right { break }
 		width := grapheme_width(cluster)
 		s.put_grapheme(at, y, cluster, width, fg, bg, attr)
 		at += width
@@ -142,7 +201,7 @@ pub fn (mut s Screen) text(x int, y int, text string, fg int, bg int, attr int) 
 fn (mut s Screen) aligned_text(x int, y int, width int, text string, align TextAlign, fg int, bg int, attr int) {
 	if width <= 0 { return }
 	line := text.all_before('\n').all_before('\r')
-	columns := if s.ascii { line.runes().len } else { text_width(line) }
+	columns := if align == .left { 0 } else if s.ascii { line.runes().len } else { text_width(line) }
 	spare := max(0, width - columns)
 	offset := match align {
 		.left { 0 }
@@ -155,25 +214,39 @@ fn (mut s Screen) aligned_text(x int, y int, width int, text string, align TextA
 }
 
 pub fn (mut s Screen) fill(r Rect, glyph rune, fg int, bg int) {
-	text, width := glyph.str(), rune_width(glyph)
-	for y in max(0, max(s.clip.y, r.y)) .. min(s.height, min(s.clip.y + s.clip.h, r.y + max(0, r.h))) {
-		for x in max(0, max(s.clip.x, r.x)) .. min(s.width, min(s.clip.x + s.clip.w, r.x + max(0, r.w))) {
-			s.put_grapheme(x, y, text, width, fg, bg, 0)
+	area := r.intersection(s.clip).intersection(Rect{0, 0, s.width, s.height})
+	if area.w == 0 || !s.paints(area) || glyph < 32 || (glyph >= 127 && glyph < 160) { return }
+	text := display_rune(if s.ascii { ascii_glyph(glyph) } else { glyph })
+	width := if s.ascii { 1 } else { rune_width(glyph) }
+	start, end := area.x, area.x + area.w
+	for y in max(s.paint_y, area.y) .. min(s.paint_end, area.y + area.h) {
+		if width != 1 {
+			for x in start .. end { s.put_grapheme(x, y, text, width, fg, bg, 0) }
+			continue
 		}
+		base := y * s.width
+		mut first, mut last := start, end
+		if start > 0 && s.cells[base + start].continuation {
+			first--
+			s.cells[base + first] = Cell{fg: fg, bg: bg}
+		}
+		if end < s.width && s.cells[base + end].continuation {
+			s.cells[base + end] = Cell{fg: fg, bg: bg}
+			last++
+		}
+		cell := Cell{glyph: text, fg: fg, bg: bg}
+		for x in start .. end { s.cells[base + x] = cell }
+		s.mark(first, last, y)
 	}
 }
 
 pub fn (mut s Screen) frame(r Rect, double bool, fg int, bg int) {
 	if r.w < 2 || r.h < 2 { return }
-	g := if double { '╔╗╚╝═║'.runes() } else { '┌┐└┘─│'.runes() }
-	for x in r.x + 1 .. r.x + r.w - 1 {
-		s.put(x, r.y, g[4], fg, bg, 0)
-		s.put(x, r.y + r.h - 1, g[4], fg, bg, 0)
-	}
-	for y in r.y + 1 .. r.y + r.h - 1 {
-		s.put(r.x, y, g[5], fg, bg, 0)
-		s.put(r.x + r.w - 1, y, g[5], fg, bg, 0)
-	}
+	g := if double { [`╔`, `╗`, `╚`, `╝`, `═`, `║`]! } else { [`┌`, `┐`, `└`, `┘`, `─`, `│`]! }
+	s.fill(Rect{r.x + 1, r.y, r.w - 2, 1}, g[4], fg, bg)
+	s.fill(Rect{r.x + 1, r.y + r.h - 1, r.w - 2, 1}, g[4], fg, bg)
+	s.fill(Rect{r.x, r.y + 1, 1, r.h - 2}, g[5], fg, bg)
+	s.fill(Rect{r.x + r.w - 1, r.y + 1, 1, r.h - 2}, g[5], fg, bg)
 	s.put(r.x, r.y, g[0], fg, bg, 0)
 	s.put(r.x + r.w - 1, r.y, g[1], fg, bg, 0)
 	s.put(r.x, r.y + r.h - 1, g[2], fg, bg, 0)
@@ -200,64 +273,36 @@ pub fn (mut s Screen) line(x1 int, y1 int, x2 int, y2 int, glyph rune, fg int, b
 	}
 }
 
-fn ansi_color(color int, bg bool) string {
-	base := if bg { 48 } else { 38 }
-	if color & 0x1000000 != 0 {
-		return '${base};2;${(color >> 16) & 255};${(color >> 8) & 255};${color & 255}'
+// diff returns the incremental ANSI update since the previous presentation.
+pub fn (mut s Screen) diff() string { return s.present(RenderOptions{}) }
+
+fn (mut s Screen) present(options RenderOptions) string {
+	if options.backend == .memory { return '' }
+	conservative := options.backend == .conservative
+	if s.ansi.conservative != conservative || s.ansi.basic_colors != options.slow_terminal {
+		s.ansi = render.Ansi{conservative: conservative, basic_colors: options.slow_terminal}
 	}
-	if color & 0x2000000 != 0 { return '${base};5;${color & 255}' }
-	return '${(if bg { 40 } else { 30 }) + (color & 7) + (if color & 8 != 0 { 60 } else { 0 })}'
+	sequence := s.ansi.present(render.Frame{
+		cells: s.cells
+		width: s.width
+		height: s.height
+		damage: s.damage
+		first: s.damage_first
+		end: s.damage_end
+		cursor: render.Cursor{s.cursor_x, s.cursor_y, s.cursor_shape == .block}
+	})
+	for y in s.damage_first .. s.damage_end { s.damage[y] = render.Span{} }
+	s.damage_first, s.damage_end = s.height, 0
+	return sequence
 }
 
-// diff returns a single ANSI write and retains the front buffer. Text control
-// bytes never reach the host terminal; only renderer-generated escapes do.
-pub fn (mut s Screen) diff() string {
-	mut out := strings.new_builder(s.cells.len)
-	mut pen := Cell{ fg: -1, bg: -1, attr: -1 }
-	for y in 0 .. s.height {
-		mut positioned := false
-		for x in 0 .. s.width {
-			i := y * s.width + x
-			cell := s.cells[i]
-			if s.front.len == s.cells.len && cell == s.front[i] {
-				positioned = false
-				continue
-			}
-			if cell.continuation { continue }
-			if !positioned {
-				out.write_string('\x1b[${y + 1};${x + 1}H')
-				positioned = true
-			}
-			if cell.fg != pen.fg || cell.bg != pen.bg || cell.attr != pen.attr {
-				out.write_string('\x1b[0;${ansi_color(cell.fg, false)};${ansi_color(cell.bg, true)}m')
-				if cell.attr & bold != 0 { out.write_string('\x1b[1m') }
-				if cell.attr & underline != 0 { out.write_string('\x1b[4m') }
-				if cell.attr & italic != 0 { out.write_string('\x1b[3m') }
-				if cell.attr & reverse != 0 { out.write_string('\x1b[7m') }
-				pen = cell
-			}
-			out.write_string(cell.glyph)
-		}
-	}
-	if s.front.len != s.cells.len { s.front = []Cell{len: s.cells.len} }
-	copy(mut s.front, s.cells)
-	if s.cursor_x >= 0 && s.cursor_x < s.width && s.cursor_y >= 0 && s.cursor_y < s.height {
-		shape := if s.cursor_shape == .block { 2 } else { 6 }
-		out.write_string('\x1b[${s.cursor_y + 1};${s.cursor_x + 1}H\x1b[${shape} q\x1b[?25h')
-	} else {
-		out.write_string('\x1b[?25l')
-	}
-	return out.str()
+fn (mut s Screen) mark(x int, end int, y int) {
+	old := s.damage[y]
+	s.damage[y] = render.Span{if old.end > 0 { min(x, old.start) } else { x }, max(end, old.end)}
+	s.damage_first, s.damage_end = min(y, s.damage_first), max(y + 1, s.damage_end)
 }
 
-pub fn (s &Screen) snapshot() string {
-	mut out := strings.new_builder(s.cells.len)
-	for i, cell in s.cells {
-		if i > 0 && i % s.width == 0 { out.write_u8(`\n`) }
-		out.write_string(cell.glyph)
-	}
-	return out.str()
-}
+pub fn (s &Screen) snapshot() string { return render.snapshot(s.cells, s.width) }
 
 fn boundary(text string, offset int) int {
 	mut at := clamp(offset, 0, text.len)

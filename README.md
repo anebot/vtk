@@ -500,6 +500,41 @@ RGB palettes for consistent contrast across terminal color schemes.
 `color_rgb` and `color_256` provide extended colors;
 Serial uses basic ANSI colors and ASCII fallbacks when gradients are off.
 
+## Terminal presenters
+
+Set `app.rendering` before calling `init()` or `run()`.
+
+```v
+mut app := vtk.new_app()
+app.rendering = vtk.RenderOptions{
+    backend: .ansi
+    slow_terminal: true
+}
+```
+
+- `.ansi` is the default. It sends changed cells and uses VT scrolling when
+  a full-width region consists of exact shifted rows.
+- `.conservative` uses basic colors and avoids scroll-region operations and
+  cursor shape requests. It still requires a VT-compatible terminal.
+- `.memory` needs no terminal. Call `dispatch` and `step(0)` to drive the app,
+  then read `snapshot()`. It uses the same layout and widget painting as ANSI.
+
+For apps using the default options, set `VTK_RENDERER=conservative` or
+`VTK_SLOW_TERMINAL=1` in the environment.
+
+The slow terminal profile uses ASCII and basic colors, limits frames to about
+12 per second, slows spinners, and suppresses passive mouse reports unless a
+software cursor is enabled. On Unix, pending output is drained as the tty
+becomes writable. The event loop can continue handling input and coalesce new
+damage meanwhile. The Windows console uses its native synchronous output and
+a bounded wait for size changes and embedded terminal output.
+
+Use `ctl.invalidate_paint()` or `app.invalidate_area(rect)` when layout is
+unchanged. VTK batches and recomposes the touched rows, including overlapping
+windows and both cells of wide characters. Use `invalidate()` for geometry,
+widget tree, or broad application changes. A custom mouse callback that returns
+false can explicitly invalidate any changes it made.
+
 ## Editing and rendering
 
 Editor positions and selection anchors are UTF-8 byte offsets. Navigation

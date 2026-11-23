@@ -67,22 +67,29 @@ fn (mut app App) draw_table(mut c Ctl, fg int, bg int) {
 	t := app.theme
 	selected_fg, selected_bg := if active { t.focus_fg } else { t.sel_fg }, if active { t.focus_bg } else { t.sel_bg }
 	app.fill_ctl(c, fg, bg)
-	for y := c.top; y < c.row_count && y < c.top + c.h - 1; y++ {
+	first := c.top + max(0, max(app.screen.paint_y, app.screen.clip.y) - c.y - 1)
+	last := min(c.row_count, c.top + min(c.h - 1, min(app.screen.paint_end, app.screen.clip.y + app.screen.clip.h) - c.y - 1))
+	for y in first .. last {
 		if c.table.selection == .rows && range.x >= 0 && y >= range.y && y <= range.y2 {
 			app.screen.fill(Rect{c.x, c.y + y - c.top + 1, c.w, 1}, ` `, selected_fg, selected_bg)
 		}
 	}
 	body := Rect{c.x + c.table_gutter(), c.y, max(0, c.w - int(c.scrollbar) - c.table_gutter()), c.h}
 	clip := app.screen.set_clip(body)
+	mut left := body.x - c.left
+	right := app.screen.clip.x + app.screen.clip.w
 	for x in 0 .. c.kids.len {
+		if left >= right { break }
 		column := c.table_column_at(x)
-		r := c.table_column_rect(column)
-		if r.x >= body.x + body.w { break }
-		if r.x + r.w <= body.x { continue }
-		if !(app.drag == c && c.table.drag == .header && c.table.drag_moved && c.table.reorderable_columns && c.table.drag_id == column) {
+		width := c.table_column_width(column)
+		r := Rect{left, c.y, width, c.h}
+		left += width
+		if left <= app.screen.clip.x { continue }
+		if app.screen.paints(Rect{r.x, c.y, r.w, 1})
+			&& !(app.drag == c && c.table.drag == .header && c.table.drag_moved && c.table.reorderable_columns && c.table.drag_id == column) {
 			app.draw_table_header(c, column, r.x, fg, bg)
 		}
-		for y := c.top; y < c.row_count && y < c.top + c.h - 1; y++ {
+		for y in first .. last {
 			row := c.table_row_at(y)
 			style := c.table_cell_style(row, column)
 			selected := range.x >= 0 && x >= range.x && x <= range.x2 && y >= range.y && y <= range.y2
@@ -107,7 +114,7 @@ fn (mut app App) draw_table(mut c Ctl, fg int, bg int) {
 	app.screen.restore_clip(clip)
 	if c.table_gutter() > 0 {
 		app.screen.fill(Rect{c.x, c.y, c.table_gutter(), c.h}, ` `, t.dim, bg)
-		for y := c.top; y < c.row_count && y < c.top + c.h - 1; y++ {
+		for y in first .. last {
 			app.screen.aligned_text(c.x, c.y + y - c.top + 1, c.table_gutter() - 1, (c.table_row_at(y) + 1).str(), .right, t.dim, bg, 0)
 		}
 	}

@@ -227,28 +227,98 @@ fn (c &Ctl) editor_height() int {
 	})
 }
 
-fn (c &Ctl) editor_rows() []TextRow {
-	mut lines := if c.kind == .markdown {
-		c.markdown_rows()
-	} else if c.kind == .multiline && c.syntax == .diff {
-		diff_rows(c.text)
-	} else {
-		plain_rows(c.text)
-	}
+// Text is public, so compare it as well as the options that affect row geometry.
+struct EditorRowsKey {
+	text             string
+	syntax           TextSyntax
+	wrap             TextWrapMode
+	width            int
+	tab_width        int
+	markdown_mode    MarkdownMode
+	markdown_no_wrap bool
+	markdown_layout  MarkdownLayout
+	section_at       int
+	page_lines       int
+	task_interactive bool
+}
+
+// The checkpoint preserves lexer state and backs up far enough for a table
+// header or an unfinished last line to change when new text arrives.
+struct TextCheckpoint {
+	offset int
+	line int
+	fence string
+	fence_len int
+	highlighter CodeHighlighter = CodeHighlighter{auto_diff: true}
+}
+
+struct EditorRowsCache {
+	key  EditorRowsKey
+	rows []TextRow
+	resume TextCheckpoint
+}
+
+fn (mut c Ctl) editor_rows() []TextRow {
 	mode := c.wrap_mode()
-	if mode == .none { return lines }
 	mut width := max(1, c.w - c.editor_gutter() - int(c.scrollbar))
 	if c.kind == .markdown && c.md.column_width > 0 { width = min(width, c.md.column_width) }
+	key := EditorRowsKey{
+		text: c.text
+		syntax: c.syntax
+		wrap: mode
+		width: if mode != .none { width } else { 0 }
+		tab_width: max(1, c.md.tab_width)
+		markdown_mode: c.md.mode
+		markdown_no_wrap: c.md.no_wrap
+		markdown_layout: c.md.layout
+		section_at: c.md.section_at
+		page_lines: c.md.page_lines
+		task_interactive: c.md.task_interactive
+	}
+	mut resume := TextCheckpoint{}
+	mut prefix := []TextRow{}
+	is_diff := c.kind == .multiline && c.syntax == .diff
+	if cache := c.editor_cache {
+		if cache.key == key { return cache.rows }
+		if !(c.kind == .markdown && c.md.layout == .section)
+			&& cache.key == EditorRowsKey{...key, text: cache.key.text}
+			&& c.text.starts_with(cache.key.text) {
+			resume = cache.resume
+			mut count := cache.rows.len
+			for count > 0 && cache.rows[count - 1].line >= resume.line { count-- }
+			prefix = cache.rows[..count].clone()
+		}
+	}
+	mut lines := []TextRow{}
+	if c.kind == .markdown {
+		lines, resume = c.markdown_rows_from(resume)
+	} else if is_diff {
+		lines, resume = diff_rows_from(c.text, resume)
+	} else {
+		lines = plain_rows(c.text, resume.offset, resume.line)
+		resume = TextCheckpoint{offset: lines.last().start, line: lines.last().line}
+	}
+	rows := if mode == .none { lines } else { wrap_rows(lines, key) }
+	if prefix.len == 0 {
+		c.editor_cache = &EditorRowsCache{key, rows, resume}
+		return rows
+	}
+	prefix << rows
+	c.editor_cache = &EditorRowsCache{key, prefix, resume}
+	return prefix
+}
+
+fn wrap_rows(lines []TextRow, key EditorRowsKey) []TextRow {
 	mut result := []TextRow{}
 	for row in lines {
 		if row.no_wrap || row.glyphs.len == 0 { result << row; continue }
 		mut start := 0
 		for start < row.glyphs.len {
-			end := text_wrap_end(row.glyphs, start, width, max(1, c.md.tab_width), mode)
+			end := text_wrap_end(row.glyphs, start, key.width, key.tab_width, key.wrap)
 			result << TextRow{ ...row,
 				start: if start == 0 { row.start } else { row.glyphs[start].at },
 				end: if end == row.glyphs.len { row.end } else { row.glyphs[end].at },
-				glyphs: row.glyphs[start..end].clone() }
+				glyphs: if start == 0 && end == row.glyphs.len { row.glyphs } else { row.glyphs[start..end].clone() } }
 			start = end
 		}
 	}
@@ -277,10 +347,10 @@ fn text_wrap_end(glyphs []Glyph, start int, width int, tab_width int, mode TextW
 	return glyphs.len
 }
 
-fn plain_rows(text string) []TextRow {
+fn plain_rows(text string, start int, line int) []TextRow {
 	mut result := []TextRow{}
-	mut row := TextRow{}
-	mut at := 0
+	mut row := TextRow{start: start, line: line}
+	mut at := start
 	for at < text.len {
 		r, n := utf8.decode_rune_at(text, at)
 		if r == `\n` {
@@ -332,11 +402,19 @@ fn row_hit(row TextRow, column int, tab_width int, secret bool) int {
 
 fn (c &Ctl) caret_row(rows []TextRow) int {
 	caret := c.caret_position()
+	if c.kind != .markdown {
+		mut first, mut end := 0, rows.len
+		for first < end {
+			mid := first + (end - first) / 2
+			if rows[mid].start <= caret { first = mid + 1 } else { end = mid }
+		}
+		return max(0, first - 1)
+	}
 	// Wrapped table cells can share a source line; locate the actual glyph
 	// before falling back to the source row range. Synthetic borders have
 	// zero-length spans and must not steal the caret.
 	for i, row in rows {
-		if row.no_wrap {
+		if row.no_wrap && caret >= row.start && caret <= row.end {
 			for glyph in row.glyphs {
 				if caret >= glyph.at && caret < glyph.end { return i }
 			}
@@ -395,7 +473,9 @@ fn (mut app App) draw_editor(mut c Ctl) {
 		c.left = 0
 	}
 	a, b := c.selection()
-	for i := c.top; i < rows.len && i < c.top + height; i++ {
+	first := c.top + max(0, max(app.screen.paint_y, app.screen.clip.y) - c.y - inset)
+	last := min(rows.len, c.top + min(height, min(app.screen.paint_end, app.screen.clip.y + app.screen.clip.h) - c.y - inset))
+	for i in first .. last {
 		row := rows[i]
 		y := c.y + inset + i - c.top
 		if c.line_numbers { app.screen.text(c.x, y, '${row.line + 1:4} ', t.dim, bg, 0) }
@@ -410,6 +490,7 @@ fn (mut app App) draw_editor(mut c Ctl) {
 		}
 		mut col := 0
 		for g in row.glyphs {
+			if col - c.left >= view_w { break }
 			selected := g.at >= a && g.at < b
 			mut paint := MarkdownPaint{ fg: fg, bg: bg, attr: g.attr | row.attr }
 			if c.kind == .markdown {
@@ -429,9 +510,14 @@ fn (mut app App) draw_editor(mut c Ctl) {
 				app.screen.fill(Rect{c.x + margin + col - c.left, y, n, 1}, ` `, gfg, gbg)
 				col += n
 			} else {
-				if c.secret { app.screen.put(c.x + margin + col - c.left, y, `*`, gfg, gbg, attribute) }
-				else { app.screen.put_grapheme(c.x + margin + col - c.left, y, glyph_text(g), glyph_width(g), gfg, gbg, attribute) }
-				col += if c.secret { 1 } else { glyph_width(g) }
+				if c.secret {
+					app.screen.put(c.x + margin + col - c.left, y, `*`, gfg, gbg, attribute)
+					col++
+				} else {
+					width := glyph_width(g)
+					app.screen.put_grapheme(c.x + margin + col - c.left, y, glyph_text(g), width, gfg, gbg, attribute)
+					col += width
+				}
 			}
 		}
 		app.screen.restore_clip(old)
@@ -451,6 +537,7 @@ fn (mut app App) draw_editor(mut c Ctl) {
 		}
 	}
 	app.draw_scrollbar(&c, rows.len, height, inset)
+	if app.focus == &c { app.screen.cursor_x = -1 }
 	if app.focus == &c && !c.disabled && caret >= c.top && caret < c.top + height {
 		visible_col := if c.wrap_mode() != .none && !rows[caret].no_wrap { min(caret_col, view_w - 1) } else { caret_col - c.left }
 		app.screen.cursor_x = c.x + margin + visible_col
@@ -567,6 +654,7 @@ fn (mut c Ctl) editor_mouse(e Event, mut app App) {
 			if glyph.at == at && glyph.link != '' {
 				if f := c.md.linkfn {
 					f(mut c, glyph.link, mut app)
+					app.dirty = true
 					return
 				}
 			}
@@ -594,5 +682,5 @@ fn (mut c Ctl) editor_mouse(e Event, mut app App) {
 		if !e.shift { c.anchor = at }
 	}
 	c.scroll_hold = false
-	app.dirty = true
+	c.invalidate_paint()
 }

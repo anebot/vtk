@@ -28,6 +28,8 @@ mut:
 	utf8_buffer string
 	osc_escape  bool
 	pending     string
+	damage_top  int
+	damage_end  int
 }
 
 pub fn new_terminal(cols int, rows int) &Terminal {
@@ -84,6 +86,7 @@ fn (mut t Terminal) clear_range(row int, from int, to int) {
 	if row < 0 || row >= t.rows { return }
 	a, b := clamp(from, 0, t.cols), clamp(to, 0, t.cols)
 	if a >= b { return }
+	t.damage_rows(row, row + 1)
 	if a > 0 && a < t.cols && t.cells[row * t.cols + a].continuation {
 		t.cells[row * t.cols + a - 1] = t.blank()
 	}
@@ -96,6 +99,8 @@ fn (mut t Terminal) clear_range(row int, from int, to int) {
 }
 
 fn (mut t Terminal) scroll_region(lines int) {
+	if lines == 0 { return }
+	t.damage_rows(t.top, t.bottom + 1)
 	n := min(abs(lines), t.bottom - t.top + 1)
 	if lines > 0 {
 		for y in t.top .. t.bottom + 1 - n {
@@ -132,6 +137,7 @@ fn (mut t Terminal) put(r rune) {
 				t.newline()
 				at = t.cy * t.cols
 			} else { t.cx = column }
+			t.damage_rows(t.cy, t.cy + 1)
 			t.cells[at] = Cell{ ...previous, glyph: joined }
 			if width == 2 { t.cells[at + 1] = Cell{ ...previous, glyph: '', continuation: true } }
 			t.cx += width
@@ -144,6 +150,7 @@ fn (mut t Terminal) put(r rune) {
 			mut at := t.cy * t.cols + min(t.cols - 1, t.cx - 1)
 			if t.cells[at].continuation && at > 0 { at-- }
 			t.cells[at].glyph += r.str()
+			t.damage_rows(t.cy, t.cy + 1)
 		}
 		return
 	}
@@ -153,14 +160,21 @@ fn (mut t Terminal) put(r rune) {
 	}
 	at := t.cy * t.cols + t.cx
 	if t.cells[at].continuation && t.cx > 0 { t.cells[at - 1] = t.blank() }
-	if t.cx + 1 < t.cols && t.cells[at + 1].continuation { t.cells[at + 1] = t.blank() }
-	t.cells[at] = Cell{r.str(), t.fg, t.bg, t.attr, false}
+	if t.cx + w < t.cols && t.cells[at + w].continuation { t.cells[at + w] = t.blank() }
+	t.damage_rows(t.cy, t.cy + 1)
+	t.cells[at] = Cell{display_rune(r), t.fg, t.bg, t.attr, false}
 	if w == 2 { t.cells[at + 1] = Cell{'', t.fg, t.bg, t.attr, true} }
 	t.cx += w
 }
 
+fn (mut t Terminal) damage_rows(top int, end int) {
+	t.damage_top = if t.damage_end > 0 { min(t.damage_top, top) } else { top }
+	t.damage_end = max(t.damage_end, end)
+}
+
 pub fn (mut t Terminal) feed(bytes string) {
-	for byte in bytes.bytes() {
+	for i in 0 .. bytes.len {
+		byte := bytes[i]
 		match t.state {
 			0 {
 				if byte == 27 {
@@ -459,21 +473,33 @@ pub fn (mut t Terminal) close() {
 	t.pending = ''
 }
 
-fn (mut app App) pump_terminals(mut c Ctl) {
-	if c.closed { return }
-	if !isnil(c.term) {
-		c.term.flush_input()
-		mut budget := 65536
-		for budget > 0 {
-			bytes := c.term.pty.read(min(16384, budget))
-			if bytes == '' { break }
-			c.term.feed(bytes)
-			budget -= bytes.len
-			app.dirty = true
-		}
-		c.term.exited = !c.term.pty.alive()
+fn (mut app App) pump_terminal(mut c Ctl) {
+	if c.closed || isnil(c.term) { return }
+	mut t := c.term
+	t.flush_input()
+	t.damage_end = 0
+	x, y, hidden := t.cx, t.cy, t.cursor_hidden
+	mut budget := 65536
+	for budget > 0 {
+		bytes := t.pty.read(min(16384, budget))
+		if bytes == '' { break }
+		t.feed(bytes)
+		budget -= bytes.len
 	}
-	for mut child in c.kids { app.pump_terminals(mut child) }
+	t.exited = !t.pty.alive()
+	if !c.is_drawable() { return }
+	r := app.visible_paint_rect(c)
+	if r.w <= 0 || r.h <= 0 { return }
+	w := c.owner_window_ptr()
+	if !isnil(w) && app.covered_by_window(app.windows.index(w) + 1, r) { return }
+	if t.damage_end > 0 {
+		affected := Rect{c.x, c.y + t.damage_top, c.w, t.damage_end - t.damage_top}
+		app.invalidate_area(affected.intersection(r))
+	}
+	if app.focus == &c && (x != t.cx || y != t.cy || hidden != t.cursor_hidden) {
+		app.update_terminal_cursor(c)
+		app.cursor_dirty = true
+	}
 }
 
 fn (mut app App) close_terminals(mut c Ctl) {
@@ -485,17 +511,28 @@ fn (mut app App) close_terminals(mut c Ctl) {
 fn (mut app App) draw_terminal(mut c Ctl) {
 	if isnil(c.term) { return }
 	c.term.resize(c.w, c.h)
-	for y in 0 .. min(c.h, c.term.rows) {
+	first := max(0, max(app.screen.clip.y, app.screen.paint_y) - c.y)
+	end := min(min(c.h, c.term.rows), min(app.screen.clip.y + app.screen.clip.h, app.screen.paint_end) - c.y)
+	for y in first .. end {
 		for x in 0 .. min(c.w, c.term.cols) {
 			cell := c.term.cells[y * c.term.cols + x]
 			if !cell.continuation {
-				app.screen.text(c.x + x, c.y + y, cell.glyph, cell.fg, cell.bg, cell.attr)
+				wide := x + 1 < c.term.cols && c.term.cells[y * c.term.cols + x + 1].continuation
+				app.screen.put_grapheme(c.x + x, c.y + y, cell.glyph, 1 + int(wide), cell.fg, cell.bg, cell.attr)
+				if wide && app.screen.ascii && x + 1 < c.w {
+					app.screen.put(c.x + x + 1, c.y + y, ` `, cell.fg, cell.bg, 0)
+				}
 			}
 		}
 	}
-	if app.focus == &c && !c.term.cursor_hidden {
-		app.screen.cursor_x = c.x + min(c.w - 1, c.term.cx)
-		app.screen.cursor_y = c.y + c.term.cy
-		app.screen.cursor_shape = .block
-	}
+	if app.focus == &c { app.update_terminal_cursor(c) }
+}
+
+fn (mut app App) update_terminal_cursor(c &Ctl) {
+	x, y := c.x + min(c.w - 1, c.term.cx), c.y + c.term.cy
+	app.screen.cursor_x = -1
+	if c.disabled || c.term.cursor_hidden || app.popups.len > 0
+		|| c.owner_window_ptr() != app.top_window_ptr() || !app.visible_paint_rect(c).contains(x, y) { return }
+	app.screen.cursor_x, app.screen.cursor_y = x, y
+	app.screen.cursor_shape = .block
 }

@@ -60,8 +60,5 @@ fn (mut app App) sync_mouse_pointer() {
 	enabled := app.mouse_cursor.enabled && app.mouse_cursor.hide_pointer && app.terminal_focused
 	visible := enabled && Rect{0, 0, app.width, app.height}.contains(app.mouse_x, app.mouse_y)
 	sequence := app.driver.pointer.update(enabled, visible, time.ticks())
-	if sequence != '' {
-		print(sequence)
-		flush_stdout()
-	}
+	app.driver.output(sequence)
 }
