@@ -35,7 +35,7 @@ v run examples/vim.v README.md
 v run examples/draw.v
 v run examples/widgets.v
 v run examples/terminal.v
-v run examples/spreadsheet.v
+v run examples/spread.v
 v test .
 ```
 
@@ -702,10 +702,11 @@ Try `v run examples/terminal.v /path/to/worktree 'Shell: feature-worktree'`.
 
 `htk.v` translates `examples/htk.hc`. `draw.v` translates the HTK path of
 `examples/ui/draw.hc`. `word.v` and `vim.v` translate their editor workflows;
-the HolyC applications' `lib/text` document exporters and font services are
-outside this module. `widgets.v`, `terminal.v` and `spreadsheet.v` are additional
-native demos. The spreadsheet exercises editable tables, formulas, workbook
-persistence, selection, sorting, colors and sheet tab reordering.
+the HolyC applications' `lib/text` document exporters are outside this module.
+Word's Format > Font... window applies the Unicode styles above to a selection.
+`widgets.v`, `terminal.v` and `spread.v` are additional native demos.
+The spreadsheet exercises editable tables, formulas, workbook persistence,
+selection, sorting, colors and sheet tab reordering.
 
 The regression suite covers layout, focus, window lifecycle, modal ownership,
 input chunking, Unicode, clipboard/edit history, Vim, Markdown source mapping,

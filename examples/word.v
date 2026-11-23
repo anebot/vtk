@@ -474,6 +474,7 @@ fn choose_font(mut doc Document, mut app vtk.App) {
 		app.notify('Read only', 1500)
 		return
 	}
+	// Each style name previews the font it applies.
 	mut names := []string{cap: font_styles.len}
 	for style in font_styles {
 		name := style.str()
@@ -482,6 +483,7 @@ fn choose_font(mut doc Document, mut app vtk.App) {
 	at := app.choice_for(doc.window, 'Unicode text style', names, 2)
 	if at < 0 { return }
 	style := font_styles[at]
+	// Underline and strikethrough stay as portable Markdown tags.
 	if style == .underline {
 		wrap(mut doc, '<u>', '</u>')
 	} else if style == .strikethrough {
