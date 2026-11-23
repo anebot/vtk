@@ -151,6 +151,7 @@ pub fn (mut app App) app_menu(x int, y int) {
 fn (mut app App) bar_mouse(e Event) bool {
 	if app.bar_height() == 0 || e.y != app.bar_y() { return false }
 	if !isnil(app.blocker(unsafe { nil })) { return true }
+	if e.button in [.wheel_left, .wheel_right] { return true }
 	if e.button in [.wheel_up, .wheel_down] {
 		app.bar_offset = max(0, app.bar_offset + if e.button == .wheel_up { -3 } else { 3 })
 		return true

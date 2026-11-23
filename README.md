@@ -273,6 +273,11 @@ parser also joins sequences delivered across separate PTY reads. Unicode emoji
 properties are generated into `lib/emoji_data.v`; optional regeneration uses
 `tools/unicode-width.swift`, with no Swift dependency at build time.
 
+Mouse wheel reports keep all four directions distinct. Horizontal wheel or
+trackpad travel is ignored by vertical panels, rather than becoming vertical
+scrolling. Wrapped editors scroll by display rows, preserve their caret and
+selection, and retain mouse capture when a wheel event arrives during a drag.
+
 Markdown modes independently select source/rendered and editable/read-only
 presentation. The V renderer handles headings, emphasis, inline code, links,
 lists, task checkboxes, quotes, fenced code and pipe tables. Tables support

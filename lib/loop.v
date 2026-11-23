@@ -418,6 +418,19 @@ pub fn (mut app App) scroll_ctl(mut c Ctl, rows int) bool {
 
 fn (mut app App) mouse(e Event) {
 	app.dirty = true
+	if e.button.is_wheel() {
+		if !e.pressed { return }
+		// Wheel reports are not left-button drag/motion events. Retain capture
+		// and selection while scrolling text; leave a dragged thumb stationary.
+		if !isnil(app.scroll_drag) { return }
+		if !isnil(app.drag) {
+			mut target := app.drag
+			if target.kind in [.entry, .multiline, .markdown] && e.button in [.wheel_up, .wheel_down] {
+				app.scroll_ctl(mut target, if e.button == .wheel_up { -1 } else { 1 })
+			}
+			return
+		}
+	}
 	now := app.now()
 	last_title := app.title_click
 	double_title_click := e.pressed && !e.motion && e.button == .left && !isnil(last_title)
@@ -622,7 +635,9 @@ fn (mut app App) mouse(e Event) {
 	if f := c.mousefn {
 		if f(mut c, e, mut app) { return }
 	}
-	if e.button in [.wheel_up, .wheel_down] {
+	if e.button.is_wheel() {
+		// Horizontal trackpad noise must never reverse a vertical scroll.
+		if e.button in [.wheel_left, .wheel_right] { return }
 		mut p := c
 		for !isnil(p) {
 			if app.scroll_ctl(mut p, if e.button == .wheel_up { -1 } else { 1 }) { return }

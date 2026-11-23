@@ -51,6 +51,12 @@ pub enum MouseButton {
 	right
 	wheel_up
 	wheel_down
+	wheel_left
+	wheel_right
+}
+
+fn (button MouseButton) is_wheel() bool {
+	return button in [.wheel_up, .wheel_down, .wheel_left, .wheel_right]
 }
 
 pub struct Event {
@@ -251,10 +257,11 @@ pub fn (mut input Input) feed(bytes string) []Event {
 					if parts.len == 3 {
 						code := parts[0].int()
 						mouse_button := if code & 64 != 0 {
-							if code & 1 == 0 {
-								MouseButton.wheel_up
-							} else {
-								MouseButton.wheel_down
+							match code & 3 {
+								0 { MouseButton.wheel_up }
+								1 { MouseButton.wheel_down }
+								2 { MouseButton.wheel_left }
+								else { MouseButton.wheel_right }
 							}
 						} else {
 							match code & 3 {
