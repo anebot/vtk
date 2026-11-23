@@ -314,6 +314,7 @@ fn test_terminal_resize_keeps_windows_inside_the_workspace() {
 			mut displaced := app.window('Displaced', 25, 8)
 			displaced.x = 70
 			displaced.y = 25
+			original_displaced := displaced.rect()
 			mut oversized := app.window('Oversized', 90, 30)
 			mut field := entry('Keep this text', 0)
 			oversized.add(mut field)
@@ -321,21 +322,20 @@ fn test_terminal_resize_keeps_windows_inside_the_workspace() {
 			order := app.windows.clone()
 			app.dispatch(Event{ kind: .resize, width: 40, height: 12 })
 			area := app.work_area()
-			assert inside.rect() == original
+			assert inside.w == original.w && inside.h == original.h
 			assert oversized.w == 40 && oversized.h == area.h
 			for w in app.windows {
 				assert w.x >= area.x && w.x + w.w <= area.x + area.w
 				assert w.y >= area.y && w.y + w.h <= area.y + area.h
 			}
 			assert app.windows == order && app.focus == field && field.text == 'Keep this text'
-			adjusted := displaced.rect()
 			app.raise(mut displaced)
 			app.redraw()
 			app.dispatch(Event{ kind: .mouse, x: displaced.x + 2, y: displaced.y, button: .left, pressed: true })
 			assert app.popups.len == 1 && app.popups[0].link.kids[0].link == displaced
 			app.close_popups()
 			app.dispatch(Event{ kind: .resize, width: 100, height: 40 })
-			assert displaced.rect() == adjusted && inside.rect() == original
+			assert displaced.rect() == original_displaced && inside.rect() == original
 		}
 	}
 }
@@ -382,9 +382,8 @@ fn test_terminal_resize_preserves_minimum_sizes_and_cancels_stale_placement() {
 	assert app.screen.cells[app.width..app.width + 4].map(it.glyph).join('') == ' [=]'
 	app.dispatch(Event{ kind: .resize, width: 80, height: 24 })
 	app.dispatch(Event{ key: int(Key.escape) })
-	// The top attachment recovers its original height; the floating horizontal
-	// axis retains the width it was clamped to in the smaller terminal.
-	assert w.rect() == Rect{0, 1, 24, 10}
+	// Both attached and floating axes recover their original geometry.
+	assert w.rect() == Rect{2, 1, 30, 10}
 }
 
 fn test_new_windows_and_bar_changes_keep_the_whole_frame_in_the_workspace() {

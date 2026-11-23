@@ -130,7 +130,7 @@ fn test_terminal_resize_moves_shared_edges_to_respect_size_limits() {
 	assert right.rect() == Rect{50, 0, 50, 30}
 }
 
-fn test_terminal_resize_preserves_docked_size_and_leaves_floating_windows_alone() {
+fn test_terminal_resize_preserves_docked_size_and_proportional_floating_margins() {
 	mut app := new_app()
 	app.desktop = false
 	app.width = 101
@@ -139,17 +139,65 @@ fn test_terminal_resize_preserves_docked_size_and_leaves_floating_windows_alone(
 	floating := resize_test_window(mut app, 'Floating', Rect{5, 5, 20, 5})
 	app.dispatch(Event{ kind: .resize, width: 137, height: 44 })
 	assert docked.rect() == Rect{112, 36, 25, 8}
-	assert floating.rect() == Rect{5, 5, 20, 5}
+	assert floating.rect() == Rect{7, 8, 20, 5}
 	// Raising a window changes stacking order, not the saved layout.
 	app.raise(mut docked)
 	app.dispatch(Event{ kind: .resize, width: 101, height: 30 })
 	assert docked.rect() == Rect{76, 22, 25, 8}
+	assert floating.rect() == Rect{5, 5, 20, 5}
 	// User placement breaks the old attachments before the next resize.
 	docked.x = 60
 	docked.y = 10
 	app.dispatch(Event{ kind: .resize, width: 137, height: 44 })
-	assert docked.rect() == Rect{60, 10, 25, 8}
-	assert floating.rect() == Rect{5, 5, 20, 5}
+	assert docked.rect() == Rect{88, 16, 25, 8}
+	assert floating.rect() == Rect{7, 8, 20, 5}
+}
+
+fn test_terminal_resize_keeps_floating_windows_centered_without_resizing() {
+	for desktop in [false, true] {
+		for bar_top in [false, true] {
+			mut app := new_app()
+			app.desktop = desktop
+			app.bar_top = bar_top
+			app.width = 100
+			app.height = 40 + int(desktop)
+			area := app.work_area()
+			w := resize_test_window(mut app, 'Centered', Rect{40, area.y + 15, 20, 10})
+			original := w.rect()
+			for _ in 0 .. 4 {
+				for dimensions in [[140, 60], [99, 37], [60, 20], [100, 40]] {
+					app.dispatch(Event{ kind: .resize, width: dimensions[0],
+						height: dimensions[1] + int(desktop) })
+					app.redraw()
+					current := app.work_area()
+					assert w.w == 20 && w.h == 10
+					assert abs((w.x - current.x) * 2 - (current.w - w.w)) <= 1
+					assert abs((w.y - current.y) * 2 - (current.h - w.h)) <= 1
+				}
+				assert w.rect() == original
+			}
+			// A temporarily tiny terminal must not replace the saved placement.
+			app.dispatch(Event{ kind: .resize, width: 12, height: 2 })
+			assert w.w == 16 && w.h == 3
+			app.dispatch(Event{ kind: .resize, width: 100, height: 40 + int(desktop) })
+			assert w.rect() == original
+		}
+	}
+}
+
+fn test_terminal_resize_preserves_floating_margins_on_each_unattached_axis() {
+	mut app := new_app()
+	app.desktop = false
+	app.width = 100
+	app.height = 40
+	left := resize_test_window(mut app, 'Left', Rect{0, 15, 20, 10})
+	top := resize_test_window(mut app, 'Top', Rect{40, 0, 20, 10})
+	app.dispatch(Event{ kind: .resize, width: 140, height: 60 })
+	assert left.rect() == Rect{0, 25, 20, 10}
+	assert top.rect() == Rect{60, 0, 20, 10}
+	app.dispatch(Event{ kind: .resize, width: 100, height: 40 })
+	assert left.rect() == Rect{0, 15, 20, 10}
+	assert top.rect() == Rect{40, 0, 20, 10}
 }
 
 fn test_terminal_resize_propagates_size_limits_through_a_chain_of_tiles() {

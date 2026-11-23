@@ -250,8 +250,10 @@ Changing the bar's position or visibility moves windows back inside the workspac
 Terminal resizing preserves screen-edge attachments and touching window borders,
 including manually arranged tiles. Shared borders follow the workspace proportions;
 windows attached along only one edge retain their size where space permits.
-Window size limits take precedence, and unattached windows are clamped to fit.
-Repeated resizes retain the original tiled layout without rounding drift, even
+Unattached axes preserve the proportional gaps to opposite workspace edges without
+resizing the window, so centered windows stay centered. Window size limits take
+precedence, and windows are clamped to fit when space is limited.
+Repeated resizes retain the original layout without rounding drift, even
 after a terminal temporarily becomes too small to contain the minimum sizes.
 The title controls are selected with `window_menu`, `window_minimize`,
 `window_maximize`, `window_close`, or their bitwise combination.

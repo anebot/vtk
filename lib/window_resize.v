@@ -1,7 +1,7 @@
 module vtk
 
 // Keep the last user-arranged geometry separately from the applied geometry.
-// Reusing it avoids rounding drift and restores tiles after a tiny terminal.
+// Reusing it avoids rounding drift and restores windows after a tiny terminal.
 struct WindowLayout {
 	area Rect
 mut:
@@ -116,17 +116,27 @@ fn (layout &WindowLayout) resize_axis(area Rect, vertical bool) {
 			joins << WindowEdgeJoin{a, b, overlap}
 		}
 	}
-	if !attached.any(it) { return }
 	mut limits := [][]int{len: n, init: []int{len: n, init: window_edge_infinity}}
 	mut target := []int{len: n}
 	mut active := []bool{len: n}
 	for i in 0 .. n { limits[i][i] = 0 }
 	for i, p in placements {
 		a, b := i * 2 + 1, i * 2 + 2
-		if !attached[a] && !attached[b] { continue }
+		start, span := window_axis(p.rect, vertical)
+		if !attached[a] && !attached[b] {
+			// Preserve the ratio of opposite margins without scaling the window.
+			old_gap := old_size - span
+			target[a] = if old_gap > 0 {
+				int((i64(clamp(start - old_origin, 0, old_gap)) * max(0, size - span)
+					+ old_gap / 2) / old_gap)
+			} else {
+				0
+			}
+			target[b] = target[a] + span
+			continue
+		}
 		active[a] = true
 		active[b] = true
-		start, span := window_axis(p.rect, vertical)
 		target[a] = int(i64(start - old_origin) * size / old_size)
 		target[b] = int(i64(start + span - old_origin) * size / old_size)
 		if !attached[a] { target[a] = target[b] - span }
@@ -150,7 +160,6 @@ fn (layout &WindowLayout) resize_axis(area Rect, vertical bool) {
 	positions := window_edge_positions(mut limits, target, active, attached)
 	for i, p in placements {
 		a, b := i * 2 + 1, i * 2 + 2
-		if !active[a] { continue }
 		mut w := p.window
 		if vertical {
 			w.y = origin + positions[a]
