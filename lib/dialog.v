@@ -2,10 +2,10 @@ module vtk
 
 import os
 
-fn dialog_accept(mut c Ctl, mut app App) {
+fn dialog_accept(mut c Ctl, mut _ App) {
 	mut w := c.owner_window()
 	w.value = int(c.data)
-	app.close(mut w)
+	w.close()
 }
 
 fn dialog_button(text string, accepted bool) &Ctl {
@@ -122,12 +122,6 @@ pub fn (mut app App) prompt(title string, text string, initial string) ?string {
 	return app.prompt_for(app.top_window(), title, text, initial)
 }
 
-fn choice_accept(mut c Ctl, mut app App) {
-	mut w := c.owner_window()
-	w.value = int(c.data)
-	app.close(mut w)
-}
-
 pub fn (mut app App) choice_for(owner &Ctl, title string, items []string, columns int) int {
 	mut body := grid()
 	cols := clamp(columns, 1, 64)
@@ -137,7 +131,7 @@ pub fn (mut app App) choice_for(owner &Ctl, title string, items []string, column
 		b.col = i % cols
 		b.row = i / cols
 		b.data = i
-		b.changed = choice_accept
+		b.changed = dialog_accept
 		body.add(mut b)
 	}
 	mut w := app.dialog(title, mut body)
@@ -146,12 +140,12 @@ pub fn (mut app App) choice_for(owner &Ctl, title string, items []string, column
 	return result
 }
 
-fn list_accept(mut c Ctl, mut app App) {
+fn list_accept(mut c Ctl, mut _ App) {
 	mut list := if c.kind == .tree { &c } else { c.link }
 	if isnil(list.link) { return }
 	mut w := c.owner_window()
 	w.value = int(list.link.data)
-	app.close(mut w)
+	w.close()
 }
 
 pub fn (mut app App) list_choice_for(owner &Ctl, title string, items []string, selected int) int {
@@ -260,7 +254,7 @@ fn file_accept(mut c Ctl, mut app App) {
 		pick.fill(path) or { app.notify(err.msg(), 2500) }
 	} else if path != '' {
 		pick.result = path
-		app.close(mut pick.window)
+		pick.window.close()
 	}
 }
 

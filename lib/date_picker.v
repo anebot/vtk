@@ -133,10 +133,10 @@ fn (mut app App) draw_date_picker(c &Ctl) {
 	app.screen.text(c.x + max(8, c.w - 10), c.y + 8, picker_date_text(date), fg, t.field_bg, 0)
 }
 
-fn date_picker_accept(mut c Ctl, mut app App) {
+fn date_picker_accept(mut c Ctl, mut _ App) {
 	mut w := c.owner_window()
 	w.value = 1
-	app.close(mut w)
+	w.close()
 }
 
 // date_pick returns the chosen date, or none when cancelled.

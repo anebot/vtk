@@ -222,7 +222,7 @@ fn window_menu_action(mut item Ctl, mut app App) {
 		3 { app.begin_placement(mut w, false) }
 		4 { app.begin_placement(mut w, true) }
 		5 { app.always_on_top(mut w, !w.always_on_top) }
-		6 { app.close(mut w) }
+		6 { w.close() }
 		7 { app.tile_side(mut w, .left) }
 		8 { app.tile_side(mut w, .right) }
 		9 { app.tile_side(mut w, .top) }

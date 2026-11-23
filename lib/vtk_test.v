@@ -51,7 +51,7 @@ fn test_layout_focus_tabs_and_window_lifecycle() {
 	assert w.minimized
 	app.raise(mut w)
 	assert !w.minimized
-	assert app.close(mut w)
+	assert w.close()
 	assert w.closed
 }
 
@@ -242,15 +242,15 @@ fn modal_close_hook(mut app App) {
 		assert app.blocker(dialog.modal_owner) == dialog
 		mut other := app.window('Independent window', 24, 6)
 		assert isnil(app.blocker(other))
-		app.close(mut other)
+		other.close()
 	} else {
 		mut other := app.window('Blocked new window', 24, 6)
 		assert app.blocker(other) == dialog
 		assert app.top_window() == dialog
-		app.close(mut other)
+		other.close()
 	}
 	dialog.value = 42
-	app.close(mut dialog)
+	dialog.close()
 }
 
 fn test_modal_owners_application_modality_and_timer_reentrancy() {
