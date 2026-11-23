@@ -1,6 +1,6 @@
 V ?= v
 BUILD_DIR ?= build
-EXAMPLES = htk word vim draw widgets terminal
+EXAMPLES = htk word vim draw widgets terminal spreadsheet
 BINARIES = $(addprefix $(BUILD_DIR)/,$(EXAMPLES))
 SOURCES = $(wildcard lib/*.v examples/support/*.v) v.mod
 VML_SOURCES = vml/main.v vml/parser.v vml/generator.v vml/vtk.vmlt
@@ -13,6 +13,8 @@ all: $(BINARIES) vml
 $(BUILD_DIR)/%: examples/%.v $(SOURCES)
 	mkdir -p $(BUILD_DIR)
 	$(V) -o $@ $<
+
+$(BUILD_DIR)/spreadsheet: $(wildcard examples/spreadsheet/*.v)
 
 $(BUILD_DIR)/vmlc: $(VML_SOURCES)
 	mkdir -p $(BUILD_DIR)

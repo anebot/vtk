@@ -190,6 +190,8 @@ pub fn (mut app App) dispatch(e Event) {
 			mut c := app.focus
 			if c.kind == .terminal {
 				c.term.write(e.text)
+			} else if c.kind == .table && c.table.pasteable {
+				c.table_paste(e.text) or { app.notify(err.msg(), 3000) }
 			} else if c.kind in [.entry, .multiline, .markdown] {
 				c.replace_selection(e.text)
 			}
@@ -252,6 +254,7 @@ pub fn (mut app App) dispatch(e Event) {
 				if f(mut app.focus, e, mut app) { return }
 			}
 		}
+		if !isnil(app.focus) && app.focus.kind == .table && app.focus.table_key(e, mut app) { return }
 		app.focus_next(e.shift)
 		return
 	}
@@ -341,8 +344,9 @@ fn (mut app App) widget_key(mut c Ctl, event Event) bool {
 				return true
 			}
 		}
-		.radio, .tabs, .table {
-			count := if c.kind == .table { c.row_count } else { c.kids.len }
+		.table { return c.table_key(e, mut app) }
+		.radio, .tabs {
+			count := c.kids.len
 			if count == 0 { return false }
 			step := if e.key == int(Key.page_up) {
 				-max(1, c.h - 2)
@@ -497,6 +501,7 @@ fn (mut app App) mouse(e Event) {
 	}
 	if !isnil(app.drag) {
 		mut c := app.drag
+		if c.kind == .table { c.table_drag(e, mut app); return }
 		if c.kind == .split {
 			if e.button == .none && !e.pressed { app.drag = unsafe { nil }; return }
 			if e.button != .left { return }
@@ -678,6 +683,7 @@ fn (mut app App) mouse(e Event) {
 	if f := c.mousefn {
 		if f(mut c, e, mut app) { return }
 	}
+	if c.kind == .table && c.table_mouse(e, mut app) { return }
 	if e.button.is_wheel() {
 		// Horizontal trackpad noise must never reverse a vertical scroll.
 		if e.button in [.wheel_left, .wheel_right] { return }
@@ -738,12 +744,6 @@ fn (mut app App) mouse(e Event) {
 					c.fire()
 					break
 				}
-			}
-		}
-		.table {
-			if e.y > c.y && c.row_count > 0 {
-				c.scroll_hold = false
-				c.set_value(clamp(c.top + e.y - c.y - 1, 0, c.row_count - 1))
 			}
 		}
 		.tree {

@@ -143,6 +143,7 @@ pub mut:
 	edit          &Edit = &Edit{}
 	md            Markdown
 	vim           Vim
+	table         Table
 mut:
 	parent        &Ctl = unsafe { nil }
 	kids          []&Ctl

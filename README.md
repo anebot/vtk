@@ -24,7 +24,7 @@ make test
 ./build/draw
 ```
 
-`make` builds all six native examples, the VML compiler, and four VML examples
+`make` builds all seven native examples, the VML compiler, and four VML examples
 in `build/`.
 You can also run the original examples directly:
 
@@ -35,6 +35,7 @@ v run examples/vim.v README.md
 v run examples/draw.v
 v run examples/widgets.v
 v run examples/terminal.v
+v run examples/spreadsheet.v
 v test .
 ```
 
@@ -170,6 +171,14 @@ button with `app.set_default_button(mut window, button)` and query it with
 `window.get_default_button()`. Popup relationships are managed internally. `link`
 is an optional associated-control reference used by callbacks; unwrap it before
 use. `user` and `data` hold application state.
+
+Tables support configurable row, column and rectangular cell selection, stable
+ascending/descending sorting, column resizing/reordering, row dragging, cell
+editing, TSV copy/paste and cell colors. Each behavior has source-level options;
+existing tables retain single-row selection and fixed column order by default.
+See [the table API](lib/TABLES.md) and the runnable
+[spreadsheet example](examples/spreadsheet/README.md), including formulas,
+undo/redo, colored cells, workbook save/load and reorderable sheet tabs.
 
 Grid children use `row` and `col`, both in `0..64`. Expanding children share
 spare space; horizontal boxes leave one cell between children. Button bars
@@ -583,13 +592,17 @@ Try `v run examples/terminal.v /path/to/worktree 'Shell: feature-worktree'`.
 `htk.v` translates `examples/htk.hc`. `draw.v` translates the HTK path of
 `examples/ui/draw.hc`. `word.v` and `vim.v` translate their editor workflows;
 the HolyC applications' `lib/text` document exporters and font services are
-outside this module. `widgets.v` and `terminal.v` are additional native demos.
+outside this module. `widgets.v`, `terminal.v` and `spreadsheet.v` are additional
+native demos. The spreadsheet exercises editable tables, formulas, workbook
+persistence, selection, sorting, colors and sheet tab reordering.
 
 The regression suite covers layout, focus, window lifecycle, modal ownership,
 input chunking, Unicode, clipboard/edit history, Vim, Markdown source mapping,
-settings, terminal parsing and actual Unix PTY I/O. All six examples have
+settings, terminal parsing and actual Unix PTY I/O. The six original examples have
 been built and exercised under pseudo terminals on macOS, including resize,
 UTF-8 file saving and terminal restoration. Windows code has been V type-checked;
 ConPTY runtime behavior still needs validation on Windows 10 or newer.
+The spreadsheet also has model and headless UI regressions for formulas,
+validation, undo/redo, persistence, selection, paste and sheet tab reordering.
 
 The port follows the repository's public-domain dedication; see [COPYING](COPYING).

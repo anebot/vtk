@@ -164,6 +164,8 @@ fn (mut app App) dispose_ctl(mut c Ctl) {
 	c.scrollfn = none
 	c.closing = none
 	c.cellfn = none
+	c.table = Table{}
+	c.reordered = none
 	c.paint = none
 	c.md.linkfn = none
 	app.dirty = true

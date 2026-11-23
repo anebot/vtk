@@ -52,7 +52,14 @@ pub fn (mut c Ctl) add_item(text string) &Ctl {
 	return item
 }
 
-pub fn (mut c Ctl) table_column(title string) { c.add_item(title) }
+pub fn (mut c Ctl) table_column(title string, options TableColumnOptions) int {
+	if c.kind != .table || c.destroyed { return -1 }
+	index := c.kids.len
+	c.add_item(title)
+	c.table.columns[index] = options
+	c.table.widths.delete(index)
+	return index
+}
 
 pub fn (c &Ctl) table_cell(row int, col int) string {
 	if f := c.cellfn { return f(c, row, col) }
@@ -63,6 +70,7 @@ pub fn (mut c Ctl) set_value(value int) {
 	v := if c.kind in [.slider, .spin, .progress] { clamp(value, c.low, c.high) } else { value }
 	if c.value != v {
 		c.value = v
+		if c.kind == .table { c.table.anchor_row = -1; c.table.anchor_column = -1 }
 		c.fire()
 	}
 }
@@ -201,34 +209,7 @@ fn (mut app App) draw_ctl(mut c Ctl) {
 				}, 0)
 			}
 		}
-		.table {
-			n := c.kids.len
-			if n > 0 {
-				span := max(1, (c.w - int(c.scrollbar)) / n)
-				for i, col in c.kids {
-					clip := app.screen.set_clip(Rect{c.x + i * span, c.y, span - 1, 1})
-					app.screen.text(c.x + i * span, c.y, col.text, fg, bg, bold | underline)
-					app.screen.restore_clip(clip)
-				}
-				c.scroll_into_view(c.value, c.h - 1)
-				c.top = clamp(c.top, 0, c.row_count - max(1, c.h - 1))
-				for row := c.top; row < c.row_count && row < c.top + c.h - 1; row++ {
-					rowbg := if row == c.value {
-						if focused { t.focus_bg } else { t.sel_bg }
-					} else {
-						bg
-					}
-					rowfg := if row == c.value { if focused { t.focus_fg } else { t.sel_fg } } else { fg }
-					app.screen.fill(Rect{c.x, c.y + row - c.top + 1, c.w, 1}, ` `, rowfg, rowbg)
-					for col in 0 .. n {
-						clip := app.screen.set_clip(Rect{c.x + col * span, c.y + row - c.top + 1, max(0, span - 1), 1})
-						app.screen.text(c.x + col * span, c.y + row - c.top + 1, c.table_cell(row, col), rowfg, rowbg, 0)
-						app.screen.restore_clip(clip)
-					}
-				}
-				app.draw_scrollbar(c, c.row_count, max(1, c.h - 1), 1)
-			}
-		}
+		.table { app.draw_table(mut c, fg, bg) }
 		.tree {
 			rows := c.tree_rows()
 			for i, row in rows {

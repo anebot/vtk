@@ -69,9 +69,14 @@ fn main() {
 	mut activity := vtk.spinner('Working')
 	body.add(mut activity)
 	mut tabs := vtk.tabs()
+	tabs.reorderable = true
 	mut table := vtk.table(table_cell, 100)
-	table.table_column('Name')
-	table.table_column('Square')
+	table.table_column('Name', min_width: 8)
+	table.table_column('Square', numeric: true, align: .right, min_width: 8)
+	table.table.sortable = true
+	table.table.resizable_columns = true
+	table.table.reorderable_columns = true
+	table.table.multi_select = true
 	tabs.add_tab('Table', mut table)
 	mut tree := vtk.tree()
 	root := tree.tree_add(none, 'Library')
