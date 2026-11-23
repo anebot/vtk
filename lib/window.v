@@ -277,8 +277,8 @@ pub fn (mut app App) tile() {
 		w.maximized = false
 		w.x = (i % cols) * app.width / cols
 		w.y = area.y + (i / cols) * area.h / rows
-		w.w = app.width / cols
-		w.h = area.h / rows
+		w.w = ((i % cols) + 1) * app.width / cols - w.x
+		w.h = area.y + ((i / cols) + 1) * area.h / rows - w.y
 		w.fit_window(area)
 	}
 	app.dirty = true

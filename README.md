@@ -203,9 +203,13 @@ Drag a maximized window's frame edge or corner to resize it from its current bou
 The minimum window size is 16 columns by 3 rows, including the frame.
 Opening, moving, resizing and arranging windows keep their full frames inside
 the workspace, respecting their size limits and the app bar at either edge.
-Changing the bar's position or visibility and resizing the terminal also move
-windows back inside the workspace and shrink oversized windows to fit.
-Windows retain their minimum sizes even in smaller terminals.
+Changing the bar's position or visibility moves windows back inside the workspace.
+Terminal resizing preserves screen-edge attachments and touching window borders,
+including manually arranged tiles. Shared borders follow the workspace proportions;
+windows attached along only one edge retain their size where space permits.
+Window size limits take precedence, and unattached windows are clamped to fit.
+Repeated resizes retain the original tiled layout without rounding drift, even
+after a terminal temporarily becomes too small to contain the minimum sizes.
 The title controls are selected with `window_menu`, `window_minimize`,
 `window_maximize`, `window_close`, or their bitwise combination.
 Window buttons in the app bar use `[= AppName]`: click `=` for the window's

@@ -132,12 +132,13 @@ pub fn (mut app App) dispatch(e Event) {
 		return
 	}
 	if e.kind == .resize {
+		if !isnil(app.placement) { app.placement_key(Event{ key: int(Key.escape) }) }
+		old_area := app.work_area()
 		app.width = max(1, e.width)
 		app.height = max(1, e.height)
 		app.drag = unsafe { nil }
 		app.scroll_drag = unsafe { nil }
-		if !isnil(app.placement) { app.placement_key(Event{ key: int(Key.escape) }) }
-		app.fit_windows()
+		app.resize_windows(old_area)
 		app.screen.resize(app.width, app.height)
 		app.layout_popups()
 		app.sync_mouse_pointer()

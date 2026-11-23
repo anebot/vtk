@@ -382,7 +382,9 @@ fn test_terminal_resize_preserves_minimum_sizes_and_cancels_stale_placement() {
 	assert app.screen.cells[app.width..app.width + 4].map(it.glyph).join('') == ' [=]'
 	app.dispatch(Event{ kind: .resize, width: 80, height: 24 })
 	app.dispatch(Event{ key: int(Key.escape) })
-	assert w.rect() == Rect{0, 1, 24, 6}
+	// The top attachment recovers its original height; the floating horizontal
+	// axis retains the width it was clamped to in the smaller terminal.
+	assert w.rect() == Rect{0, 1, 24, 10}
 }
 
 fn test_new_windows_and_bar_changes_keep_the_whole_frame_in_the_workspace() {

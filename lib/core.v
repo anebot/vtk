@@ -338,6 +338,7 @@ mut:
 	placement        &Ctl = unsafe { nil }
 	placement_resize bool
 	placement_start  Rect
+	window_layout    WindowLayout
 	settings_path    string
 	bar_offset       int
 	next_window_order int
