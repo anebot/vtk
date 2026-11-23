@@ -82,11 +82,12 @@ fn test_dialog_result_and_default_button_preserve_callback_associations() {
 	dialog.default_button = accept
 	dialog.link = associated
 	app.set_focus(field)
-	app.after(0, fn (mut app App) {
+	app.after(0, fn [dialog, associated, accept] (mut app App) {
 		app.dispatch(Event{ key: int(Key.enter) })
+		assert dialog.link == ?&Ctl(associated) && dialog.default_button == accept
 		app.quit() // A regression must fail instead of blocking the modal loop.
 	})
 	assert app.modal_for(mut dialog, none) == 7
-	assert dialog.link == ?&Ctl(associated) && dialog.default_button == accept
+	assert dialog.link == none && dialog.get_default_button() == none && associated.data == 99
 	app.destroy_ctl(mut dialog)
 }

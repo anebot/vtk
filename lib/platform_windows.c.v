@@ -14,6 +14,7 @@ mut:
 	mouse_motion bool
 	pointer      MousePointer
 	eof          bool
+	read_buffer  []u8
 }
 
 fn (mut d Driver) start() ! {
@@ -43,17 +44,18 @@ fn (mut d Driver) stop() {
 	C.SetConsoleMode(d.input, d.input_mode)
 	C.SetConsoleMode(d.output, d.output_mode)
 	d.active = false
+	d.read_buffer = []
 }
 
 fn (mut d Driver) read(timeout int) string {
 	if C.WaitForSingleObject(d.input, u32(max(0, timeout))) != 0 { return '' }
-	mut bytes := []u8{len: 16384}
+	if d.read_buffer.len == 0 { d.read_buffer = []u8{len: 16384} }
 	mut n := u32(0)
-	if !C.ReadFile(d.input, bytes.data, u32(bytes.len), &n, unsafe { nil }) {
+	if !C.ReadFile(d.input, d.read_buffer.data, u32(d.read_buffer.len), &n, unsafe { nil }) {
 		d.eof = true
 		return ''
 	}
-	return bytes[..int(n)].bytestr()
+	return d.read_buffer[..int(n)].bytestr()
 }
 
 fn (d &Driver) size() (int, int) {

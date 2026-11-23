@@ -27,7 +27,6 @@ mut:
 	sequence    string
 	utf8_buffer string
 	osc_escape  bool
-	repaint     bool = true
 	pending     string
 }
 
@@ -77,7 +76,6 @@ pub fn (mut t Terminal) resize(cols int, rows int) {
 	t.cx = clamp(t.cx, 0, w - 1)
 	t.cy = clamp(t.cy, 0, h - 1)
 	t.pty.resize(w, h)
-	t.repaint = true
 }
 
 fn (t &Terminal) blank() Cell { return Cell{ fg: t.fg, bg: t.bg } }
@@ -245,7 +243,6 @@ pub fn (mut t Terminal) feed(bytes string) {
 			else { t.state = 0 }
 		}
 	}
-	t.repaint = true
 }
 
 fn param(params []int, i int, fallback int) int {
@@ -405,6 +402,7 @@ fn (mut t Terminal) sgr(p []int) {
 }
 
 pub fn (mut t Terminal) write(text string) {
+	if t.exited { return }
 	t.pending += text
 	t.flush_input()
 }
@@ -458,6 +456,7 @@ pub fn (mut t Terminal) key(e Event) {
 pub fn (mut t Terminal) close() {
 	t.pty.close()
 	t.exited = true
+	t.pending = ''
 }
 
 fn (mut app App) pump_terminals(mut c Ctl) {
@@ -480,6 +479,7 @@ fn (mut app App) pump_terminals(mut c Ctl) {
 fn (mut app App) close_terminals(mut c Ctl) {
 	if !isnil(c.term) { c.term.close() }
 	for mut child in c.kids { app.close_terminals(mut child) }
+	if !isnil(c.menu) { app.close_terminals(mut c.menu) }
 }
 
 fn (mut app App) draw_terminal(mut c Ctl) {
@@ -498,5 +498,4 @@ fn (mut app App) draw_terminal(mut c Ctl) {
 		app.screen.cursor_y = c.y + c.term.cy
 		app.screen.cursor_shape = .block
 	}
-	c.term.repaint = false
 }

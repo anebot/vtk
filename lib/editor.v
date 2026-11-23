@@ -25,10 +25,7 @@ mut:
 }
 
 pub fn (mut edit Edit) reset() {
-	edit.undo.clear()
-	edit.redo.clear()
-	edit.grouping = false
-	edit.revision++
+	edit = Edit{revision: edit.revision + 1}
 }
 
 pub fn entry(text string, byte_limit int) &Ctl {
@@ -82,7 +79,7 @@ pub fn (mut c Ctl) replace_range(from int, to int, text string) bool {
 	if !c.edit.grouping {
 		c.edit.undo << Change{from, before, insertion, c.cursor, c.anchor, from + insertion.len}
 	}
-	c.edit.redo.clear()
+	c.edit.redo = []
 	c.edit.revision++
 	c.text = c.text[..from] + insertion + c.text[to..]
 	c.cursor = from + insertion.len
@@ -100,7 +97,8 @@ pub fn (mut c Ctl) replace_selection(text string) bool {
 pub fn (mut c Ctl) undo() bool {
 	c.end_edit_group()
 	if c.readonly || c.edit.undo.len == 0 { return false }
-	change := c.edit.undo.pop()
+	change := c.edit.undo.last()
+	c.edit.undo.delete_last()
 	c.text = c.text[..change.at] + change.before + c.text[change.at + change.after.len..]
 	c.cursor = change.cursor
 	c.anchor = change.anchor
@@ -113,7 +111,8 @@ pub fn (mut c Ctl) undo() bool {
 
 pub fn (mut c Ctl) redo() bool {
 	if c.readonly || c.edit.redo.len == 0 { return false }
-	change := c.edit.redo.pop()
+	change := c.edit.redo.last()
+	c.edit.redo.delete_last()
 	c.text = c.text[..change.at] + change.after + c.text[change.at + change.before.len..]
 	c.cursor = change.after_cursor
 	c.anchor = -1

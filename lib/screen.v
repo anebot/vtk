@@ -98,7 +98,7 @@ pub fn (mut s Screen) put(x int, y int, r rune, fg int, bg int, attr int) {
 
 fn (mut s Screen) put_grapheme(x int, y int, text string, columns int, fg int, bg int, attr int) {
 	if y < 0 || y >= s.height || x < 0 || x > s.width { return }
-	r := text.runes()[0]
+	r, _ := utf8.decode_rune_at(text, 0)
 	if r < 32 || (r >= 0x7f && r < 0xa0) { return }
 	actual := if s.ascii { ascii_glyph(r).str() } else { text }
 	width := if s.ascii { 1 } else { columns }
@@ -141,9 +141,8 @@ pub fn (mut s Screen) text(x int, y int, text string, fg int, bg int, attr int) 
 // Align inside a clipped content row, using the same cell widths as text().
 fn (mut s Screen) aligned_text(x int, y int, width int, text string, align TextAlign, fg int, bg int, attr int) {
 	if width <= 0 { return }
-	mut columns := 0
 	line := text.all_before('\n').all_before('\r')
-	columns = if s.ascii { line.runes().len } else { text_width(line) }
+	columns := if s.ascii { line.runes().len } else { text_width(line) }
 	spare := max(0, width - columns)
 	offset := match align {
 		.left { 0 }
@@ -156,9 +155,10 @@ fn (mut s Screen) aligned_text(x int, y int, width int, text string, align TextA
 }
 
 pub fn (mut s Screen) fill(r Rect, glyph rune, fg int, bg int) {
+	text, width := glyph.str(), rune_width(glyph)
 	for y in max(0, max(s.clip.y, r.y)) .. min(s.height, min(s.clip.y + s.clip.h, r.y + max(0, r.h))) {
 		for x in max(0, max(s.clip.x, r.x)) .. min(s.width, min(s.clip.x + s.clip.w, r.x + max(0, r.w))) {
-			s.put(x, y, glyph, fg, bg, 0)
+			s.put_grapheme(x, y, text, width, fg, bg, 0)
 		}
 	}
 }
@@ -239,7 +239,8 @@ pub fn (mut s Screen) diff() string {
 			out.write_string(cell.glyph)
 		}
 	}
-	s.front = s.cells.clone()
+	if s.front.len != s.cells.len { s.front = []Cell{len: s.cells.len} }
+	copy(mut s.front, s.cells)
 	if s.cursor_x >= 0 && s.cursor_x < s.width && s.cursor_y >= 0 && s.cursor_y < s.height {
 		shape := if s.cursor_shape == .block { 2 } else { 6 }
 		out.write_string('\x1b[${s.cursor_y + 1};${s.cursor_x + 1}H\x1b[${shape} q\x1b[?25h')
@@ -250,13 +251,12 @@ pub fn (mut s Screen) diff() string {
 }
 
 pub fn (s &Screen) snapshot() string {
-	mut rows := []string{}
-	for y in 0 .. s.height {
-		mut row := ''
-		for x in 0 .. s.width { row += s.cells[y * s.width + x].glyph }
-		rows << row
+	mut out := strings.new_builder(s.cells.len)
+	for i, cell in s.cells {
+		if i > 0 && i % s.width == 0 { out.write_u8(`\n`) }
+		out.write_string(cell.glyph)
 	}
-	return rows.join('\n')
+	return out.str()
 }
 
 fn boundary(text string, offset int) int {

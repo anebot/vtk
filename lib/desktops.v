@@ -20,7 +20,7 @@ pub fn (mut app App) set_desktop_count(count int) {
 	app.desktop_count = value
 	for mut w in app.windows { w.desktop_id = clamp(w.desktop_id, 1, value) }
 	app.active_desktop = clamp(app.active_desktop, 1, value)
-	for i in value .. 4 { app.desktop_focus[i] = unsafe { nil } }
+	for i in value .. 4 { app.desktop_focus[i] = none }
 	app.bar_offset = 0
 	app.enforce_modal_input()
 	app.dirty = true
@@ -32,13 +32,12 @@ pub fn (mut app App) switch_desktop(desktop_id int) bool {
 	if desktop_id < 1 || desktop_id > app.desktop_count { return false }
 	if desktop_id == app.active_desktop { return true }
 	if !isnil(app.blocker(unsafe { nil })) { return false }
-	app.desktop_focus[app.active_desktop - 1] = app.focus
+	app.desktop_focus[app.active_desktop - 1] = ctl_option(app.focus)
 	app.clear_desktop_input()
 	app.active_desktop = desktop_id
 	app.bar_offset = 0
 	app.focus = unsafe { nil }
-	previous := app.desktop_focus[desktop_id - 1]
-	if !isnil(previous) && previous.visible() { app.set_focus(previous) }
+	if previous := app.desktop_focus[desktop_id - 1] { app.set_focus(previous) }
 	app.enforce_modal_input()
 	app.dirty = true
 	return true

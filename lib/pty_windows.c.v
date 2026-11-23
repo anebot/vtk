@@ -40,6 +40,7 @@ mut:
 	output  voidptr
 	process voidptr
 	active  bool
+	read_buffer []u8
 }
 
 fn spawn_pty(cols int, rows int, directory string) !Pty {
@@ -94,10 +95,11 @@ fn (mut p Pty) read(capacity int) string {
 	if !p.active { return '' }
 	mut available := u32(0)
 	if !C.PeekNamedPipe(p.output, 0, 0, 0, &available, 0) || available == 0 { return '' }
-	mut bytes := []u8{len: min(capacity, int(available))}
+	size := min(int(available), max(1, capacity))
+	if p.read_buffer.len < size { p.read_buffer = []u8{len: size} }
 	mut n := u32(0)
-	if !C.ReadFile(p.output, bytes.data, u32(bytes.len), &n, 0) { return '' }
-	return bytes[..int(n)].bytestr()
+	if !C.ReadFile(p.output, p.read_buffer.data, u32(size), &n, 0) { return '' }
+	return p.read_buffer[..int(n)].bytestr()
 }
 
 fn (mut p Pty) write(text string) int {
@@ -119,4 +121,5 @@ fn (mut p Pty) close() {
 	C.CloseHandle(p.output)
 	C.ClosePseudoConsole(p.console)
 	p.active = false
+	p.read_buffer = []
 }

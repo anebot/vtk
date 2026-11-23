@@ -24,7 +24,7 @@ struct C.winsize {
 fn C.poll(voidptr, u32, int) int
 fn C.ioctl(int, u64, ...voidptr) int
 
-__global active_driver = &Driver(unsafe { nil })
+__global active_driver = ?&Driver(none)
 __global terminal_signal = int(0)
 
 struct SignalRestore {
@@ -41,17 +41,18 @@ mut:
 	pointer      MousePointer
 	eof          bool
 	signals      []SignalRestore
+	read_buffer  []u8
 }
 
 fn terminal_on_signal(signal os.Signal) { terminal_signal = int(signal) }
 
 fn terminal_on_exit() {
-	if !isnil(active_driver) { active_driver.stop() }
+	if mut driver := active_driver { driver.stop() }
 }
 
 fn (mut d Driver) start() ! {
-	if !isnil(active_driver) && active_driver.active {
-		return error('another VTK app owns this terminal')
+	if driver := active_driver {
+		if driver.active { return error('another VTK app owns this terminal') }
 	}
 	if C.isatty(0) == 0 || C.isatty(1) == 0 { return error('vtk needs an interactive terminal') }
 	if termios.tcgetattr(0, mut d.saved) != 0 { return error('cannot read terminal attributes') }
@@ -85,6 +86,8 @@ fn (mut d Driver) stop() {
 	flush_stdout()
 	termios.tcsetattr(0, C.TCSAFLUSH, mut d.saved)
 	d.active = false
+	active_driver = none
+	d.read_buffer = []
 	for saved in d.signals { os.signal_opt(saved.signal, saved.handler) or {} }
 	d.signals.clear()
 }
@@ -100,13 +103,13 @@ fn (mut d Driver) read(timeout int) string {
 		return ''
 	}
 	if ready <= 0 { return '' }
-	mut bytes := []u8{len: 16384}
-	n := int(C.read(0, bytes.data, uint(bytes.len)))
+	if d.read_buffer.len == 0 { d.read_buffer = []u8{len: 16384} }
+	n := int(C.read(0, d.read_buffer.data, uint(d.read_buffer.len)))
 	if n <= 0 {
 		if n == 0 { d.eof = true }
 		return ''
 	}
-	return bytes[..n].bytestr()
+	return d.read_buffer[..n].bytestr()
 }
 
 fn (d &Driver) size() (int, int) {

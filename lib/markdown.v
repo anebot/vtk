@@ -291,7 +291,7 @@ pub fn (mut c Ctl) toggle_task(at int) bool {
 	c.end_edit_group()
 	after := if c.text[task] == ` ` { 'x' } else { ' ' }
 	c.edit.undo << Change{task, c.text[task..task + 1], after, c.cursor, c.anchor, c.cursor}
-	c.edit.redo.clear()
+	c.edit.redo = []
 	c.edit.revision++
 	c.text = c.text[..task] + after + c.text[task + 1..]
 	c.fire()

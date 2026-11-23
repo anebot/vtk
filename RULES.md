@@ -19,6 +19,20 @@ Shorter syntax alone does not make a better API.
 - **Keep abstractions small and justified.** Prefer direct V code, existing
   toolkit mechanisms, the standard library, and native OS bindings. Add a helper
   or type when it removes repeated reasoning or expresses a useful constraint.
+- **Make absence explicit.** Initialize required references when constructing
+  state; use options for values that can be absent. Keep unavoidable nulls at
+  private graph or native API boundaries with clear checks.
+- **Keep ownership and associations distinct.** Reject tree and modal cycles.
+  Clear stale caches, callback contexts and associations on disposal so retained
+  handles do not keep unrelated object graphs alive.
+- **Avoid allocation in hot loops.** Reuse render buffers, decode without
+  temporary arrays, and use `any` or `count` when no result collection is needed.
+  Measure allocation and runtime changes against the same workload, including
+  the stack and retained-memory cost.
+- **Keep large storage on the heap.** Use heap storage for large buffers,
+  arrays and structs. Give it a clear owner, allocate on demand, and reuse it.
+  Account for stack growth when passing or copying large structs by value;
+  lowering GC allocations alone does not justify large stack variables.
 - **Keep ownership consistent.** Use the existing ownership model or validate
   an explicit app/control pairing. Callbacks must receive the app that owns the
   control, including after reparenting.
@@ -72,3 +86,10 @@ Shorter syntax alone does not make a better API.
 - **Inflating verification or hiding failures.** Avoid tests that only mirror
   implementation details, unrelated formatting churn, and changes to unrelated
   failing tests. Do not claim the suite passes when failures remain.
+- **Mistaking array length for released storage.** In the supported V runtime,
+  `clear` and `pop` can leave references in spare capacity. Release discarded
+  history/queue buffers or use operations that clear the removed elements.
+- **Adding a second memory manager.** Avoid manual frees, reference counting,
+  pools or arenas without a measured need and a clear ownership contract. Keep
+  shared editor state and callback references valid; never silently truncate
+  history, paste or pending terminal input to hide memory growth.

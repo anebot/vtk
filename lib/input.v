@@ -176,7 +176,6 @@ mut:
 	buffer      string
 	escape_at   i64
 	pasting     bool
-	paste       string
 	osc_discard bool
 }
 

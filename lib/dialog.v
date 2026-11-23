@@ -2,6 +2,11 @@ module vtk
 
 import os
 
+fn (app &App) can_own_dialog(owner ?&Ctl) bool {
+	if window_owner := owner { return app.can_manage(window_owner) }
+	return true
+}
+
 fn dialog_accept(mut c Ctl, mut app App) {
 	mut w := c.owner_window_ptr()
 	w.dialog_result = int(c.data)
@@ -29,7 +34,10 @@ pub fn (mut app App) dialog(title string, mut body Ctl) &Ctl {
 }
 
 pub fn (mut app App) modal_for(mut dialog Ctl, owner ?&Ctl) int {
-	if !app.can_access(&dialog) || !app.can_access(owner) { return -1 }
+	if !app.can_manage(&dialog) || dialog.modal || !app.can_own_dialog(owner) { return -1 }
+	if window_owner := owner {
+		if window_owner.has_modal_ancestor(&dialog) { return -1 }
+	}
 	owner_ptr := owner or { unsafe { nil } }
 	if !isnil(owner_ptr) { dialog.desktop_id = owner_ptr.desktop_id }
 	app.close_popups()
@@ -62,7 +70,7 @@ fn dialog_body(body string) &Ctl {
 }
 
 pub fn (mut app App) msgbox_for(owner ?&Ctl, title string, text string) {
-	if !app.can_access(owner) { return }
+	if !app.can_own_dialog(owner) { return }
 	mut body := dialog_body(text)
 	mut row := button_bar()
 	mut ok := dialog_button('  OK  ', true)
@@ -80,7 +88,7 @@ pub fn (mut app App) msgbox(title string, text string) {
 }
 
 pub fn (mut app App) confirm_for(owner ?&Ctl, title string, text string) bool {
-	if !app.can_access(owner) { return false }
+	if !app.can_own_dialog(owner) { return false }
 	mut body := dialog_body(text)
 	mut row := button_bar()
 	mut yes := dialog_button(' Yes ', true)
@@ -101,7 +109,7 @@ pub fn (mut app App) confirm_quit() {
 }
 
 pub fn (mut app App) prompt_for(owner ?&Ctl, title string, text string, initial string) ?string {
-	if !app.can_access(owner) { return none }
+	if !app.can_own_dialog(owner) { return none }
 	mut body := dialog_body(text)
 	mut field := entry(initial, 0)
 	field.min_w = 30
@@ -128,7 +136,7 @@ pub fn (mut app App) prompt(title string, text string, initial string) ?string {
 }
 
 pub fn (mut app App) choice_for(owner ?&Ctl, title string, items []string, columns int) int {
-	if !app.can_access(owner) { return -1 }
+	if !app.can_own_dialog(owner) { return -1 }
 	mut body := grid()
 	cols := clamp(columns, 1, 64)
 	for i, text in items {
@@ -155,7 +163,7 @@ fn list_accept(mut c Ctl, mut app App) {
 }
 
 pub fn (mut app App) list_choice_for(owner ?&Ctl, title string, items []string, selected int) int {
-	if !app.can_access(owner) { return -1 }
+	if !app.can_own_dialog(owner) { return -1 }
 	mut body := box(true)
 	mut list := tree()
 	list.min_w = 54
@@ -190,7 +198,7 @@ pub fn (mut app App) emoji_pick(owner ?&Ctl) ?string {
 }
 
 pub fn (mut app App) history_for(owner ?&Ctl, mut editor Ctl) {
-	if !app.can_access(owner) || !app.can_access(&editor) { return }
+	if !app.can_own_dialog(owner) || !app.can_access(&editor) { return }
 	editor.end_edit_group()
 	mut labels := []string{}
 	mut steps := []int{}
@@ -227,9 +235,9 @@ fn history_label(change Change) string {
 @[heap]
 struct FilePicker {
 mut:
-	window    &Ctl = unsafe { nil }
-	field     &Ctl = unsafe { nil }
-	list      &Ctl = unsafe { nil }
+	window    &Ctl
+	field     &Ctl
+	list      &Ctl
 	directory string
 	result    string
 }
@@ -240,11 +248,9 @@ fn (mut pick FilePicker) fill(path string) ! {
 	names.sort()
 	pick.directory = directory
 	pick.field.set_text(directory)
-	pick.list.kids.clear()
-	pick.list.selected_node = unsafe { nil }
+	pick.list.clear()
 	pick.list.top = 0
-	mut parent := pick.list.tree_add(none, '..')
-	parent.text = '..'
+	pick.list.tree_add(none, '..')
 	for name in names { pick.list.tree_add(none, name) }
 }
 
@@ -267,14 +273,16 @@ fn file_accept(mut c Ctl, mut app App) {
 }
 
 pub fn (mut app App) file_pick_for(owner ?&Ctl, directory string) ?string {
-	if !app.can_access(owner) { return none }
-	mut pick := &FilePicker{}
+	if !app.can_own_dialog(owner) { return none }
+	mut pick := &FilePicker{
+		window: app.window('Open - Enter opens, Esc cancels', 60, 18)
+		field: entry(directory, 0)
+		list: tree()
+	}
 	mut body := box(true)
-	pick.field = entry(directory, 0)
 	pick.field.expand = false
 	pick.field.user = pick
 	pick.field.submit = file_accept
-	pick.list = tree()
 	pick.list.user = pick
 	pick.list.changed = file_select
 	pick.list.submit = file_accept
@@ -284,7 +292,6 @@ pub fn (mut app App) file_pick_for(owner ?&Ctl, directory string) ?string {
 	body.add(mut pick.field)
 	body.add(mut pick.list)
 	body.add(mut open)
-	pick.window = app.window('Open - Enter opens, Esc cancels', 60, 18)
 	pick.window.dismissable = true
 	pick.window.controls = window_close
 	pick.window.add(mut body)
@@ -301,7 +308,7 @@ pub fn (mut app App) file_pick_for(owner ?&Ctl, directory string) ?string {
 struct ColorPicker {
 mut:
 	sliders []&Ctl
-	preview &Ctl = unsafe { nil }
+	preview &Ctl
 }
 
 fn draw_color_preview(mut c Ctl, mut screen Screen) {
@@ -316,7 +323,7 @@ fn color_picker_changed(mut c Ctl, mut app App) {
 
 // Returns an RGB value (0xRRGGBB), or none on cancel.
 pub fn (mut app App) color_pick(owner ?&Ctl, title string, rgb int) ?int {
-	if !app.can_access(owner) { return none }
+	if !app.can_own_dialog(owner) { return none }
 	mut body := box(true)
 	mut r := slider(0, 255)
 	r.value = (rgb >> 16) & 255

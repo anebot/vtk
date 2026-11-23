@@ -103,6 +103,11 @@ fn (mut app App) clear_hover_within(c &Ctl) {
 
 fn (mut app App) release_ctl(c &Ctl) {
 	app.clear_hover_within(c)
+	for i, saved in app.desktop_focus {
+		if previous := saved {
+			if c.contains_ctl(previous) { app.desktop_focus[i] = none }
+		}
+	}
 	if c.contains_ctl(app.focus) { app.focus = unsafe { nil } }
 	if c.contains_ctl(app.drag) { app.drag = unsafe { nil } }
 	if c.contains_ctl(app.scroll_drag) { app.scroll_drag = unsafe { nil } }

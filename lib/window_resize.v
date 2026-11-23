@@ -69,7 +69,9 @@ fn (mut app App) resize_windows(old_area Rect) {
 	}
 	area := app.work_area()
 	for vertical in [false, true] {
-		app.window_layout.resize_axis(area, vertical)
+		for desktop_id in 1 .. app.desktop_count + 1 {
+			app.window_layout.resize_desktop_axis(area, vertical, desktop_id)
+		}
 	}
 	app.fit_windows()
 	app.window_layout.applied_area = area
@@ -86,15 +88,12 @@ struct WindowEdgeJoin {
 	overlap int
 }
 
-fn (layout &WindowLayout) resize_axis(area Rect, vertical bool) {
-	for desktop_id in 1 .. 5 { layout.resize_desktop_axis(area, vertical, desktop_id) }
-}
-
 fn (layout &WindowLayout) resize_desktop_axis(area Rect, vertical bool, desktop_id int) {
 	origin, size := window_axis(area, vertical)
 	old_origin, old_size := window_axis(layout.area, vertical)
 	if old_size <= 0 || size <= 0 { return }
 	placements := layout.windows.filter(it.participates && it.desktop_id == desktop_id)
+	if placements.len == 0 { return }
 	n := placements.len * 2 + 1 // Node zero is the workspace origin.
 	mut attached := []bool{len: n}
 	mut joins := []WindowEdgeJoin{}

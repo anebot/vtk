@@ -20,6 +20,7 @@ mut:
 	fd     int = -1
 	pid    int = -1
 	reaped bool
+	read_buffer []u8
 }
 
 fn spawn_pty(cols int, rows int, directory string) !Pty {
@@ -100,9 +101,10 @@ fn (mut p Pty) resize(cols int, rows int) {
 
 fn (mut p Pty) read(capacity int) string {
 	if p.fd < 0 { return '' }
-	mut bytes := []u8{len: max(1, capacity)}
-	n := int(C.read(p.fd, bytes.data, uint(bytes.len)))
-	return if n > 0 { bytes[..n].bytestr() } else { '' }
+	size := max(1, capacity)
+	if p.read_buffer.len < size { p.read_buffer = []u8{len: size} }
+	n := int(C.read(p.fd, p.read_buffer.data, uint(size)))
+	return if n > 0 { p.read_buffer[..n].bytestr() } else { '' }
 }
 
 fn (mut p Pty) write(text string) int {
@@ -135,4 +137,5 @@ fn (mut p Pty) close() {
 	}
 	C.close(p.fd)
 	p.fd = -1
+	p.read_buffer = []
 }

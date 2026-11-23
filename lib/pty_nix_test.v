@@ -15,6 +15,24 @@ fn test_pty_shell_output_and_cleanup() {
 	assert pty.fd == -1
 }
 
+fn test_pty_reads_reuse_storage_and_return_independent_strings() {
+	mut pipe := [2]i32{}
+	assert C.pipe(&pipe[0]) == 0
+	defer { C.close(pipe[1]) }
+	mut pty := Pty{fd: pipe[0], reaped: true}
+	defer { pty.close() }
+	assert C.write(pipe[1], c'abcd', 4) == 4
+	first := pty.read(4)
+	storage := pty.read_buffer.data
+	assert C.write(pipe[1], c'efgh', 4) == 4
+	assert pty.read(4) == 'efgh' && pty.read_buffer.data == storage
+	assert first == 'abcd'
+	assert C.write(pipe[1], c'12345678', 8) == 8
+	assert pty.read(8) == '12345678' && pty.read_buffer.len == 8 && first == 'abcd'
+	pty.close()
+	assert pty.fd == -1 && pty.read_buffer.cap == 0
+}
+
 fn terminal_test_output(mut pty Pty) string {
 	mut output := ''
 	deadline := time.ticks() + 3000
@@ -87,4 +105,29 @@ fn test_terminal_startup_errors_leave_no_window_or_changed_directory() ! {
 	if _ := app.terminal_window(directory: directory) { assert false, 'missing shell was accepted' }
 	assert app.windows.len == 0 && isnil(app.focus)
 	assert os.getwd() == cwd
+}
+
+fn test_window_lifecycle_paths_close_live_terminal_processes() {
+	previous_shell := os.getenv_opt('SHELL')
+	os.setenv('SHELL', '/bin/sh', true)
+	defer {
+		if value := previous_shell { os.setenv('SHELL', value, true) } else { os.unsetenv('SHELL') }
+	}
+	actions := [
+		fn (mut app App, mut w Ctl) { assert app.close(mut w) },
+		fn (mut app App, mut w Ctl) { app.destroy_ctl(mut w) },
+		fn (mut app App, mut _ Ctl) { app.quit() },
+		fn (mut app App, mut _ Ctl) { app.fini() },
+	]
+	for action in actions {
+		mut app := new_app()
+		mut w := app.window('Shell', 30, 8)
+		mut control := terminal(10, 2, TerminalOptions{}) or { panic(err) }
+		defer { control.term.close() }
+		w.add(mut control)
+		assert control.term.pty.alive()
+		action(mut app, mut w)
+		assert control.term.has_exited() && control.term.pty.fd == -1 && !control.term.pty.alive()
+		app.fini()
+	}
 }

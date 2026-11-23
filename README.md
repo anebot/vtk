@@ -101,7 +101,8 @@ and render/history storage are toolkit-owned. Read them through `rect()`,
 and the state queries. Returned arrays are copies. Use `add`, `detach`, `clear`
 and `replace` for tree changes; `clear` detaches children, while `destroy_ctl`
 also releases their resources. Detaching removes stale selections, default
-buttons and input capture. Use `app.move` for window positions and `app.layout()`
+buttons and input capture. Windows remain roots; tree and context-menu changes
+reject cycles. Use `app.move` for window positions and `app.layout()`
 to calculate geometry before a redraw. `app.invalidate()` schedules an app redraw.
 
 Lookups such as `top_window()`, `owner_window()`, `parent_ctl()`, `tree_selection()`,
@@ -191,11 +192,32 @@ Callbacks receive `mut Ctl` and `mut App`. `changed` handles activation and
 edits, `submit` handles Enter, and `user`/`data` hold application state.
 `keyfn`, `mousefn` and `scrollfn` return true to consume an event. A window's
 `closing` callback can veto `app.close(mut window)` or application quit.
-`destroy` is called by `app.destroy_ctl`. Controls use V-managed memory.
+Controls use V-managed memory; `destroy` releases application-owned resources.
+
+| Operation | Lifecycle contract |
+|---|---|
+| `app.close(mut window)` | Checks close vetoes for the window and owned modal dialogs, then releases their terminal processes and input capture. Retains the tree until the next event-loop step, which disposes closed windows automatically. |
+| `app.destroy_ctl(mut control)` | Honors close vetoes for registered windows, then disposes children and context menus, calls each `destroy` callback once, and detaches the control. |
+| `app.quit()` | Checks every window's veto before closing anything, including windows opened by close callbacks. Stops the event loop only when all approve. |
+| `app.fini()` | Forces final disposal of registered windows without calling `closing`, cancels pending hooks and input, and restores the physical terminal. Safe to call repeatedly or from a destroy callback. |
+
+A veto prevents toolkit cleanup; side effects performed by callbacks remain.
+Destroy callbacks run after their children have been disposed. Disposed controls
+cannot be reattached or raised. Detached controls are the caller's responsibility;
+use `destroy_ctl` to dispose them without requesting window closure. `run()`
+always calls `fini()` after its loop.
 
 `app.close(mut window)` returns false if closing is vetoed or the control is not
 a window owned by that app. Closing an already closed window owned by the app
-succeeds.
+succeeds; recursively closing a window whose close callback is running returns
+false. A callback that transfers a window to another app aborts the old app's
+close request.
+
+The child tree determines resource lifetime. `link` and `user` are associations;
+disposal clears them and callbacks after `destroy` runs. Shared editor buffers
+and V-managed widget handles remain safe to hold. `fini` also releases queued
+callbacks, input, notifications and render/cache storage. Window actions reject
+ordinary widgets; modal requests reject invalid owners and ownership cycles.
 
 ## Mouse cursor and hover
 

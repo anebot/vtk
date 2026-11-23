@@ -7,6 +7,7 @@ pub fn (mut c Ctl) set_menu(mut menu Ctl) {
 	if menu.kind != .menu || c.menu == &menu || !c.can_adopt(&menu) { return }
 	if !isnil(c.menu) { c.menu.detach() }
 	menu.detach()
+	if !c.can_adopt(&menu) { return }
 	// A context menu inherits ownership without becoming a choice or tab.
 	menu.parent = &c
 	c.menu = &menu
@@ -68,7 +69,7 @@ fn (mut app App) push_menu(owner &Ctl, x int, y int) {
 }
 
 pub fn (mut app App) close_popups() {
-	app.popups.clear()
+	app.popups = []
 	app.app_popup = unsafe { nil }
 	app.popup_at_bar = false
 	app.dirty = true
@@ -237,7 +238,7 @@ fn window_menu_action(mut item Ctl, mut app App) {
 }
 
 pub fn (mut app App) window_menu(mut w Ctl, x int, y int) {
-	if !app.can_access(&w) || !app.on_desktop(&w) || w.hidden || w.closed || w.disabled || !isnil(app.blocker(&w)) { return }
+	if !app.can_manage(&w) || !app.on_desktop(&w) || w.hidden || w.closed || w.disabled || !isnil(app.blocker(&w)) { return }
 	mut menu := context_menu()
 	names := ['Minimize', if w.maximized { 'Restore' } else { 'Maximize' }, 'Move', 'Resize',
 		(if w.always_on_top { '[x] ' } else { '[ ] ' }) + 'Always on top', 'Close']

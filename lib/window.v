@@ -11,7 +11,7 @@ pub enum TileSide {
 }
 
 pub fn (mut app App) window(title string, width int, height int) &Ctl {
-	offset := (app.windows.filter(it.desktop_id == app.active_desktop && !it.closed).len * 2) % 10
+	offset := (app.windows.count(it.desktop_id == app.active_desktop && !it.closed) * 2) % 10
 	app.next_window_order++
 	mut w := &Ctl{ kind: .window, app: app, desktop_id: app.active_desktop, text: title, x: 2 + offset, y: 1 + offset / 2, w: max(minimum_window_width, width), h: max(minimum_window_height, height), min_w: minimum_window_width, min_h: minimum_window_height, window_order: app.next_window_order }
 	app.windows << w
@@ -37,23 +37,27 @@ fn (app &App) blocker(w &Ctl) &Ctl {
 		}
 		if d.closed || d.minimized || !d.modal || d.desktop_id != desktop_id { continue }
 		// A nested dialog is allowed above the modal which owns it.
-		mut ancestor := unsafe { w }
-		mut descendant := false
-		for !isnil(ancestor) {
-			if ancestor == d {
-				descendant = true
-				break
-			}
-			ancestor = if !isnil(ancestor.modal_parent) { ancestor.modal_parent } else { ancestor.modal_owner }
-		}
-		if descendant { continue }
+		if !isnil(w) && w.has_modal_ancestor(d) { continue }
 		if isnil(d.modal_owner) || d.modal_owner == w { return d }
 	}
 	return unsafe { nil }
 }
 
+fn (w &Ctl) has_modal_ancestor(ancestor &Ctl) bool {
+	mut node := unsafe { w }
+	for !isnil(node) {
+		if node == ancestor { return true }
+		node = if !isnil(node.modal_parent) { node.modal_parent } else { node.modal_owner }
+	}
+	return false
+}
+
+fn (app &App) can_manage(w &Ctl) bool {
+	return w.kind == .window && !w.destroyed && app.can_access(w)
+}
+
 pub fn (mut app App) raise(mut w Ctl) {
-	if w.kind != .window || !app.can_access(&w) { return }
+	if !app.can_manage(&w) { return }
 	if isnil(w.app) { w.app = app; w.desktop_id = app.active_desktop }
 	if !app.on_desktop(&w) && !app.switch_desktop(w.desktop_id) { return }
 	mut blocked := app.blocker(&w)
@@ -66,12 +70,8 @@ pub fn (mut app App) raise(mut w Ctl) {
 		app.next_window_order++
 		w.window_order = app.next_window_order
 	}
-	for i, window in app.windows {
-		if window == &w {
-			app.windows.delete(i)
-			break
-		}
-	}
+	previous := app.windows.index(&w)
+	if previous >= 0 { app.windows.delete(previous) }
 	w.minimized = false
 	mut at := app.windows.len
 	if !w.always_on_top {
@@ -92,41 +92,80 @@ pub fn (mut app App) raise(mut w Ctl) {
 
 pub fn (mut app App) close(mut w Ctl) bool {
 	if w.kind != .window || w.app != &app { return false }
-	if w.closed { return true }
-	if f := w.closing {
-		if !f(mut w, mut app) { return false }
+	return app.close_windows([&w], false)
+}
+
+// Collect approvals before cleanup so a veto leaves every window open.
+// Keep guards active across callbacks, which may open and close nested dialogs.
+fn (mut app App) close_windows(windows []&Ctl, all_windows bool) bool {
+	mut pending := windows.clone()
+	mut approved := []&Ctl{}
+	defer { for mut w in approved { w.closing_now = false } }
+	for i := 0; i < pending.len; i++ {
+		mut w := pending[i]
+		if w.app != &app { return false }
+		if w.closed { continue }
+		if w.closing_now { return false }
+		w.closing_now = true
+		approved << w
+		if f := w.closing {
+			if !f(mut w, mut app) { return false }
+		}
+		for dialog in app.windows {
+			if (all_windows || dialog.modal_owner == w || dialog.modal_parent == w)
+				&& pending.index(dialog) < 0 { pending << dialog }
+		}
 	}
-	// Owned modal dialogs close with their owner.
-	for mut dialog in app.windows.clone() {
-		if (dialog.modal_owner == &w || dialog.modal_parent == &w) && !app.close(mut dialog) { return false }
+	if approved.any(it.app != &app) { return false }
+	for mut w in approved { w.closed = true }
+	for mut w in approved {
+		if w.app != &app { continue }
+		app.release_ctl(w)
+		if w.app == &app { app.close_terminals(mut w) }
 	}
-	w.closed = true
-	app.clear_hover_within(&w)
-	app.close_terminals(mut w)
-	app.close_popups()
-	if !isnil(app.focus) && app.focus.owner_window_ptr() == &w {
-		app.focus = unsafe { nil }
-		app.focus_first(app.top_window_ptr())
+	if approved.len > 0 {
+		app.close_popups()
+		if isnil(app.focus) { app.focus_first(app.top_window_ptr()) }
+		app.dirty = true
 	}
-	app.dirty = true
 	return true
 }
 
 pub fn (mut app App) destroy_ctl(mut c Ctl) {
-	if !app.can_access(&c) { return }
-	if c.kind == .window && !app.close(mut c) { return }
+	if c.destroyed || !app.can_access(&c) { return }
+	if c.kind == .window && !isnil(c.app) && !app.close(mut c) { return }
+	app.dispose_ctl(mut c)
+}
+
+// Final disposal is unconditional and runs once, including during fini.
+fn (mut app App) dispose_ctl(mut c Ctl) {
+	if c.destroyed || !app.can_access(&c) { return }
+	c.destroyed = true
 	c.closed = true
-	app.clear_hover_within(&c)
-	for mut child in c.kids.clone() { app.destroy_ctl(mut child) }
+	app.release_ctl(&c)
+	for mut child in c.kids.clone() {
+		if child.parent == &c { app.dispose_ctl(mut child) }
+	}
 	if !isnil(c.menu) {
 		mut menu := c.menu
-		app.destroy_ctl(mut menu)
+		app.dispose_ctl(mut menu)
 	}
 	if !isnil(c.term) { c.term.close() }
 	if f := c.destroy { f(mut c, mut app) }
 	c.detach()
-	c.kids.clear()
-	if app.focus == &c { app.focus = unsafe { nil } }
+	c.kids = []
+	c.link = none
+	c.user = voidptr(0)
+	c.selected_node, c.default_button = unsafe { nil }, unsafe { nil }
+	c.modal_owner, c.modal_parent, c.popup_owner = unsafe { nil }, unsafe { nil }, unsafe { nil }
+	c.changed, c.submit, c.destroy = none, none, none
+	c.keyfn, c.mousefn = none, none
+	c.mouse_enter, c.mouse_leave = none, none
+	c.scrollfn = none
+	c.closing = none
+	c.cellfn = none
+	c.paint = none
+	c.md.linkfn = none
 	app.dirty = true
 }
 
@@ -140,25 +179,21 @@ pub fn (mut app App) set_default_button(mut w Ctl, button ?&Ctl) bool {
 }
 
 pub fn (mut app App) move(mut w Ctl, x int, y int) {
-	if w.kind != .window || !app.can_access(&w) { return }
+	if !app.can_manage(&w) { return }
 	w.x, w.y = x, y
 	w.fit_window(app.work_area())
 	app.dirty = true
 }
 
 pub fn (mut app App) quit() {
-	for mut w in app.windows.clone() {
-		if !w.closed {
-			if f := w.closing {
-				if !f(mut w, mut app) { return }
-			}
-		}
-	}
-	app.running = false
+	if !app.running || app.quitting || app.finishing { return }
+	app.quitting = true
+	defer { app.quitting = false }
+	if app.close_windows(app.windows, true) { app.running = false }
 }
 
 pub fn (mut app App) minimize(mut w Ctl) {
-	if !app.can_access(&w) || w.modal || !isnil(app.blocker(&w)) { return }
+	if !app.can_manage(&w) || w.modal || !isnil(app.blocker(&w)) { return }
 	w.minimized = true
 	app.clear_hover_within(&w)
 	if !isnil(app.focus) && app.focus.owner_window_ptr() == &w { app.focus = unsafe { nil } }
@@ -167,20 +202,16 @@ pub fn (mut app App) minimize(mut w Ctl) {
 }
 
 pub fn (mut app App) maximize(mut w Ctl) {
-	if !app.can_access(&w) { return }
+	if !app.can_manage(&w) { return }
 	if !w.maximized { w.saved = w.rect() }
 	w.maximized = true
 	w.minimized = false
-	area := app.work_area()
-	w.x = area.x
-	w.y = area.y
-	w.w = area.w
-	w.h = area.h
+	w.fit_window(app.work_area())
 	app.raise(mut w)
 }
 
 pub fn (mut app App) restore(mut w Ctl) {
-	if !app.can_access(&w) { return }
+	if !app.can_manage(&w) { return }
 	if w.maximized {
 		w.x = w.saved.x
 		w.y = w.saved.y
@@ -194,7 +225,7 @@ pub fn (mut app App) restore(mut w Ctl) {
 }
 
 pub fn (mut app App) always_on_top(mut w Ctl, enabled bool) {
-	if !app.can_access(&w) { return }
+	if !app.can_manage(&w) { return }
 	w.always_on_top = enabled
 	app.raise(mut w)
 }
@@ -250,7 +281,7 @@ fn (mut app App) fit_windows() {
 }
 
 pub fn (mut app App) tile_side(mut w Ctl, side TileSide) {
-	if !app.can_access(&w) { return }
+	if !app.can_manage(&w) { return }
 	w.maximized = false
 	area := app.work_area()
 	h := area.h
@@ -452,7 +483,7 @@ fn (mut app App) focus_next(back bool) {
 }
 
 pub fn (mut app App) begin_placement(mut w Ctl, resize bool) {
-	if !app.can_access(&w) || !app.on_desktop(&w) || w.maximized || w.minimized { return }
+	if !app.can_manage(&w) || !app.on_desktop(&w) || w.maximized || w.minimized { return }
 	w.fit_window(app.work_area())
 	app.placement = &w
 	app.placement_resize = resize

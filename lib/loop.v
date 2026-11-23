@@ -19,8 +19,30 @@ pub fn (mut app App) init() ! {
 }
 
 pub fn (mut app App) fini() {
+	if app.finishing { return }
+	app.finishing = true
+	defer { app.finishing = false }
+	app.running = false
 	app.clear_mouse()
-	for mut w in app.windows { app.close_terminals(mut w) }
+	for app.windows.len > 0 {
+		mut w := app.windows.pop()
+		app.dispose_ctl(mut w)
+	}
+	app.windows = []
+	app.clear_desktop_input()
+	app.focus = unsafe { nil }
+	app.desktop_focus = [4]?&Ctl{}
+	app.hooks = []
+	app.events = []
+	for mut notice in app.notices { notice.closed = true }
+	app.notices = []
+	app.launchers = []
+	app.window_layout = WindowLayout{}
+	app.screen = Screen{}
+	app.input = Input{}
+	app.clipboard = ''
+	app.clock_clicked = none
+	app.ctrl_c_handler = none
 	app.driver.stop()
 	app.started = false
 }
@@ -55,6 +77,9 @@ pub fn (mut app App) step(timeout_ms int) bool {
 		}
 	}
 	app.tick()
+	if app.windows.any(it.closed) {
+		for mut w in app.windows.filter(it.closed) { app.dispose_ctl(mut w) }
+	}
 	if app.dirty {
 		app.redraw()
 		if app.started {
@@ -62,7 +87,7 @@ pub fn (mut app App) step(timeout_ms int) bool {
 			flush_stdout()
 		}
 	}
-	if app.windows.filter(!it.closed).len == 0 && app.launchers.len == 0 { app.running = false }
+	if !app.windows.any(!it.closed) && app.launchers.len == 0 { app.running = false }
 	return app.running
 }
 

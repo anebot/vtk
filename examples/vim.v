@@ -137,7 +137,7 @@ fn split_pane(mut c vtk.Ctl, vertical bool, path string, fresh bool, mut app vtk
 fn close_pane(mut c vtk.Ctl, force bool, mut app vtk.App) bool {
 	mut pane := unsafe { &Pane(c.user) }
 	mut editor := pane.editor
-	refs := editor.panes.filter(unsafe { &Pane(it.user) }.buffer == pane.buffer).len
+	refs := editor.panes.count(unsafe { &Pane(it.user) }.buffer == pane.buffer)
 	if !force && refs == 1 && c.text != pane.buffer.saved {
 		app.notify('Unsaved changes; use :w or :q!', 2500)
 		return false

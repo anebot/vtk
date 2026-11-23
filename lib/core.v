@@ -159,6 +159,8 @@ mut:
 	tab_x         int
 	tab_w         int
 	closed        bool
+	closing_now   bool
+	destroyed     bool
 	minimized     bool
 	maximized     bool
 	always_on_top bool
@@ -192,7 +194,7 @@ pub fn new_ctl(kind Kind) &Ctl {
 }
 
 fn (c &Ctl) can_adopt(child &Ctl) bool {
-	return !child.contains_ctl(c)
+	return !c.destroyed && !child.destroyed && child.kind != .window && !child.contains_ctl(c)
 }
 
 fn (c &Ctl) contains_ctl(child &Ctl) bool {
@@ -226,17 +228,17 @@ pub fn (mut c Ctl) detach() {
 	}
 	if !isnil(c.parent) {
 		if c.parent.menu == &c { c.parent.menu = unsafe { nil } }
-		for i, child in c.parent.kids {
-			if child == &c {
-				c.parent.kids.delete(i)
-				break
-			}
-		}
+		at := c.parent.kids.index(&c)
+		if at >= 0 { c.parent.kids.delete(at) }
 	}
 	c.parent = unsafe { nil }
 	c.app = unsafe { nil }
 	if !isnil(app) {
-		if c.kind == .window { app.windows = app.windows.filter(it != &c) }
+		if c.kind == .window {
+			at := app.windows.index(&c)
+			if at >= 0 { app.windows.delete(at) }
+			app.window_layout = WindowLayout{}
+		}
 		if isnil(app.focus) { app.focus_first(app.top_window_ptr()) }
 	}
 }
@@ -255,7 +257,7 @@ pub fn (mut c Ctl) replace(mut child Ctl, mut replacement Ctl) bool {
 	at := c.kids.index(&child)
 	if at < 0 { return false }
 	child.detach()
-	if !c.can_adopt(&replacement) { return false }
+	if !c.can_adopt(&replacement) || !isnil(replacement.parent) { return false }
 	replacement.parent = &c
 	c.kids.insert(clamp(at, 0, c.kids.len), &replacement)
 	c.invalidate()
@@ -283,11 +285,10 @@ fn (c &Ctl) root() &Ctl {
 	return root
 }
 
-// Detached controls and nil dialog owners are allowed; foreign roots are not.
-fn (app &App) can_access(c ?&Ctl) bool {
-	value := c or { return true }
-	if isnil(value) { return true }
-	owner := value.root().app
+// Detached controls are accessible; roots owned by another app are not.
+fn (app &App) can_access(c &Ctl) bool {
+	if isnil(c) { return true }
+	owner := c.root().app
 	return isnil(owner) || owner == app
 }
 
@@ -386,6 +387,8 @@ mut:
 	last_animation   i64
 	ctrl_c_active    bool
 	started          bool
+	quitting         bool
+	finishing        bool
 	drag             &Ctl = unsafe { nil }
 	drag_mode        int
 	scroll_drag      &Ctl = unsafe { nil }
@@ -402,7 +405,7 @@ mut:
 	placement_resize bool
 	placement_start  Rect
 	window_layout    WindowLayout
-	desktop_focus    [4]&Ctl
+	desktop_focus    [4]?&Ctl
 	settings_path    string
 	bar_offset       int
 	next_window_order int
@@ -438,7 +441,9 @@ fn (mut app App) add_hook(ms int, interval int, call fn (mut App)) int {
 }
 
 pub fn (mut app App) cancel_hook(id int) {
-	app.hooks = app.hooks.filter(it.id != id)
+	for i, hook in app.hooks {
+		if hook.id == id { app.hooks.delete(i); return }
+	}
 }
 
 fn (mut app App) tick() {
@@ -453,13 +458,14 @@ fn (mut app App) tick() {
 		}
 		hook.call(mut app)
 	}
-	for mut notice in app.notices {
-		if notice.due > 0 && now >= notice.due {
+	for i := app.notices.len - 1; i >= 0; i-- {
+		mut notice := app.notices[i]
+		if notice.closed || (notice.due > 0 && now >= notice.due) {
 			notice.closed = true
+			app.notices.delete(i)
 			app.dirty = true
 		}
 	}
-	app.notices = app.notices.filter(!it.closed)
 	if app.bar_clock && now / 60000 != app.last_clock {
 		app.last_clock = now / 60000
 		app.dirty = true
