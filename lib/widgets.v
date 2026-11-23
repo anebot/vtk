@@ -158,9 +158,20 @@ fn (mut app App) draw_ctl(mut c Ctl) {
 			app.screen.put(c.x + thumb, c.y, `█`, if focused { t.focus_bg } else { t.field_fg }, bg, 0)
 		}
 		.progress {
-			fill := clamp(c.value, 0, 100) * c.w / 100
-			app.screen.fill(c.rect(), `░`, t.dim, bg)
-			app.screen.fill(Rect{c.x, c.y, fill, 1}, `█`, t.field_fg, bg)
+			value := clamp(c.value, c.low, c.high) - c.low
+			span := max(1, c.high - c.low)
+			color := if c.disabled { t.dim } else { t.field_fg }
+			if c.blocky {
+				app.screen.fill(c.rect(), ` `, t.dim, bg)
+				blocks := max(1, (c.w + 1) / 3)
+				for i in 0 .. int(i64(value) * blocks / span) {
+					app.screen.fill(Rect{c.x + i * 3, c.y, min(2, c.w - i * 3), 1}, `█`, color, bg)
+				}
+			} else {
+				fill := int(i64(value) * c.w / span)
+				app.screen.fill(c.rect(), `░`, t.dim, bg)
+				app.screen.fill(Rect{c.x, c.y, fill, 1}, `█`, color, bg)
+			}
 		}
 		.spin {
 			fg = if c.disabled { t.dim } else if focused { t.focus_fg } else { t.field_fg }

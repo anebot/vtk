@@ -62,6 +62,10 @@ fn main() {
 	spin.changed = changed
 	values.add(mut slider)
 	values.add(mut spin)
+	mut blocks := vtk.progress()
+	blocks.blocky = true
+	blocks.value = 60
+	values.add(mut blocks)
 	body.add(mut values)
 	mut activity := vtk.spinner('Working')
 	body.add(mut activity)

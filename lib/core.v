@@ -107,6 +107,7 @@ pub mut:
 	user          voidptr
 	data          i64
 	value         int
+	blocky        bool
 	low           int
 	high          int
 	top           int
