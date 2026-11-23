@@ -151,7 +151,7 @@ fn close_pane(mut c vtk.Ctl, force bool, mut app vtk.App) bool {
 	}
 	if editor.panes.len == 1 {
 		editor.force_close = force
-		return editor.window.close()
+		return app.close(mut editor.window)
 	}
 	mut container := c.parent
 	mut other := container.kids[if container.kids[0] == &c { 1 } else { 0 }]
@@ -208,7 +208,7 @@ fn command(mut c vtk.Ctl, source string, mut app vtk.App) {
 		'q', 'quit' { close_pane(mut c, force, mut app) }
 		'qa', 'qall' {
 			editor.force_close = force
-			editor.window.close()
+			app.close(mut editor.window)
 		}
 		'sp', 'split', 'vs', 'vsplit', 'new', 'vnew' {
 			split_pane(mut c, name in ['vs', 'vsplit', 'vnew'], arg, name in ['new', 'vnew'], mut app)

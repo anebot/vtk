@@ -1,6 +1,6 @@
 module vtk
 
-fn test_close_uses_owning_app_and_preserves_veto_and_focus() {
+fn test_close_checks_ownership_and_preserves_veto_and_focus() {
 	mut app := new_app()
 	mut other := new_app()
 	mut w := app.window('Owner', 30, 8)
@@ -15,13 +15,16 @@ fn test_close_uses_owning_app_and_preserves_veto_and_focus() {
 	}
 	app.dirty = false
 	other.dirty = false
-	assert !w.close()
+	assert !other.close(mut w)
+	assert w.data == 0 && app.clipboard_text() == ''
+	assert !app.close(mut w)
 	assert !w.closed && app.focus == field && !app.dirty
 	assert app.clipboard_text() == 'Owner' && other.clipboard_text() == ''
 	w.value = 1
-	assert w.close()
+	assert app.close(mut w)
 	assert w.closed && isnil(app.focus) && app.dirty
-	assert w.close() && w.data == 2
+	assert app.close(mut w) && w.data == 2
+	assert !other.close(mut w) && w.data == 2
 	assert !untouched.closed && !other.dirty
 }
 
@@ -33,21 +36,21 @@ fn test_close_propagates_owned_dialog_veto_and_closes_nested_dialogs() {
 	mut nested := app.window('Nested', 24, 6)
 	nested.modal_parent = child
 	child.closing = fn (mut c Ctl, mut _ App) bool { return c.value == 1 }
-	assert !owner.close()
+	assert !app.close(mut owner)
 	assert !owner.closed && !child.closed && !nested.closed
 	child.value = 1
-	assert owner.close()
+	assert app.close(mut owner)
 	assert owner.closed && child.closed && nested.closed
 }
 
 fn test_close_rejects_detached_windows_and_nonwindow_controls() {
-	mut detached := new_ctl(.window)
-	assert !detached.close() && !detached.closed
 	mut app := new_app()
+	mut detached := new_ctl(.window)
+	assert !app.close(mut detached) && !detached.closed
 	mut w := app.window('Window', 30, 8)
 	mut field := entry('', 0)
 	w.add(mut field)
-	assert !field.close() && !field.closed && !w.closed
+	assert !app.close(mut field) && !field.closed && !w.closed
 	w.detach()
-	assert !w.close() && !w.closed
+	assert !app.close(mut w) && !w.closed
 }

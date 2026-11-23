@@ -220,7 +220,7 @@ fn test_window_bar_keeps_creation_order_when_windows_are_raised_minimized_or_pin
 		app.dispatch(Event{ kind: .mouse, x: 21, y: app.bar_y(), button: .left, pressed: true })
 		assert app.popups[0].link.kids[0].link == second
 		app.close_popups()
-		first.close()
+		app.close(mut first)
 		app.redraw()
 		assert app.screen.cells[row + 12..row + 28].map(it.glyph).join('') == '[= Two] [= Tri] '
 		app.destroy_ctl(mut second)

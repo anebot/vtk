@@ -90,16 +90,15 @@ pub fn (mut app App) raise(mut w Ctl) {
 	app.dirty = true
 }
 
-pub fn (mut w Ctl) close() bool {
+pub fn (mut app App) close(mut w Ctl) bool {
+	if w.kind != .window || w.app != &app { return false }
 	if w.closed { return true }
-	mut app := w.app
-	if w.kind != .window || isnil(app) { return false }
 	if f := w.closing {
 		if !f(mut w, mut app) { return false }
 	}
 	// Owned modal dialogs close with their owner.
 	for mut dialog in app.windows.clone() {
-		if (dialog.modal_owner == &w || dialog.modal_parent == &w) && !dialog.close() { return false }
+		if (dialog.modal_owner == &w || dialog.modal_parent == &w) && !app.close(mut dialog) { return false }
 	}
 	w.closed = true
 	app.clear_hover_within(&w)
@@ -114,7 +113,7 @@ pub fn (mut w Ctl) close() bool {
 }
 
 pub fn (mut app App) destroy_ctl(mut c Ctl) {
-	if c.kind == .window && !c.close() { return }
+	if c.kind == .window && !app.close(mut c) { return }
 	c.closed = true
 	app.clear_hover_within(&c)
 	for mut child in c.kids.clone() { app.destroy_ctl(mut child) }

@@ -125,7 +125,7 @@ fn test_hover_rechecks_tabs_visibility_detach_and_lifecycle() {
 	app.raise(mut w)
 	app.redraw()
 	assert two.hovered
-	assert w.close()
+	assert app.close(mut w)
 	assert !two.hovered && isnil(app.hovered_ctl())
 }
 

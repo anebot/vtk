@@ -2,10 +2,10 @@ module vtk
 
 import os
 
-fn dialog_accept(mut c Ctl, mut _ App) {
+fn dialog_accept(mut c Ctl, mut app App) {
 	mut w := c.owner_window()
 	w.value = int(c.data)
-	w.close()
+	app.close(mut w)
 }
 
 fn dialog_button(text string, accepted bool) &Ctl {
@@ -140,12 +140,12 @@ pub fn (mut app App) choice_for(owner &Ctl, title string, items []string, column
 	return result
 }
 
-fn list_accept(mut c Ctl, mut _ App) {
+fn list_accept(mut c Ctl, mut app App) {
 	mut list := if c.kind == .tree { &c } else { c.link }
 	if isnil(list.link) { return }
 	mut w := c.owner_window()
 	w.value = int(list.link.data)
-	w.close()
+	app.close(mut w)
 }
 
 pub fn (mut app App) list_choice_for(owner &Ctl, title string, items []string, selected int) int {
@@ -254,7 +254,7 @@ fn file_accept(mut c Ctl, mut app App) {
 		pick.fill(path) or { app.notify(err.msg(), 2500) }
 	} else if path != '' {
 		pick.result = path
-		pick.window.close()
+		app.close(mut pick.window)
 	}
 }
 

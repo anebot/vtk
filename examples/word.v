@@ -99,7 +99,7 @@ fn action(mut c vtk.Ctl, mut app vtk.App) {
 		}
 		3 { save(mut doc, false, mut app) }
 		4 { save(mut doc, true, mut app) }
-		5 { doc.window.close() }
+		5 { app.close(mut doc.window) }
 		6 { doc.view.undo() }
 		7 { doc.view.redo() }
 		8 {

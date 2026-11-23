@@ -214,7 +214,7 @@ fn check_desktop_count_settings(mut app App) {
 	assert progress.value == 1 && minus.disabled && !plus.disabled
 	buttons[2].fire() // Reset
 	assert app.desktop_count == 1 && progress.value == 1 && count.text == '1'
-	w.close()
+	app.close(mut w)
 }
 
 fn test_settings_selects_applies_saves_and_resets_one_to_four_desktops() {

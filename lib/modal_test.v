@@ -7,7 +7,7 @@ fn close_nested_modal(mut app App) {
 	assert child.modal && !isnil(child.modal_parent)
 	assert app.blocker(child.modal_parent) == child
 	assert app.blocker(app.windows[0]) == child
-	child.close()
+	app.close(mut child)
 }
 
 fn check_settings_modality(mut app App) {
@@ -51,8 +51,8 @@ fn check_settings_modality(mut app App) {
 	app.after(0, close_nested_modal)
 	app.modal_for(mut nested, unsafe { nil })
 	assert app.blocker(created) == settings && app.top_window() == settings
-	created.close()
-	settings.close()
+	app.close(mut created)
+	app.close(mut settings)
 }
 
 fn test_settings_blocks_existing_new_windows_and_stale_input() {
@@ -104,7 +104,7 @@ fn check_settings_bar_position(mut app App) {
 	app.set_focus(buttons[2]) // Reset
 	app.dispatch(Event{ key: int(Key.enter) })
 	assert !app.bar_top && option.value == 0 && !app.settings_saved()
-	settings.close()
+	app.close(mut settings)
 }
 
 fn test_settings_applies_saves_and_resets_bar_position() {
@@ -139,7 +139,7 @@ fn change_settings_window_buttons(mut app App) {
 		app.dispatch(Event{ key: int(Key.enter) })
 		assert !app.macos_buttons && option.value == 0 && !app.settings_saved()
 	}
-	settings.close()
+	app.close(mut settings)
 }
 
 fn test_settings_applies_saves_reopens_and_resets_macos_window_buttons() {
@@ -202,7 +202,7 @@ fn change_settings_appearance(mut app App) {
 	assert app.screen.cells[swatch.y * app.width + swatch.x].bg == app.theme.desk_bg
 	app.set_focus(buttons[1])
 	app.dispatch(Event{ key: int(Key.enter) })
-	settings.close()
+	app.close(mut settings)
 }
 
 fn check_saved_settings_appearance_and_reset(mut app App) {
@@ -234,7 +234,7 @@ fn check_saved_settings_appearance_and_reset(mut app App) {
 	app.dispatch(Event{ key: int(Key.enter) })
 	assert app.theme == theme_default() && !app.title_gradient && gradient.value == 0
 	assert !app.settings_saved()
-	settings.close()
+	app.close(mut settings)
 }
 
 fn test_settings_appearance_color_picker_save_reopen_and_reset() {

@@ -133,11 +133,12 @@ uses centered text.
 Callbacks receive `mut Ctl` and `mut App`. `changed` handles activation and
 edits, `submit` handles Enter, and `user`/`data` hold application state.
 `keyfn`, `mousefn` and `scrollfn` return true to consume an event. A window's
-`closing` callback can veto `window.close()` or application quit; `destroy` is called
-by `app.destroy_ctl`. Controls use V-managed memory.
+`closing` callback can veto `app.close(mut window)` or application quit.
+`destroy` is called by `app.destroy_ctl`. Controls use V-managed memory.
 
-`window.close()` uses its owning app and returns false if closing is vetoed or
-the control is not an attached window. Closing an already closed window succeeds.
+`app.close(mut window)` returns false if closing is vetoed or the control is not
+a window owned by that app. Closing an already closed window owned by the app
+succeeds.
 
 ## Mouse cursor and hover
 

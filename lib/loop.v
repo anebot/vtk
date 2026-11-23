@@ -252,7 +252,7 @@ pub fn (mut app App) dispatch(e Event) {
 			if f(mut w, e, mut app) { return }
 		}
 		if e.key == int(Key.escape) && w.dismissable {
-			w.close()
+			app.close(mut w)
 		} else if e.key == int(Key.enter) && !isnil(w.link) {
 			w.link.fire()
 		}
@@ -560,7 +560,7 @@ fn (mut app App) mouse(e Event) {
 		if e.y == w.y {
 			title := app.window_title_layout(w)
 			if title.close >= 0 && e.x >= title.close && e.x < title.close + 3 {
-				w.close()
+				app.close(mut w)
 				return
 			}
 			if title.maximize >= 0 && e.x >= title.maximize && e.x < title.maximize + 3 {
