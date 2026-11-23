@@ -49,6 +49,8 @@ fn (mut c Ctl) table_scroll_horizontal(delta int) {
 }
 
 fn (mut app App) draw_table(mut c Ctl, fg int, bg int) {
+	padding_clip := app.screen.set_clip(c.rect())
+	defer { app.screen.restore_clip(padding_clip) }
 	c.table_sync()
 	if c.kids.len == 0 { return }
 	if c.value >= 0 { c.scroll_into_view(c.table_view_row(c.value), c.h - 1) }
@@ -64,7 +66,7 @@ fn (mut app App) draw_table(mut c Ctl, fg int, bg int) {
 	active := app.focus == c && !c.disabled
 	t := app.theme
 	selected_fg, selected_bg := if active { t.focus_fg } else { t.sel_fg }, if active { t.focus_bg } else { t.sel_bg }
-	app.screen.fill(c.rect(), ` `, fg, bg)
+	app.fill_ctl(c, fg, bg)
 	for y := c.top; y < c.row_count && y < c.top + c.h - 1; y++ {
 		if c.table.selection == .rows && range.x >= 0 && y >= range.y && y <= range.y2 {
 			app.screen.fill(Rect{c.x, c.y + y - c.top + 1, c.w, 1}, ` `, selected_fg, selected_bg)

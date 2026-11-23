@@ -91,10 +91,12 @@ fn (mut c Ctl) date_picker_mouse(e Event) {
 }
 
 fn (mut app App) draw_date_picker(c &Ctl) {
+	padding_clip := app.screen.set_clip(c.rect())
+	defer { app.screen.restore_clip(padding_clip) }
 	t := app.theme
 	date := c.date()
 	fg := if c.disabled { t.dim } else { t.field_fg }
-	app.screen.fill(c.rect(), ` `, fg, t.field_bg)
+	app.fill_ctl(c, fg, t.field_bg)
 	header := '${time.long_months[date.month - 1]} ${date.year:04}'
 	app.screen.aligned_text(c.x + 3, c.y, max(0, c.w - 6), header, .center, fg, t.field_bg, bold)
 	app.screen.text(c.x, c.y, ' < ', fg, t.field_bg, 0)

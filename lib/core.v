@@ -89,6 +89,7 @@ pub mut:
 	link          ?&Ctl
 	text          string
 	text_align    TextAlign
+	padding       Insets
 	changed       ?Callback
 	reordered     ?TabReorderCallback
 	submit        ?Callback
@@ -164,6 +165,9 @@ mut:
 	tab_x         int
 	tab_w         int
 	wrap_words    bool
+	padding_used  Insets
+	intrinsic_w   int
+	intrinsic_h   int
 	closed        bool
 	closing_now   bool
 	destroyed     bool
@@ -192,7 +196,9 @@ pub fn (r Rect) contains(x int, y int) bool {
 }
 
 pub fn (c &Ctl) rect() Rect {
-	return Rect{c.x, c.y, c.w, c.h}
+	return Rect{c.x - c.padding_used.left, c.y - c.padding_used.top,
+		c.w + c.padding_used.left + c.padding_used.right,
+		c.h + c.padding_used.top + c.padding_used.bottom}
 }
 
 pub fn new_ctl(kind Kind) &Ctl {

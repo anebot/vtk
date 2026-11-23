@@ -43,7 +43,7 @@ pub fn table(fetch CellCallback, row_count int) &Ctl {
 }
 
 pub fn canvas(width int, height int, paint PaintCallback) &Ctl {
-	return &Ctl{ kind: .canvas, pw: width, ph: height, paint: paint }
+	return &Ctl{ kind: .canvas, pw: width, ph: height, intrinsic_w: width, intrinsic_h: height, paint: paint }
 }
 
 pub fn (mut c Ctl) add_item(text string) &Ctl {
@@ -89,7 +89,7 @@ fn (mut c Ctl) scroll_into_view(row int, height int) {
 }
 
 fn (mut app App) draw_ctl(mut c Ctl) {
-	if c.hidden || c.closed || c.minimized || c.w <= 0 || c.h <= 0 { return }
+	if c.hidden || c.closed || c.minimized || c.rect().w <= 0 || c.rect().h <= 0 { return }
 	old := app.screen.set_clip(c.rect())
 	t := app.theme
 	focused := app.focus == &c && !c.disabled
@@ -110,6 +110,12 @@ fn (mut app App) draw_ctl(mut c Ctl) {
 		p = p.parent
 	}
 	mut focus_bg := if focused { t.focus_bg } else { bg }
+	if c.padding_used != Insets{} { app.screen.fill(c.rect(), ` `, fg, bg) }
+	if c.w <= 0 || c.h <= 0 {
+		if app.focus == &c { app.screen.cursor_x = -1 }
+		app.screen.restore_clip(old)
+		return
+	}
 	match c.kind {
 		.window { app.draw_window(mut c) }
 		.label, .status {
@@ -117,7 +123,7 @@ fn (mut app App) draw_ctl(mut c Ctl) {
 				fg = t.bar_fg
 				bg = t.bar_bg
 			}
-			app.screen.fill(c.rect(), ` `, fg, bg)
+			app.fill_ctl(c, fg, bg)
 			for i, line in c.text.split('\n') { app.screen.text(c.x, c.y + i, line, fg, bg, 0) }
 			for mut child in c.kids { app.draw_ctl(mut child) }
 		}
@@ -132,7 +138,7 @@ fn (mut app App) draw_ctl(mut c Ctl) {
 				bg = t.sel_bg
 				fg = t.sel_fg
 			}
-			app.screen.fill(c.rect(), ` `, fg, bg)
+			app.fill_ctl(c, fg, bg)
 			if c.kind == .toolbutton {
 				app.screen.text(c.x, c.y, '[${c.text}]', fg, bg, if focused { bold } else { 0 })
 			} else {
@@ -152,25 +158,28 @@ fn (mut app App) draw_ctl(mut c Ctl) {
 			} else {
 				'[ ] '
 			}
-			app.screen.fill(c.rect(), ` `, fg, focus_bg)
+			app.fill_ctl(c, fg, focus_bg)
 			app.screen.text(c.x, c.y, mark + c.text, fg, focus_bg, 0)
 		}
 		.spinner {
+			app.screen.set_clip(c.content_rect())
 			c.value = int(time.ticks() / 125) & 3
 			app.screen.text(c.x, c.y, '|/-\\'[c.value].ascii_str() + ' ' + c.text, t.accent, bg, 0)
 		}
-		.separator { app.screen.fill(Rect{c.x, c.y, c.w, 1}, `─`, t.dim, bg) }
+		.separator { app.screen.set_clip(c.content_rect()); app.screen.fill(Rect{c.x, c.y, c.w, 1}, `─`, t.dim, bg) }
 		.slider {
+			app.screen.set_clip(c.content_rect())
 			app.screen.fill(Rect{c.x, c.y, c.w, 1}, `─`, t.dim, bg)
 			thumb := (clamp(c.value, c.low, c.high) - c.low) * max(0, c.w - 1) / max(1, c.high - c.low)
 			app.screen.put(c.x + thumb, c.y, `█`, if focused { t.focus_bg } else { t.field_fg }, bg, 0)
 		}
 		.progress {
+			app.fill_ctl(c, t.dim, bg)
 			value := clamp(c.value, c.low, c.high) - c.low
 			span := max(1, c.high - c.low)
 			color := if c.disabled { t.dim } else { t.field_fg }
 			if c.blocky {
-				app.screen.fill(c.rect(), ` `, t.dim, bg)
+				app.fill_ctl(c, t.dim, bg)
 				blocks := max(1, (c.w + 1) / 3)
 				for i in 0 .. int(i64(value) * blocks / span) {
 					app.screen.fill(Rect{c.x + i * 3, c.y, min(2, c.w - i * 3), 1}, `█`, color, bg)
@@ -184,7 +193,7 @@ fn (mut app App) draw_ctl(mut c Ctl) {
 		.spin {
 			fg = if c.disabled { t.dim } else if focused { t.focus_fg } else { t.field_fg }
 			focus_bg = if focused { t.focus_bg } else { t.field_bg }
-			app.screen.fill(c.rect(), ` `, fg, focus_bg)
+			app.fill_ctl(c, fg, focus_bg)
 			app.screen.text(c.x, c.y, '◄', fg, focus_bg, 0)
 			app.screen.text(c.x + max(1, (c.w - c.value.str().len) / 2), c.y, c.value.str(), fg, focus_bg, 0)
 			app.screen.text(c.x + c.w - 1, c.y, '►', fg, focus_bg, 0)
@@ -194,13 +203,14 @@ fn (mut app App) draw_ctl(mut c Ctl) {
 		.combo {
 			fg = if c.disabled { t.dim } else if focused { t.focus_fg } else { t.field_fg }
 			focus_bg = if focused { t.focus_bg } else { t.field_bg }
-			app.screen.fill(c.rect(), ` `, fg, focus_bg)
+			app.fill_ctl(c, fg, focus_bg)
 			if c.value >= 0 && c.value < c.kids.len {
 				app.screen.aligned_text(c.x, c.y, c.w - 1, c.kids[c.value].text, c.text_align, fg, focus_bg, 0)
 			}
 			app.screen.text(c.x + c.w - 1, c.y, '▼', fg, focus_bg, 0)
 		}
 		.radio {
+			app.screen.set_clip(c.content_rect())
 			for i, child in c.kids {
 				app.screen.text(c.x, c.y + i, (if i == c.value { '(•) ' } else { '( ) ' }) + child.text, if i == c.value && focused { t.focus_fg } else { fg }, if i == c.value {
 					focus_bg
@@ -211,6 +221,7 @@ fn (mut app App) draw_ctl(mut c Ctl) {
 		}
 		.table { app.draw_table(mut c, fg, bg) }
 		.tree {
+			app.screen.set_clip(c.content_rect())
 			rows := c.tree_rows()
 			for i, row in rows {
 				if row.node == c.selected_node {
@@ -243,20 +254,22 @@ fn (mut app App) draw_ctl(mut c Ctl) {
 			app.draw_tabs(mut c, fg, bg)
 		}
 		.group {
-			app.screen.frame(c.rect(), false, t.dim, bg)
+			app.screen.set_clip(c.content_rect())
+			app.screen.frame(c.content_rect(), false, t.dim, bg)
 			app.screen.text(c.x + 1, c.y, ' ${c.text} ', fg, bg, 0)
 			for mut child in c.kids { app.draw_ctl(mut child) }
 		}
 		.toolbar {
-			app.screen.fill(c.rect(), ` `, t.tool_fg, t.tool_bg)
+			app.fill_ctl(c, t.tool_fg, t.tool_bg)
 			for mut child in c.kids { app.draw_ctl(mut child) }
 		}
 		.canvas {
-			app.screen.fill(c.rect(), ` `, white, black)
+			app.fill_ctl(c, white, black)
 			if paint := c.paint { paint(mut c, mut app.screen) }
 		}
-		.terminal { app.draw_terminal(mut c) }
+		.terminal { app.screen.set_clip(c.content_rect()); app.draw_terminal(mut c) }
 		.split {
+			app.screen.set_clip(c.content_rect())
 			app.screen.fill(c.split_divider(), if c.vertical { `─` } else { `│` }, t.dim, bg)
 			for mut child in c.kids { app.draw_ctl(mut child) }
 		}
@@ -268,9 +281,12 @@ fn (mut app App) draw_ctl(mut c Ctl) {
 		}
 		.menu, .menuitem, .item, .treenode {}
 		else {
+			app.screen.set_clip(c.content_rect())
 			for mut child in c.kids { app.draw_ctl(mut child) }
 		}
 	}
+	if c.contains_ctl(app.focus) && (!c.content_rect().contains(app.screen.cursor_x, app.screen.cursor_y)
+		|| !old.contains(app.screen.cursor_x, app.screen.cursor_y)) { app.screen.cursor_x = -1 }
 	app.screen.restore_clip(old)
 }
 

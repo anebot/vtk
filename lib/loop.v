@@ -683,6 +683,11 @@ fn (mut app App) mouse(e Event) {
 	if f := c.mousefn {
 		if f(mut c, e, mut app) { return }
 	}
+	if !e.button.is_wheel() && !c.content_rect().contains(e.x, e.y)
+		&& c.kind !in [.button, .toolbutton, .checkbox, .switch] {
+		if e.button == .left && e.pressed && !e.motion { app.set_focus(c) }
+		return
+	}
 	if c.kind == .table && c.table_mouse(e, mut app) { return }
 	if e.button.is_wheel() {
 		// Horizontal trackpad noise must never reverse a vertical scroll.

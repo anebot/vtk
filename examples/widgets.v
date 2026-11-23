@@ -80,6 +80,7 @@ fn main() {
 	tabs.add_tab('Table', mut table)
 	mut text := vtk.multiline('Word wrapping keeps words together while retaining the original text.\nLong words such as abcdefghijklmnopqrstuvwxyz still wrap when necessary.\nUnicode: café 👩‍💻 🇪🇸 and tabs\tstay intact.')
 	text.set_wrap_mode(.word)
+	text.padding = vtk.Insets{left: 1, right: 1, top: 1, bottom: 1}
 	text.scrollbar = true
 	tabs.add_tab('Text', mut text)
 	mut tree := vtk.tree()

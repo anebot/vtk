@@ -14,21 +14,24 @@ fn (c &Ctl) split_panes() ?(&Ctl, &Ctl) {
 
 fn (c &Ctl) split_divider() Rect {
 	first, _ := c.split_panes() or { return Rect{} }
+	bounds := first.rect()
 	return if c.vertical {
-		Rect{c.x, first.y + first.h, c.w, 1}
+		Rect{c.x, bounds.y + bounds.h, c.w, 1}
 	} else {
-		Rect{first.x + first.w, c.y, 1, c.h}
+		Rect{bounds.x + bounds.w, c.y, 1, c.h}
 	}
 }
 
 fn (mut c Ctl) resize_split(e Event) {
 	first, second := c.split_panes() or { return }
 	space := (if c.vertical { c.h } else { c.w }) - 1
-	low := max(1, if c.vertical { first.min_h } else { first.min_w })
-	high := space - max(1, if c.vertical { second.min_h } else { second.min_w })
+	low := max(if c.vertical { first.min_h } else { first.min_w },
+		padded_extent(1, if c.vertical { first.padding.top } else { first.padding.left }, if c.vertical { first.padding.bottom } else { first.padding.right }))
+	high := space - max(if c.vertical { second.min_h } else { second.min_w },
+		padded_extent(1, if c.vertical { second.padding.top } else { second.padding.left }, if c.vertical { second.padding.bottom } else { second.padding.right }))
 	if low > high { return }
 	keep := clamp(if c.vertical { e.y - c.y } else { e.x - c.x }, low, high)
-	if keep == (if c.vertical { first.h } else { first.w }) { return }
+	if keep == (if c.vertical { first.rect().h } else { first.rect().w }) { return }
 	// Convert cells to the existing thousandths ratio. Constrain the ratio
 	// itself too, so rounding in large splits respects both pane minimums.
 	min_share := max(1, (low * 1000 + space - 1) / space)

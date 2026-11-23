@@ -50,7 +50,7 @@ pub fn terminal(cols int, rows int, options TerminalOptions) !&Ctl {
 	directory := if options.directory == '' { '' } else { os.abs_path(options.directory) }
 	mut t := new_terminal(cols, rows)
 	t.pty = spawn_pty(t.cols, t.rows, directory)!
-	return &Ctl{ kind: .terminal, term: t, pw: cols, ph: rows, expand: true, focusable: true }
+	return &Ctl{ kind: .terminal, term: t, pw: cols, ph: rows, intrinsic_w: cols, intrinsic_h: rows, expand: true, focusable: true }
 }
 
 pub fn (mut app App) terminal_window(options TerminalOptions) !&Ctl {

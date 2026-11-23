@@ -359,6 +359,8 @@ pub fn (c &Ctl) caret_position() int {
 }
 
 fn (mut app App) draw_editor(mut c Ctl) {
+	padding_clip := app.screen.set_clip(c.rect())
+	defer { app.screen.restore_clip(padding_clip) }
 	t := app.theme
 	rows := c.editor_rows()
 	height := c.editor_height()
@@ -377,7 +379,7 @@ fn (mut app App) draw_editor(mut c Ctl) {
 		paint := c.md.styles.paint(.text, t, MarkdownPaint{ fg: fg, bg: bg })
 		fg, bg = paint.fg, paint.bg
 	}
-	app.screen.fill(c.rect(), ` `, fg, bg)
+	app.fill_ctl(c, fg, bg)
 	margin := c.editor_gutter()
 	inset := if c.kind == .markdown { int(c.md.ruler_top) } else { 0 }
 	tab_width := max(1, c.md.tab_width)

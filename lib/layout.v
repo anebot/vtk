@@ -157,16 +157,16 @@ pub fn (mut c Ctl) measure() {
 			h = 6
 		}
 		.canvas, .terminal {
-			w = c.pw
-			h = c.ph
+			w = c.intrinsic_w
+			h = c.intrinsic_h
 		}
 		else {
 			w = text_width(c.text)
 			h = 1
 		}
 	}
-	c.pw = max(c.min_w, w)
-	c.ph = max(c.min_h, h)
+	c.pw = max(c.min_w, padded_extent(w, c.padding.left, c.padding.right))
+	c.ph = max(c.min_h, padded_extent(h, c.padding.top, c.padding.bottom))
 }
 
 fn (c &Ctl) grid_dims() ([]int, []int) {
@@ -188,15 +188,12 @@ fn (c &Ctl) grid_dims() ([]int, []int) {
 }
 
 fn (mut c Ctl) layout(r Rect) {
-	c.x = r.x
-	c.y = r.y
-	c.w = max(0, r.w)
-	c.h = max(0, r.h)
+	c.layout_bounds(r)
 	mut kids := c.content_kids()
 	if kids.len == 0 { return }
 	match c.kind {
 		.window {
-			mut y := c.y + 1
+			y := c.y + 1
 			for mut menu in c.kids {
 				if menu.kind == .menu {
 					menu.x = c.x + 2
@@ -211,14 +208,13 @@ fn (mut c Ctl) layout(r Rect) {
 				menu.x = mx
 				mx += menu.w + 1
 			}
-			if menus.len > 0 { y++ }
-			for mut child in kids { child.layout(Rect{c.x + 1, y, c.w - 2, c.h - (y - c.y) - 1}) }
+			for mut child in kids { child.layout(c.content_rect()) }
 		}
 		.box, .toolbar, .status, .popup {
 			if c.vertical {
 				for mut child in kids {
 					if child.kind == .flow {
-						child.w = c.w
+						child.w = c.content_rect().inset(child.padding).w
 						child.measure()
 					}
 				}
@@ -284,7 +280,7 @@ fn (mut c Ctl) layout(r Rect) {
 		.split {
 			if kids.len == 1 {
 				mut child := kids[0]
-				child.layout(c.rect())
+				child.layout(c.content_rect())
 				return
 			}
 			mut first, mut second := kids[0], kids[1]
@@ -316,7 +312,7 @@ fn (mut c Ctl) layout(r Rect) {
 				x += child.pw + 1
 				rowh = max(rowh, child.ph)
 			}
-			c.ph = y - c.y + rowh
+			c.ph = padded_extent(y - c.y + rowh, c.padding.top, c.padding.bottom)
 		}
 		.group, .tabs, .tabpage {
 			if c.kind == .tabs {
@@ -388,6 +384,7 @@ pub fn (mut c Ctl) tree_select(node ?&Ctl) bool {
 
 fn (c &Ctl) hit_ptr(x int, y int) &Ctl {
 	if c.hidden || c.closed || c.minimized || !c.rect().contains(x, y) { return unsafe { nil } }
+	if c.kind != .window && !c.content_rect().contains(x, y) { return unsafe { c } }
 	if c.kind == .scroll && c.scrollbar && x == c.x + c.w - 1 { return unsafe { c } }
 	for i := c.kids.len - 1; i >= 0; i-- {
 		child := c.kids[i]

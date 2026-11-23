@@ -180,6 +180,29 @@ See [the table API](lib/TABLES.md) and the runnable
 [spreadsheet example](examples/spreadsheet/README.md), including formulas,
 undo/redo, colored cells, workbook save/load and reorderable sheet tabs.
 
+Laid-out controls and containers accept per-side `padding` in terminal cells,
+defaulting to zero. For a one-character inset on both sides of a textarea:
+
+```v
+mut text := vtk.multiline('Text with breathing room')
+text.padding = vtk.Insets{left: 1, right: 1}
+// Top/bottom are rows; use set_padding(...) to change padding at runtime.
+text.set_padding(vtk.Insets{left: 1, right: 1, top: 1, bottom: 1})
+```
+
+Padding contributes to preferred size and reduces the content area used for
+drawing, wrapping, scrollbars, caret placement and mouse input. `rect()` returns
+the full allocation, while `content_rect()` returns the inset area; use the latter
+in custom canvas painters and mouse handlers. Padding is internal spacing, not
+a margin between siblings. It is additional to a group's frame, an editor's
+line-number gutter and other built-in spacing. Window padding applies to its
+client area, preserving the frame and menu. Menu items, table cells and tree
+nodes use their parent widget's layout rather than individual padding boxes.
+Negative values act as zero; oversized padding clips the content away safely.
+Padding areas can focus an editor without moving its caret; buttons remain
+clickable across their full allocation. The widgets example's Text tab uses
+padding with word wrapping.
+
 Grid children use `row` and `col`, both in `0..64`. Expanding children share
 spare space; horizontal boxes leave one cell between children. Button bars
 are right-aligned and bottom-docked. A split's `value` in `1..999` specifies

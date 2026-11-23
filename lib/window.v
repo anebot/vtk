@@ -424,7 +424,9 @@ fn (mut app App) draw_window(mut w Ctl) {
 		if child.kind == .menu {
 			app.screen.text(child.x, child.y, child.text, t.menu_fg, t.menu_bg, 0)
 		} else {
+			clip := app.screen.set_clip(w.content_rect())
 			app.draw_ctl(mut child)
+			app.screen.restore_clip(clip)
 		}
 	}
 	app.screen.restore_clip(inside)
