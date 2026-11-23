@@ -63,7 +63,7 @@ pub fn (mut c Ctl) end_edit_group() {
 
 // replace_range validates byte boundaries and byte limits before mutation.
 // The result reports whether an edit occurred; read-only editors are inert.
-pub fn (mut c Ctl) replace_range(from int, to int, text string, mut app App) bool {
+pub fn (mut c Ctl) replace_range(from int, to int, text string) bool {
 	if c.readonly || from < 0 || to < from || to > c.text.len || boundary(c.text, from) != from || boundary(c.text, to) != to {
 		return false
 	}
@@ -77,6 +77,7 @@ pub fn (mut c Ctl) replace_range(from int, to int, text string, mut app App) boo
 	if before == insertion {
 		c.cursor = from + insertion.len
 		c.anchor = -1
+		c.invalidate()
 		return false
 	}
 	if !c.edit.grouping {
@@ -88,16 +89,16 @@ pub fn (mut c Ctl) replace_range(from int, to int, text string, mut app App) boo
 	c.cursor = from + insertion.len
 	c.anchor = -1
 	c.scroll_hold = false
-	c.fire(mut app)
+	c.fire()
 	return true
 }
 
-pub fn (mut c Ctl) replace_selection(text string, mut app App) bool {
+pub fn (mut c Ctl) replace_selection(text string) bool {
 	a, b := c.selection()
-	return c.replace_range(a, b, text, mut app)
+	return c.replace_range(a, b, text)
 }
 
-pub fn (mut c Ctl) undo(mut app App) bool {
+pub fn (mut c Ctl) undo() bool {
 	c.end_edit_group()
 	if c.readonly || c.edit.undo.len == 0 { return false }
 	change := c.edit.undo.pop()
@@ -107,11 +108,11 @@ pub fn (mut c Ctl) undo(mut app App) bool {
 	c.edit.redo << change
 	c.edit.revision++
 	c.scroll_hold = false
-	c.fire(mut app)
+	c.fire()
 	return true
 }
 
-pub fn (mut c Ctl) redo(mut app App) bool {
+pub fn (mut c Ctl) redo() bool {
 	if c.readonly || c.edit.redo.len == 0 { return false }
 	change := c.edit.redo.pop()
 	c.text = c.text[..change.at] + change.after + c.text[change.at + change.before.len..]
@@ -120,7 +121,7 @@ pub fn (mut c Ctl) redo(mut app App) bool {
 	c.edit.undo << change
 	c.edit.revision++
 	c.scroll_hold = false
-	c.fire(mut app)
+	c.fire()
 	return true
 }
 
@@ -444,38 +445,38 @@ fn (mut c Ctl) editor_key(e Event, mut app App) bool {
 		if c.vim_key(e, mut app) { return true }
 	}
 	if c.kind == .markdown && e.key == int(Key.space) && c.md.mode in [.read, .source_read] {
-		return c.toggle_task(c.cursor, mut app)
+		return c.toggle_task(c.cursor)
 	}
 	if e.ctrl {
 		match lower_key(e.key) {
 			`a` { c.move_cursor(line_start(c.text, c.cursor), e.shift) }
 			`e` { c.move_cursor(line_end(c.text, c.cursor), e.shift) }
 			`z` {
-				if e.shift { c.redo(mut app) } else { c.undo(mut app) }
+				if e.shift { c.redo() } else { c.undo() }
 			}
-			`r`, `y` { c.redo(mut app) }
-			`v` { c.replace_selection(app.clipboard, mut app) }
+			`r`, `y` { c.redo() }
+			`v` { c.replace_selection(app.clipboard) }
 			`x` {
 				a, b := c.selection()
 				if b > a && !c.secret {
 					app.clipboard_set(c.text[a..b])
-					c.replace_selection('', mut app)
+					c.replace_selection('')
 				}
 			}
 			`w` {
 				if c.anchor < 0 || c.anchor == c.cursor {
 					c.anchor = word_back(c.text, c.cursor, false)
 				}
-				c.replace_selection('', mut app)
+				c.replace_selection('')
 			}
 			`k` {
 				c.replace_range(c.cursor, if c.cursor == line_end(c.text, c.cursor) {
 					min(c.text.len, c.cursor + 1)
 				} else {
 					line_end(c.text, c.cursor)
-				}, '', mut app)
+				}, '')
 			}
-			`u` { c.replace_range(line_start(c.text, c.cursor), c.cursor, '', mut app) }
+			`u` { c.replace_range(line_start(c.text, c.cursor), c.cursor, '') }
 			else { return false }
 		}
 		return true
@@ -491,22 +492,22 @@ fn (mut c Ctl) editor_key(e Event, mut app App) bool {
 		int(Key.page_down) { c.vertical_move(max(1, c.editor_height() - 2), e.shift) }
 		int(Key.backspace) {
 			a, b := c.selection()
-			c.replace_range(if a == b { prev_char(c.text, c.cursor) } else { a }, b, '', mut app)
+			c.replace_range(if a == b { prev_char(c.text, c.cursor) } else { a }, b, '')
 		}
 		int(Key.delete) {
 			a, b := c.selection()
-			c.replace_range(a, if a == b { next_char(c.text, c.cursor) } else { b }, '', mut app)
+			c.replace_range(a, if a == b { next_char(c.text, c.cursor) } else { b }, '')
 		}
 		int(Key.enter) {
 			if c.kind == .entry {
 				if f := c.submit { f(mut c, mut app) } else { return false }
 			} else {
-				c.replace_selection('\n', mut app)
+				c.replace_selection('\n')
 			}
 		}
 		else {
 			if e.alt || e.key < 32 || e.key >= 0x110000 { return false }
-			c.replace_selection(rune(e.key).str(), mut app)
+			c.replace_selection(rune(e.key).str())
 		}
 	}
 	return true
@@ -532,7 +533,7 @@ fn (mut c Ctl) editor_mouse(e Event, mut app App) {
 		for g in rows[row].glyphs {
 			if g.at == at && g.task >= 0 {
 				if c.md.mode in [.read, .source_read] || (c.md.last_task == g.task && app.now() - c.md.last_click < 400) {
-					c.toggle_task(g.task, mut app)
+					c.toggle_task(g.task)
 					return
 				}
 				c.md.last_task = g.task

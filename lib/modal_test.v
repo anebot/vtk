@@ -124,7 +124,7 @@ fn choose_settings_desktop_color(mut app App) {
 	preview := picker.kids[0].kids[6].kids[1]
 	app.redraw()
 	assert app.screen.cells[preview.y * app.width + preview.x].bg == color_rgb(12, 34, 56)
-	for i, mut slider in sliders { slider.set_value([65, 43, 21][i], mut app) }
+	for i, mut slider in sliders { slider.set_value([65, 43, 21][i]) }
 	app.redraw()
 	assert app.screen.cells[preview.y * app.width + preview.x].bg == color_rgb(65, 43, 21)
 	app.set_focus(picker.link)

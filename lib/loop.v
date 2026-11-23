@@ -160,7 +160,7 @@ pub fn (mut app App) dispatch(e Event) {
 			if c.kind == .terminal {
 				c.term.write(e.text)
 			} else if c.kind in [.entry, .multiline, .markdown] {
-				c.replace_selection(e.text, mut app)
+				c.replace_selection(e.text)
 			}
 		}
 		return
@@ -253,7 +253,7 @@ pub fn (mut app App) dispatch(e Event) {
 		if e.key == int(Key.escape) && w.dismissable {
 			app.close(mut w)
 		} else if e.key == int(Key.enter) && !isnil(w.link) {
-			w.link.fire(mut app)
+			w.link.fire()
 		}
 	}
 }
@@ -273,33 +273,33 @@ fn (mut app App) widget_key(mut c Ctl, event Event) bool {
 		.entry, .multiline, .markdown { return c.editor_key(e, mut app) }
 		.button, .toolbutton {
 			if e.key in [int(Key.enter), int(Key.space)] {
-				c.fire(mut app)
+				c.fire()
 				return true
 			}
 		}
 		.checkbox, .switch {
 			if e.key in [int(Key.enter), int(Key.space)] {
 				c.value = int(c.value == 0)
-				c.fire(mut app)
+				c.fire()
 				return true
 			}
 		}
 		.slider, .spin {
 			step := if c.kind == .spin { 1 } else { max(1, (c.high - c.low) / 20) }
 			if e.key in [int(Key.left), int(Key.down)] {
-				c.set_value(c.value - step, mut app)
+				c.set_value(c.value - step)
 				return true
 			}
 			if e.key in [int(Key.right), int(Key.up)] {
-				c.set_value(c.value + step, mut app)
+				c.set_value(c.value + step)
 				return true
 			}
 			if e.key == int(Key.home) {
-				c.set_value(c.low, mut app)
+				c.set_value(c.low)
 				return true
 			}
 			if e.key == int(Key.end) {
-				c.set_value(c.high, mut app)
+				c.set_value(c.high)
 				return true
 			}
 		}
@@ -331,7 +331,7 @@ fn (mut app App) widget_key(mut c Ctl, event Event) bool {
 					count - 1
 				} else {
 					c.value + step
-				}, 0, count - 1), mut app)
+				}, 0, count - 1))
 				if c.kind == .tabs {
 					c.layout(c.rect())
 					if !isnil(app.focus) && !app.focus.visible() { app.focus = &c }
@@ -367,7 +367,7 @@ fn (mut app App) widget_key(mut c Ctl, event Event) bool {
 				}, 0, rows.len - 1)
 				c.link = rows[at].node
 				c.scroll_hold = false
-				c.fire(mut app)
+				c.fire()
 				return true
 			}
 			if e.key in [int(Key.left), int(Key.right), int(Key.enter)] && !isnil(c.link) {
@@ -384,7 +384,7 @@ fn (mut app App) widget_key(mut c Ctl, event Event) bool {
 				} else {
 					int(c.link.value == 0)
 				}
-				c.fire(mut app)
+				c.fire()
 				return true
 			}
 		}
@@ -471,7 +471,7 @@ fn (mut app App) mouse(e Event) {
 			return
 		}
 		if c.kind == .slider {
-			c.set_value(c.low + (e.x - c.x) * (c.high - c.low) / max(1, c.w - 1), mut app)
+			c.set_value(c.low + (e.x - c.x) * (c.high - c.low) / max(1, c.w - 1))
 			return
 		}
 		if e.motion {
@@ -644,28 +644,28 @@ fn (mut app App) mouse(e Event) {
 		}
 	}
 	match c.kind {
-		.button, .toolbutton { c.fire(mut app) }
+		.button, .toolbutton { c.fire() }
 		.checkbox, .switch {
 			c.value = int(c.value == 0)
-			c.fire(mut app)
+			c.fire()
 		}
 		.entry, .multiline, .markdown {
 			c.editor_mouse(e, mut app)
 			app.drag = c
 		}
 		.slider {
-			c.set_value(c.low + (e.x - c.x) * (c.high - c.low) / max(1, c.w - 1), mut app)
+			c.set_value(c.low + (e.x - c.x) * (c.high - c.low) / max(1, c.w - 1))
 			app.drag = c
 		}
-		.spin { c.set_value(c.value + if e.x < c.x + c.w / 2 { -1 } else { 1 }, mut app) }
+		.spin { c.set_value(c.value + if e.x < c.x + c.w / 2 { -1 } else { 1 }) }
 		.combo { app.open_menu(c, c.x, c.y + 1) }
-		.radio { c.set_value(clamp(e.y - c.y, 0, c.kids.len - 1), mut app) }
+		.radio { c.set_value(clamp(e.y - c.y, 0, c.kids.len - 1)) }
 		.tabs {
 			if e.y >= c.y + 2 { return }
 			for i, page in c.kids {
 				if e.x >= page.tab_x && e.x < page.tab_x + page.tab_w {
 					c.value = i
-					c.fire(mut app)
+					c.fire()
 					break
 				}
 			}
@@ -673,7 +673,7 @@ fn (mut app App) mouse(e Event) {
 		.table {
 			if e.y > c.y && c.high > 0 {
 				c.scroll_hold = false
-				c.set_value(clamp(c.top + e.y - c.y - 1, 0, c.high - 1), mut app)
+				c.set_value(clamp(c.top + e.y - c.y - 1, 0, c.high - 1))
 			}
 		}
 		.tree {
@@ -683,7 +683,7 @@ fn (mut app App) mouse(e Event) {
 				c.link = rows[at].node
 				c.link.value = int(c.link.value == 0)
 				c.scroll_hold = false
-				c.fire(mut app)
+				c.fire()
 			}
 		}
 		else {}

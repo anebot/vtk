@@ -77,10 +77,10 @@ fn closing(mut w vtk.Ctl, mut app vtk.App) bool {
 	return choice == 1
 }
 
-fn wrap(mut doc Document, prefix string, suffix string, mut app vtk.App) {
+fn wrap(mut doc Document, prefix string, suffix string) {
 	a, b := doc.view.selection()
 	text := doc.view.text[a..b]
-	doc.view.replace_range(a, b, prefix + text + suffix, mut app)
+	doc.view.replace_range(a, b, prefix + text + suffix)
 	doc.view.cursor = a + prefix.len + text.len
 }
 
@@ -100,26 +100,26 @@ fn action(mut c vtk.Ctl, mut app vtk.App) {
 		3 { save(mut doc, false, mut app) }
 		4 { save(mut doc, true, mut app) }
 		5 { app.close(mut doc.window) }
-		6 { doc.view.undo(mut app) }
-		7 { doc.view.redo(mut app) }
+		6 { doc.view.undo() }
+		7 { doc.view.redo() }
 		8 {
 			app.set_focus(doc.view)
 			app.copy_focus()
 		}
-		9 { doc.view.replace_selection(app.clipboard_text(), mut app) }
+		9 { doc.view.replace_selection(app.clipboard_text()) }
 		10 {
 			doc.view.anchor = 0
 			doc.view.cursor = doc.view.text.len
 		}
-		11 { wrap(mut doc, '**', '**', mut app) }
-		12 { wrap(mut doc, '*', '*', mut app) }
-		13 { wrap(mut doc, '`', '`', mut app) }
+		11 { wrap(mut doc, '**', '**') }
+		12 { wrap(mut doc, '*', '*') }
+		13 { wrap(mut doc, '`', '`') }
 		14 {
-			if emoji := app.emoji_pick(doc.window) { doc.view.replace_selection(emoji, mut app) }
+			if emoji := app.emoji_pick(doc.window) { doc.view.replace_selection(emoji) }
 		}
 		15 {
 			if target := app.prompt_for(doc.window, 'Link', 'Target URL or path:', '') {
-				wrap(mut doc, '[', '](${target})', mut app)
+				wrap(mut doc, '[', '](${target})')
 			}
 		}
 		16 {
@@ -166,10 +166,10 @@ fn action(mut c vtk.Ctl, mut app vtk.App) {
 		23 { doc.view.md.ruler_top = !doc.view.md.ruler_top }
 		24 { doc.view.md.ruler_left = !doc.view.md.ruler_left }
 		25 { app.quit() }
-		26 { wrap(mut doc, '\n# ', '', mut app) }
-		27 { wrap(mut doc, '\n- ', '', mut app) }
-		28 { wrap(mut doc, '\n> ', '', mut app) }
-		29 { wrap(mut doc, '\n```\n', '\n```\n', mut app) }
+		26 { wrap(mut doc, '\n# ', '') }
+		27 { wrap(mut doc, '\n- ', '') }
+		28 { wrap(mut doc, '\n> ', '') }
+		29 { wrap(mut doc, '\n```\n', '\n```\n') }
 		else {}
 	}
 	app.dirty = true

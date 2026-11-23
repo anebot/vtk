@@ -62,6 +62,29 @@ fn main() {
 
 ## Controls and layout
 
+Controls acquire app ownership when added to an app's window, including nested
+controls built before attachment. Moving a subtree to another window updates its
+ownership automatically; detached controls can be initialized without an app.
+Attach context menus with `control.set_menu(mut menu)` so their items inherit
+ownership too. Standalone menus acquire ownership when opened.
+
+Widget mutations no longer take `mut app`: use `control.set_value(42)`,
+`control.replace_selection(text)`, `control.undo()`, `control.redo()`,
+`control.toggle_task(at)` and `control.fire()`. Value changes and edits notify
+`changed` with the owning app; detached mutations update state without invoking
+app callbacks, and attachment does not replay those callbacks.
+
+`set_text`, `markdown_mode`, `vim_mode`, item/tab/tree additions, scrolling,
+size limits and attachment/detachment schedule redraws without emitting `changed`.
+After changing public fields directly, call `control.invalidate()` to schedule a
+redraw. Callbacks still receive `mut app` for application operations.
+
+```v
+mut bar := vtk.progress()
+window.add(mut bar)
+bar.set_value(42)
+```
+
 `Ctl` is the shared control model. Public fields correspond to HTK's control
 fields; constructors and methods use V naming conventions. `App` contains
 the window stack, theme, focus, clipboard, hooks and desktop settings.
@@ -87,7 +110,7 @@ the window stack, theme, focus, clipboard, hooks and desktop settings.
 | Bars | `toolbar()`, `statusbar(text)` |
 | Canvas | `canvas(width, height, paint_callback)` |
 | Menus | `window.add_menu(title)`, `menu.menu_item(title, callback)` |
-| Context menu | `context_menu()`, `control.menu`, `app.open_menu(menu, x, y)` |
+| Context menu | `context_menu()`, `control.set_menu(mut menu)`, `app.open_menu(menu, x, y)` |
 
 Grid children use `row` and `col`, both in `0..64`. Expanding children share
 spare space; horizontal boxes leave one cell between children. Button bars

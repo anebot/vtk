@@ -26,6 +26,7 @@ pub fn (mut c Ctl) vim_mode(enabled bool) {
 	c.vim.pending = 0
 	c.vim.visual_start = -1
 	c.anchor = -1
+	c.invalidate()
 }
 
 pub fn (mut app App) vim_set(enabled bool) {
@@ -97,17 +98,17 @@ fn (mut c Ctl) vim_key(e Event, mut app App) bool {
 				`e` { c.move_cursor(line_end(c.text, c.cursor), false) }
 				`p` { c.vertical_move(-1, false) }
 				`n` { c.vertical_move(1, false) }
-				`d` { c.replace_range(c.cursor, next_char(c.text, c.cursor), '', mut app) }
-				`h` { c.replace_range(prev_char(c.text, c.cursor), c.cursor, '', mut app) }
+				`d` { c.replace_range(c.cursor, next_char(c.text, c.cursor), '') }
+				`h` { c.replace_range(prev_char(c.text, c.cursor), c.cursor, '') }
 				`y` {
-					c.replace_selection(app.clipboard, mut app)
+					c.replace_selection(app.clipboard)
 					c.vim.kill = false
 				}
 				`t` {
 					b := if c.cursor == c.text.len { prev_char(c.text, c.cursor) } else { c.cursor }
 					a, end := prev_char(c.text, b), next_char(c.text, b)
 					if a < b && b < c.text.len && c.text[a] != `\n` && c.text[b] != `\n` {
-						c.replace_range(a, end, c.text[b..end] + c.text[a..b], mut app)
+						c.replace_range(a, end, c.text[b..end] + c.text[a..b])
 					}
 				}
 				else {
@@ -127,7 +128,7 @@ fn (mut c Ctl) vim_key(e Event, mut app App) bool {
 						} else {
 							cut
 						})
-						c.replace_range(a, b, '', mut app)
+						c.replace_range(a, b, '')
 						c.vim.kill = true
 					}
 				}
@@ -144,7 +145,7 @@ fn (mut c Ctl) vim_key(e Event, mut app App) bool {
 	}
 	if e.ctrl {
 		if e.key == `r` {
-			c.redo(mut app)
+			c.redo()
 			return true
 		}
 		return false
@@ -159,9 +160,9 @@ fn (mut c Ctl) vim_key(e Event, mut app App) bool {
 			}
 			if e.key == `c` { c.begin_edit_group() }
 			if e.key in [int(`d`), int(`x`), int(`c`)] {
-				c.replace_range(a, b, '', mut app)
+				c.replace_range(a, b, '')
 			} else if e.key in [int(`p`), int(`P`)] {
-				c.replace_range(a, b, paste, mut app)
+				c.replace_range(a, b, paste)
 			} else {
 				c.cursor = a
 			}
@@ -219,7 +220,7 @@ fn (mut c Ctl) vim_key(e Event, mut app App) bool {
 			c.vim_copy_range(start, end, false, mut app)
 			if c.vim.pending != `y` {
 				if c.vim.pending == `c` { c.begin_edit_group() }
-				c.replace_range(start, end, '', mut app)
+				c.replace_range(start, end, '')
 			}
 			if c.vim.pending == `c` { c.vim.mode = .insert }
 			c.vim.pending = 0
@@ -244,16 +245,16 @@ fn (mut c Ctl) vim_key(e Event, mut app App) bool {
 			} else {
 				line_end(c.text, c.cursor)
 			}
-			if c.replace_range(at, at, '\n', mut app) {
+			if c.replace_range(at, at, '\n') {
 				c.vim.mode = .insert
 				if e.key == `O` { c.cursor = at }
 			}
 		}
-		`u` { c.undo(mut app) }
+		`u` { c.undo() }
 		`x` {
 			end := next_char(c.text, c.cursor)
 			if !c.readonly && end > c.cursor { c.vim_copy_range(c.cursor, end, false, mut app) }
-			c.replace_range(c.cursor, end, '', mut app)
+			c.replace_range(c.cursor, end, '')
 		}
 		`J` {
 			a := line_end(c.text, c.cursor)
@@ -264,7 +265,7 @@ fn (mut c Ctl) vim_key(e Event, mut app App) bool {
 					' '
 				} else {
 					''
-				}, mut app)
+				})
 			}
 		}
 		`d`, `y`, `c` {
@@ -273,7 +274,7 @@ fn (mut c Ctl) vim_key(e Event, mut app App) bool {
 				c.vim_copy_range(a, b, true, mut app)
 				if e.key != `y` {
 					if e.key == `c` { c.begin_edit_group() }
-					c.replace_range(a, b, '', mut app)
+					c.replace_range(a, b, '')
 				}
 				if e.key == `c` { c.vim.mode = .insert }
 				c.vim.pending = 0
@@ -295,7 +296,7 @@ fn (mut c Ctl) vim_key(e Event, mut app App) bool {
 					text = '\n' + text
 				}
 			}
-			c.replace_range(at, at, text, mut app)
+			c.replace_range(at, at, text)
 		}
 		`v`, `V` {
 			c.vim.mode = if e.key == `V` { VimMode.visual_line } else { VimMode.visual }

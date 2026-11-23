@@ -59,17 +59,18 @@ pub fn (c &Ctl) table_cell(row int, col int) string {
 	return ''
 }
 
-pub fn (mut c Ctl) set_value(value int, mut app App) {
+pub fn (mut c Ctl) set_value(value int) {
 	v := if c.kind in [.slider, .spin, .progress] { clamp(value, c.low, c.high) } else { value }
 	if c.value != v {
 		c.value = v
-		c.fire(mut app)
+		c.fire()
 	}
 }
 
 pub fn (mut c Ctl) scroll_rows(rows int, total int, viewport int) bool {
 	c.top = clamp(c.top + rows, 0, total - max(1, viewport))
 	c.scroll_hold = true
+	c.invalidate()
 	return true
 }
 

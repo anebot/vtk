@@ -3,23 +3,22 @@ module vtk
 import os
 
 fn test_utf8_entry_limits_selection_and_history() {
-	mut app := new_app()
 	mut c := entry('é', 6)
-	assert c.replace_selection('😀', mut app)
+	assert c.replace_selection('😀')
 	assert c.text == 'é😀'
-	assert !c.replace_selection('x', mut app)
+	assert !c.replace_selection('x')
 	c.cursor = 2
 	c.anchor = 0
-	assert c.replace_selection('a', mut app)
+	assert c.replace_selection('a')
 	assert c.text == 'a😀'
-	assert c.undo(mut app)
+	assert c.undo()
 	assert c.text == 'é😀'
-	assert c.redo(mut app)
+	assert c.redo()
 	assert c.text == 'a😀'
 	c.readonly = true
-	assert !c.replace_selection('oops', mut app)
-	assert !c.undo(mut app)
-	assert !c.replace_range(2, 3, '', mut app)
+	assert !c.replace_selection('oops')
+	assert !c.undo()
+	assert !c.replace_range(2, 3, '')
 }
 
 fn test_layout_focus_tabs_and_window_lifecycle() {
@@ -171,16 +170,15 @@ fn test_combo_text_alignment_clipping_and_popup_choices() {
 }
 
 fn test_markdown_tasks_source_mapping_and_readonly() {
-	mut app := new_app()
 	mut c := markdown('- [ ] task é😀\n```text\n- [ ] code\n```\n')
 	c.markdown_mode(.read)
 	c.cursor = 9
-	assert c.toggle_task(c.cursor, mut app)
+	assert c.toggle_task(c.cursor)
 	assert c.text.starts_with('- [x]') && c.readonly && c.cursor == 9
 	assert c.edit.undo.len == 1
-	assert !c.toggle_task(30, mut app)
+	assert !c.toggle_task(30)
 	c.markdown_mode(.edit)
-	assert c.undo(mut app)
+	assert c.undo()
 	assert c.text.starts_with('- [ ]')
 	c.w = 30
 	c.h = 8
@@ -212,14 +210,14 @@ fn test_vim_utf8_edits_visual_and_undo_group() {
 	assert c.cursor == 2
 	c.vim_key(Event{ key: int(`x`) }, mut app)
 	assert c.text == 'é word\nsecond'
-	c.undo(mut app)
+	c.undo()
 	c.cursor = 0
 	c.vim_key(Event{ key: int(`i`) }, mut app)
 	c.editor_key(Event{ key: int(`a`) }, mut app)
 	c.editor_key(Event{ key: int(`b`) }, mut app)
 	c.vim_key(Event{ key: int(Key.escape) }, mut app)
 	assert c.text.starts_with('abé')
-	c.undo(mut app)
+	c.undo()
 	assert c.text.starts_with('é😀')
 	c.vim_key(Event{ key: int(`v`) }, mut app)
 	c.vim_key(Event{ key: int(`l`) }, mut app)
@@ -233,7 +231,7 @@ fn test_vim_utf8_edits_visual_and_undo_group() {
 	c.editor_key(Event{ key: int(`X`) }, mut app)
 	c.vim_key(Event{ key: int(Key.escape) }, mut app)
 	assert c.text == 'X two'
-	c.undo(mut app)
+	c.undo()
 	assert c.text == 'one two' && c.cursor == 0
 }
 

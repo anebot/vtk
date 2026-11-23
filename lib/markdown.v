@@ -42,6 +42,7 @@ pub fn markdown(text string) &Ctl {
 pub fn (mut c Ctl) markdown_mode(mode MarkdownMode) {
 	c.md.mode = mode
 	c.readonly = mode in [.read, .source_read]
+	c.invalidate()
 }
 
 // Parsing and hit testing share byte positions. Fences retain a display row
@@ -265,7 +266,7 @@ fn task_offset(line string) int {
 	return -1
 }
 
-pub fn (mut c Ctl) toggle_task(at int, mut app App) bool {
+pub fn (mut c Ctl) toggle_task(at int) bool {
 	if !c.md.task_interactive { return false }
 	rows := c.markdown_rows()
 	mut task := -1
@@ -285,6 +286,6 @@ pub fn (mut c Ctl) toggle_task(at int, mut app App) bool {
 	c.edit.redo.clear()
 	c.edit.revision++
 	c.text = c.text[..task] + after + c.text[task + 1..]
-	c.fire(mut app)
+	c.fire()
 	return true
 }

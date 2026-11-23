@@ -208,7 +208,7 @@ pub fn (mut app App) history_for(owner &Ctl, mut editor Ctl) {
 	at := app.list_choice_for(owner, 'History - restore through selected change', labels, 0)
 	if at < 0 { return }
 	for _ in 0 .. abs(steps[at]) {
-		if steps[at] < 0 { editor.undo(mut app) } else { editor.redo(mut app) }
+		if steps[at] < 0 { editor.undo() } else { editor.redo() }
 	}
 }
 

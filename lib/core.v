@@ -153,6 +153,8 @@ pub mut:
 	vim           Vim
 	term          &Terminal = unsafe { nil }
 mut:
+	// Only roots (windows and standalone menus) retain the owning app.
+	app           &App = unsafe { nil }
 	modal_parent  &Ctl = unsafe { nil }
 	window_order  int
 }
@@ -177,20 +179,28 @@ pub fn new_ctl(kind Kind) &Ctl {
 	return &Ctl{ kind: kind }
 }
 
-// add reparents a control and rejects cycles rather than corrupting the tree.
-pub fn (mut c Ctl) add(mut child Ctl) {
-	mut ancestor := &c
+fn (c &Ctl) can_adopt(child &Ctl) bool {
+	mut ancestor := unsafe { c }
 	for !isnil(ancestor) {
-		if ancestor == &child { return }
+		if ancestor == child { return false }
 		ancestor = ancestor.parent
 	}
+	return true
+}
+
+// add reparents a control and rejects cycles rather than corrupting the tree.
+pub fn (mut c Ctl) add(mut child Ctl) {
+	if !c.can_adopt(&child) { return }
 	child.detach()
 	child.parent = c
 	c.kids << &child
+	c.invalidate()
 }
 
 pub fn (mut c Ctl) detach() {
+	c.invalidate()
 	if !isnil(c.parent) {
+		if c.parent.menu == &c { c.parent.menu = unsafe { nil } }
 		for i, child in c.parent.kids {
 			if child == &c {
 				c.parent.kids.delete(i)
@@ -199,6 +209,7 @@ pub fn (mut c Ctl) detach() {
 		}
 	}
 	c.parent = unsafe { nil }
+	c.app = unsafe { nil }
 }
 
 pub fn (c &Ctl) owner_window() &Ctl {
@@ -212,9 +223,26 @@ pub fn (mut c Ctl) set_text(text string) {
 	c.cursor = boundary(text, clamp(c.cursor, 0, text.len))
 	c.anchor = -1
 	c.edit.reset()
+	c.invalidate()
 }
 
-pub fn (mut c Ctl) fire(mut app App) {
+// root resolves ownership dynamically so entire subtrees can be reparented.
+fn (c &Ctl) root() &Ctl {
+	mut root := unsafe { c }
+	for !isnil(root.parent) { root = root.parent }
+	return root
+}
+
+// invalidate schedules a redraw without emitting a changed callback.
+// Detached controls have no app and can be configured safely.
+pub fn (c &Ctl) invalidate() {
+	mut app := c.root().app
+	if !isnil(app) { app.dirty = true }
+}
+
+pub fn (mut c Ctl) fire() {
+	mut app := c.root().app
+	if isnil(app) { return }
 	app.dirty = true
 	if f := c.changed { f(mut c, mut app) }
 }

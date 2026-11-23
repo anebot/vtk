@@ -2,6 +2,17 @@ module vtk
 
 pub fn context_menu() &Ctl { return new_ctl(.menu) }
 
+// set_menu attaches a context menu so its items inherit the control's app.
+pub fn (mut c Ctl) set_menu(mut menu Ctl) {
+	if menu.kind != .menu || c.menu == &menu || !c.can_adopt(&menu) { return }
+	if !isnil(c.menu) { c.menu.detach() }
+	menu.detach()
+	// A context menu inherits ownership without becoming a choice or tab.
+	menu.parent = &c
+	c.menu = &menu
+	c.invalidate()
+}
+
 pub fn (mut c Ctl) add_menu(title string) &Ctl {
 	mut menu := &Ctl{ kind: .menu, text: title }
 	c.add(mut menu)
@@ -28,12 +39,16 @@ pub fn (mut app App) open_menu(owner &Ctl, x int, y int) {
 
 fn (mut app App) push_menu(owner &Ctl, x int, y int) {
 	if owner.kids.len == 0 { return }
+	mut root := owner.root()
+	if root.kind == .window && root.app != &app { return }
+	root.app = app
 	mut width := 8
 	for item in owner.kids { width = max(width, text_width(item.text) + 4) }
 	w := min(app.width, width)
 	h := min(app.height, owner.kids.len + 2)
 	mut p := &Ctl{
 		kind:  .popup
+		app:   app
 		link:  owner
 		x:     clamp(x, 0, app.width - w)
 		y:     clamp(y, 0, app.height - h)
@@ -110,9 +125,9 @@ fn (mut app App) choose_popup() {
 	app.close_popups()
 	if owner.kind == .combo {
 		owner.value = p.value
-		owner.fire(mut app)
+		owner.fire()
 	} else {
-		item.fire(mut app)
+		item.fire()
 	}
 }
 
