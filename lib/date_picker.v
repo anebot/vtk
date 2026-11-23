@@ -141,6 +141,7 @@ fn date_picker_accept(mut c Ctl, mut app App) {
 
 // date_pick returns the chosen date, or none when cancelled.
 pub fn (mut app App) date_pick(owner &Ctl, title string, initial time.Time) ?time.Time {
+	if !app.can_access(owner) { return none }
 	mut body := box(true)
 	mut picker := date_picker(initial)
 	picker.submit = date_picker_accept

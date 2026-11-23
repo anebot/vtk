@@ -32,7 +32,7 @@ pub fn (mut c Ctl) menu_separator() {
 
 pub fn (mut app App) open_menu(owner &Ctl, x int, y int) {
 	w := owner.owner_window()
-	if !isnil(w) && !isnil(app.blocker(w)) { return }
+	if !isnil(w) && (w.app != &app || !isnil(app.blocker(w))) { return }
 	app.close_popups()
 	app.push_menu(owner, x, y)
 }
@@ -41,6 +41,7 @@ fn (mut app App) push_menu(owner &Ctl, x int, y int) {
 	if owner.kids.len == 0 { return }
 	mut root := owner.root()
 	if root.kind == .window && root.app != &app { return }
+	if !isnil(root.app) && root.app != &app { root.app.clear_hover_within(root) }
 	root.app = app
 	mut width := 8
 	for item in owner.kids { width = max(width, text_width(item.text) + 4) }
@@ -74,6 +75,10 @@ pub fn (mut app App) close_popups() {
 }
 
 fn (mut app App) layout_popups() {
+	if app.popups.any(!app.can_access(it.link)) {
+		app.close_popups()
+		return
+	}
 	anchored := app.popup_at_bar
 	if anchored && ((!isnil(app.app_popup) && !app.desktop) || app.bar_height() == 0 || app.height < 4 || app.width < 7) {
 		app.close_popups()
@@ -232,7 +237,7 @@ fn window_menu_action(mut item Ctl, mut app App) {
 }
 
 pub fn (mut app App) window_menu(mut w Ctl, x int, y int) {
-	if !app.on_desktop(&w) || w.hidden || w.closed || w.disabled || !isnil(app.blocker(&w)) { return }
+	if !app.can_access(&w) || !app.on_desktop(&w) || w.hidden || w.closed || w.disabled || !isnil(app.blocker(&w)) { return }
 	mut menu := context_menu()
 	names := ['Minimize', if w.maximized { 'Restore' } else { 'Maximize' }, 'Move', 'Resize',
 		(if w.always_on_top { '[x] ' } else { '[ ] ' }) + 'Always on top', 'Close']

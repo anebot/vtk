@@ -17,7 +17,7 @@ pub fn (mut app App) clipboard_set(text string) {
 pub fn (app &App) clipboard_text() string { return app.clipboard }
 
 pub fn (mut app App) copy_focus() bool {
-	if isnil(app.focus) || !app.focus.visible() { return false }
+	if isnil(app.focus) || !app.can_access(app.focus) || !app.focus.visible() { return false }
 	c := app.focus
 	if c.kind in [.entry, .multiline, .markdown] && !c.secret {
 		a, b := c.selection()

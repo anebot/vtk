@@ -22,6 +22,7 @@ pub fn (mut app App) notify(text string, timeout_ms int) &Notice {
 }
 
 pub fn (mut app App) notice_close(mut notice Notice) {
+	if !app.notices.any(it == &notice) { return }
 	notice.closed = true
 	app.dirty = true
 }

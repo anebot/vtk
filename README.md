@@ -68,6 +68,14 @@ ownership automatically; detached controls can be initialized without an app.
 Attach context menus with `control.set_menu(mut menu)` so their items inherit
 ownership too. Standalone menus acquire ownership when opened.
 
+Window management, focus, scrolling, destruction and dialogs reject controls
+owned by another app before changing state or invoking callbacks. They keep
+their usual failure or cancellation result. Explicit attachment and `app.dialog`
+can transfer subtrees between apps; `raise` can adopt detached windows, and
+standalone menus bind to the app that opens them.
+After a transfer, stale focus, capture and popups are discarded before the next
+input event. Hover leave callbacks run before ownership changes.
+
 Widget mutations no longer take `mut app`: use `control.set_value(42)`,
 `control.replace_selection(text)`, `control.undo()`, `control.redo()`,
 `control.toggle_task(at)` and `control.fire()`. Value changes and edits notify

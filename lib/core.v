@@ -203,6 +203,8 @@ pub fn (mut c Ctl) add(mut child Ctl) {
 
 pub fn (mut c Ctl) detach() {
 	c.invalidate()
+	mut app := c.root().app
+	if !isnil(app) { app.clear_hover_within(&c) }
 	if !isnil(c.parent) {
 		if c.parent.menu == &c { c.parent.menu = unsafe { nil } }
 		for i, child in c.parent.kids {
@@ -235,6 +237,13 @@ fn (c &Ctl) root() &Ctl {
 	mut root := unsafe { c }
 	for !isnil(root.parent) { root = root.parent }
 	return root
+}
+
+// Detached controls and nil dialog owners are allowed; foreign roots are not.
+fn (app &App) can_access(c &Ctl) bool {
+	if isnil(c) { return true }
+	owner := c.root().app
+	return isnil(owner) || owner == app
 }
 
 // invalidate schedules a redraw without emitting a changed callback.

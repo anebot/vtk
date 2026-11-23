@@ -29,6 +29,7 @@ pub fn (mut app App) dialog(title string, mut body Ctl) &Ctl {
 }
 
 pub fn (mut app App) modal_for(mut dialog Ctl, owner &Ctl) int {
+	if !app.can_access(&dialog) || !app.can_access(owner) { return -1 }
 	if !isnil(owner) { dialog.desktop_id = owner.desktop_id }
 	app.close_popups()
 	app.drag = unsafe { nil }
@@ -60,6 +61,7 @@ fn dialog_body(body string) &Ctl {
 }
 
 pub fn (mut app App) msgbox_for(owner &Ctl, title string, text string) {
+	if !app.can_access(owner) { return }
 	mut body := dialog_body(text)
 	mut row := button_bar()
 	mut ok := dialog_button('  OK  ', true)
@@ -77,6 +79,7 @@ pub fn (mut app App) msgbox(title string, text string) {
 }
 
 pub fn (mut app App) confirm_for(owner &Ctl, title string, text string) bool {
+	if !app.can_access(owner) { return false }
 	mut body := dialog_body(text)
 	mut row := button_bar()
 	mut yes := dialog_button(' Yes ', true)
@@ -97,6 +100,7 @@ pub fn (mut app App) confirm_quit() {
 }
 
 pub fn (mut app App) prompt_for(owner &Ctl, title string, text string, initial string) ?string {
+	if !app.can_access(owner) { return none }
 	mut body := dialog_body(text)
 	mut field := entry(initial, 0)
 	field.low = 30
@@ -123,6 +127,7 @@ pub fn (mut app App) prompt(title string, text string, initial string) ?string {
 }
 
 pub fn (mut app App) choice_for(owner &Ctl, title string, items []string, columns int) int {
+	if !app.can_access(owner) { return -1 }
 	mut body := grid()
 	cols := clamp(columns, 1, 64)
 	for i, text in items {
@@ -149,6 +154,7 @@ fn list_accept(mut c Ctl, mut app App) {
 }
 
 pub fn (mut app App) list_choice_for(owner &Ctl, title string, items []string, selected int) int {
+	if !app.can_access(owner) { return -1 }
 	mut body := box(true)
 	mut list := tree()
 	list.min_w = 54
@@ -183,6 +189,7 @@ pub fn (mut app App) emoji_pick(owner &Ctl) ?string {
 }
 
 pub fn (mut app App) history_for(owner &Ctl, mut editor Ctl) {
+	if !app.can_access(owner) || !app.can_access(&editor) { return }
 	editor.end_edit_group()
 	mut labels := []string{}
 	mut steps := []int{}
@@ -259,6 +266,7 @@ fn file_accept(mut c Ctl, mut app App) {
 }
 
 pub fn (mut app App) file_pick_for(owner &Ctl, directory string) ?string {
+	if !app.can_access(owner) { return none }
 	mut pick := &FilePicker{}
 	mut body := box(true)
 	pick.field = entry(directory, 0)
@@ -307,6 +315,7 @@ fn color_picker_changed(mut c Ctl, mut app App) {
 
 // Returns an RGB value (0xRRGGBB), or none on cancel.
 pub fn (mut app App) color_pick(owner &Ctl, title string, rgb int) ?int {
+	if !app.can_access(owner) { return none }
 	mut body := box(true)
 	mut r := slider(0, 255)
 	r.value = (rgb >> 16) & 255

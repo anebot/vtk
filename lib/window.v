@@ -53,7 +53,7 @@ fn (app &App) blocker(w &Ctl) &Ctl {
 }
 
 pub fn (mut app App) raise(mut w Ctl) {
-	if !isnil(w.app) && w.app != &app { return }
+	if w.kind != .window || !app.can_access(&w) { return }
 	if isnil(w.app) { w.app = app; w.desktop_id = app.active_desktop }
 	if !app.on_desktop(&w) && !app.switch_desktop(w.desktop_id) { return }
 	mut blocked := app.blocker(&w)
@@ -113,6 +113,7 @@ pub fn (mut app App) close(mut w Ctl) bool {
 }
 
 pub fn (mut app App) destroy_ctl(mut c Ctl) {
+	if !app.can_access(&c) { return }
 	if c.kind == .window && !app.close(mut c) { return }
 	c.closed = true
 	app.clear_hover_within(&c)
@@ -147,7 +148,7 @@ pub fn (mut app App) quit() {
 }
 
 pub fn (mut app App) minimize(mut w Ctl) {
-	if w.modal || !isnil(app.blocker(&w)) { return }
+	if !app.can_access(&w) || w.modal || !isnil(app.blocker(&w)) { return }
 	w.minimized = true
 	app.clear_hover_within(&w)
 	if !isnil(app.focus) && app.focus.owner_window() == &w { app.focus = unsafe { nil } }
@@ -156,6 +157,7 @@ pub fn (mut app App) minimize(mut w Ctl) {
 }
 
 pub fn (mut app App) maximize(mut w Ctl) {
+	if !app.can_access(&w) { return }
 	if !w.maximized { w.saved = w.rect() }
 	w.maximized = true
 	w.minimized = false
@@ -168,6 +170,7 @@ pub fn (mut app App) maximize(mut w Ctl) {
 }
 
 pub fn (mut app App) restore(mut w Ctl) {
+	if !app.can_access(&w) { return }
 	if w.maximized {
 		w.x = w.saved.x
 		w.y = w.saved.y
@@ -181,6 +184,7 @@ pub fn (mut app App) restore(mut w Ctl) {
 }
 
 pub fn (mut app App) always_on_top(mut w Ctl, enabled bool) {
+	if !app.can_access(&w) { return }
 	w.always_on_top = enabled
 	app.raise(mut w)
 }
@@ -236,6 +240,7 @@ fn (mut app App) fit_windows() {
 }
 
 pub fn (mut app App) tile_side(mut w Ctl, side TileSide) {
+	if !app.can_access(&w) { return }
 	w.maximized = false
 	area := app.work_area()
 	h := area.h
@@ -383,7 +388,7 @@ fn (mut app App) draw_window(mut w Ctl) {
 }
 
 pub fn (mut app App) set_focus(c &Ctl) {
-	if isnil(c) || !c.focusable || !c.visible() || !isnil(app.blocker(c.owner_window())) { return }
+	if isnil(c) || !app.can_access(c) || !c.focusable || !c.visible() || !isnil(app.blocker(c.owner_window())) { return }
 	app.focus = c
 	app.dirty = true
 }
@@ -395,23 +400,25 @@ fn focusable(c &Ctl, mut found []&Ctl) {
 }
 
 fn (mut app App) focus_first(w &Ctl) {
-	if isnil(w) || !w.visible() || !isnil(app.blocker(w)) { return }
+	if isnil(w) || !app.can_access(w) || !w.visible() || !isnil(app.blocker(w)) { return }
 	mut found := []&Ctl{}
 	focusable(w, mut found)
 	if found.len > 0 { app.focus = found[0] }
 }
 
 fn (mut app App) enforce_modal_input() {
-	if !isnil(app.drag) && (!app.drag.visible() || !isnil(app.blocker(app.drag.owner_window()))) {
+	if app.popups.any(!app.can_access(it.link)) { app.close_popups() }
+	if !isnil(app.drag) && (!app.can_access(app.drag) || !app.drag.visible() || !isnil(app.blocker(app.drag.owner_window()))) {
 		app.drag = unsafe { nil }
 	}
-	if !isnil(app.scroll_drag) && (!app.scroll_drag.visible() || !isnil(app.blocker(app.scroll_drag.owner_window()))) {
+	if !isnil(app.scroll_drag) && (!app.can_access(app.scroll_drag) || !app.scroll_drag.visible() || !isnil(app.blocker(app.scroll_drag.owner_window()))) {
 		app.scroll_drag = unsafe { nil }
 	}
+	if !app.can_access(app.placement) { app.placement = unsafe { nil } }
 	if !isnil(app.placement) && !isnil(app.blocker(app.placement)) {
 		app.placement_key(Event{ key: int(Key.escape) })
 	}
-	if !isnil(app.focus) && !app.focus.visible() { app.focus = unsafe { nil } }
+	if !isnil(app.focus) && (!app.can_access(app.focus) || !app.focus.visible()) { app.focus = unsafe { nil } }
 	mut blocked := app.blocker(if isnil(app.focus) { app.top_window() } else { app.focus.owner_window() })
 	if !isnil(blocked) { app.raise(mut blocked) }
 	if isnil(app.focus) { app.focus_first(app.top_window()) }
@@ -435,7 +442,7 @@ fn (mut app App) focus_next(back bool) {
 }
 
 pub fn (mut app App) begin_placement(mut w Ctl, resize bool) {
-	if !app.on_desktop(&w) || w.maximized || w.minimized { return }
+	if !app.can_access(&w) || !app.on_desktop(&w) || w.maximized || w.minimized { return }
 	w.fit_window(app.work_area())
 	app.placement = &w
 	app.placement_resize = resize

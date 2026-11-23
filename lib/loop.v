@@ -396,6 +396,7 @@ fn (mut app App) widget_key(mut c Ctl, event Event) bool {
 }
 
 pub fn (mut app App) scroll_ctl(mut c Ctl, rows int) bool {
+	if !app.can_access(&c) { return false }
 	if f := c.scrollfn {
 		if f(mut c, rows, mut app) {
 			app.dirty = true
