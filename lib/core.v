@@ -39,6 +39,7 @@ pub enum Kind {
 	flow
 	markdown
 	date_picker
+	chart
 }
 
 pub enum CtrlC {
@@ -145,6 +146,7 @@ pub mut:
 	md            Markdown
 	vim           Vim
 	table         Table
+	chart         Chart
 mut:
 	parent        &Ctl = unsafe { nil }
 	kids          []&Ctl

@@ -199,6 +199,7 @@ fn (mut app App) draw_ctl(mut c Ctl) {
 			app.screen.text(c.x + c.w - 1, c.y, '►', fg, focus_bg, 0)
 		}
 		.date_picker { app.draw_date_picker(c) }
+		.chart { app.draw_chart(c, fg, bg) }
 		.entry, .multiline, .markdown { app.draw_editor(mut c) }
 		.combo {
 			fg = if c.disabled { t.dim } else if focused { t.focus_fg } else { t.field_fg }

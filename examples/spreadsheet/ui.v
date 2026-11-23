@@ -3,7 +3,7 @@ module spreadsheet
 import os
 import vtk
 
-enum Action { new_sheet open save save_as import_csv export_csv quit edit apply copy paste undo redo ascending descending reset color clear_color help }
+enum Action { new_sheet open save save_as import_csv export_csv quit edit apply copy paste undo redo ascending descending reset color clear_color chart help }
 
 @[heap]
 struct BookView {
@@ -257,6 +257,7 @@ fn (mut view BookView) action(action Action, mut app vtk.App) {
 		.undo, .redo { if current.sheet.undo_edit(action == .redo) { grid.table_refresh() } }
 		.ascending, .descending { grid.table_sort(grid.table_selected_column(), if action == .ascending { .ascending } else { .descending }) }
 		.reset { grid.table_sort(grid.table_selected_column(), .none) }
+		.chart { current.show_chart(mut app) }
 		.color, .clear_color {
 			range := grid.table_selection()
 			if range.x < 0 { return }
@@ -310,7 +311,7 @@ fn create_view(mut app vtk.App, book Book) &BookView {
 	for title, actions in {
 		'File': [Action.new_sheet, .open, .save, .save_as, .import_csv, .export_csv, .quit]
 		'Edit': [Action.edit, .copy, .paste, .undo, .redo, .color, .clear_color]
-		'Data': [Action.ascending, .descending, .reset, .help]
+		'Data': [Action.ascending, .descending, .reset, .chart, .help]
 	} {
 		mut menu := window.add_menu(title)
 		for action in actions {
@@ -318,7 +319,7 @@ fn create_view(mut app vtk.App, book Book) &BookView {
 			item.user, item.data = view, i64(action)
 		}
 	}
-	for title, action in {'Undo': Action.undo, 'Redo': .redo, 'Sort ↑': .ascending, 'Sort ↓': .descending, 'Edit': .edit, 'Color': .color, 'Help': .help} {
+	for title, action in {'Undo': Action.undo, 'Redo': .redo, 'Sort ↑': .ascending, 'Sort ↓': .descending, 'Edit': .edit, 'Color': .color, 'Chart': .chart, 'Help': .help} {
 		mut button := vtk.button(title)
 		button.user, button.changed, button.data = view, book_action, i64(action)
 		toolbar.add(mut button)
@@ -347,7 +348,19 @@ pub fn run() {
 		book = load_book(arg) or { app.fini(); eprintln(err); return }
 		break
 	}
-	create_view(mut app, book)
+	mut view := create_view(mut app, book)
+	if '--chart' in os.args {
+		if mut current := view.current() { current.grid.table_select(0, 0, min(3, current.sheet.columns() - 1), min(3, current.grid.row_count - 1)) }
+		if snapshot {
+			app.after(0, fn (mut app vtk.App) {
+				app.redraw()
+				println(app.snapshot())
+				app.dispatch(vtk.Event{key: int(vtk.Key.escape)})
+			})
+		}
+		view.action(.chart, mut app)
+		if snapshot { app.fini(); return }
+	}
 	if snapshot { app.redraw(); println(app.snapshot()); app.fini(); return }
 	app.run() or { eprintln(err) }
 }

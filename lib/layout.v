@@ -141,6 +141,10 @@ pub fn (mut c Ctl) measure() {
 			w = 24
 			h = 9
 		}
+		.chart {
+			w = 40
+			h = 12
+		}
 		.slider, .progress { w = 12 }
 		.spin { w = 10 }
 		.combo, .radio {

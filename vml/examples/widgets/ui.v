@@ -32,6 +32,13 @@ pub fn build_ui(mut app vtk.App) &vtk.Ctl {
 	mut vml_25 := vtk.box(true)
 	mut vml_26 := vtk.label('Scroll the gradient; click or drag to adjust its blue channel.')
 	mut canvas := vtk.canvas(68, 30, paint_gradient)
+	mut vml_28 := vtk.chart(vtk.Chart{
+				title: 'Quarterly sales'
+				labels: ['Q1', 'Q2', 'Q3', 'Q4']
+				series: [vtk.ChartSeries{name: 'Sales', values: [f64(12), 18, 15, 24], color: vtk.cyan}]
+				x_axis: vtk.ChartAxis{title: 'Quarter'}
+				y_axis: vtk.ChartAxis{title: 'Sales', minimum: f64(0), maximum: f64(30)}
+			})
 	mut status := vtk.statusbar('Choose a widget | Tab changes focus | Ctrl-C quits')
 	vml_0.dismissable = true
 	vml_1.expand = true
@@ -116,6 +123,7 @@ pub fn build_ui(mut app vtk.App) &vtk.Ctl {
 	vml_25.add(mut canvas)
 	vml_24.add(mut vml_25)
 	vml_2.add_tab('Canvas', mut vml_24)
+	vml_2.add_tab('Statistics', mut vml_28)
 	vml_1.add(mut vml_2)
 	vml_1.add(mut status)
 	vml_0.add(mut vml_1)

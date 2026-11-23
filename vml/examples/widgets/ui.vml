@@ -83,6 +83,13 @@ Window title="VML widgets" width=76 height=23 dismissable {
 						}};
 				}
 			}
+			Chart title=Statistics options={vtk.Chart{
+				title: 'Quarterly sales'
+				labels: ['Q1', 'Q2', 'Q3', 'Q4']
+				series: [vtk.ChartSeries{name: 'Sales', values: [f64(12), 18, 15, 24], color: vtk.cyan}]
+				x_axis: vtk.ChartAxis{title: 'Quarter'}
+				y_axis: vtk.ChartAxis{title: 'Sales', minimum: f64(0), maximum: f64(30)}
+			}};
 		}
 		StatusBar $status text="Choose a widget | Tab changes focus | Ctrl-C quits";
 	}

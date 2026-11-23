@@ -159,6 +159,7 @@ the window stack, theme, focus, clipboard, hooks and desktop settings.
 | Split / scroll | `split(vertical, share)`, `scroll()` |
 | Bars | `toolbar()`, `statusbar(text)` |
 | Canvas | `canvas(width, height, paint_callback)` |
+| Statistical chart | `chart(Chart{...})`, `control.set_chart(options)` |
 | Menus | `window.add_menu(title)`, `menu.menu_item(title, callback)` |
 | Context menu | `context_menu()`, `control.set_menu(mut menu)`, `app.open_menu(menu, x, y)` |
 
@@ -179,6 +180,11 @@ existing tables retain single-row selection and fixed column order by default.
 See [the table API](lib/TABLES.md) and the runnable
 [spreadsheet example](examples/spreadsheet/README.md), including formulas,
 undo/redo, colored cells, workbook save/load and reorderable sheet tabs.
+
+Charts support grouped columns, horizontal bars and connected lines, with
+series colors, legends, chart/axis titles, grid lines and automatic or explicit
+numeric bounds. See [the chart API](lib/CHARTS.md). In the spreadsheet, select a
+cell range and choose **Chart** to plot calculated values and customize the chart.
 
 Laid-out controls and containers accept per-side `padding` in terminal cells,
 defaulting to zero. For a one-character inset on both sides of a textarea:

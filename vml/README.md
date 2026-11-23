@@ -23,7 +23,7 @@ make vml
 | [hello](examples/hello/ui.vml) | Tabs, named controls, forward references, a default greeting button, and animated progress with switchable block rendering. |
 | [preferences](examples/preferences/ui.vml) | All theme presets, desktop and cursor settings, gradient titles, staged defaults, and applying preferences for the session. |
 | [markdown](examples/markdown/ui.vml) | An adjustable split pane, undo/redo, an undoable sample reset, line-number toggling, live counts, and a read-only Markdown preview. |
-| [widgets](examples/widgets/ui.vml) | Linked slider/spin/progress controls, an enable switch and activity spinner, tree/table selections, a calendar, and a scrollable canvas with mouse input. |
+| [widgets](examples/widgets/ui.vml) | Linked slider/spin/progress controls, an enable switch and activity spinner, tree/table selections, a calendar, a scrollable canvas with mouse input, and a statistical chart. |
 
 Together these examples cover every widget tag in `vtk.vmlt`. Named controls
 connect callbacks to other widgets, including controls declared later in the

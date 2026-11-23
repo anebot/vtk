@@ -62,4 +62,8 @@ fn test_widget_gallery_links_values_and_reports_selections() {
 	app.dispatch(vtk.Event{ kind: .mouse, x: bounds.x + bounds.w - 1, y: scroll.rect().y + 1,
 		button: .left, pressed: true })
 	assert level.value == 100 && amount.value == 100 && progress.value == 100
+	tabs.set_value(4)
+	app.redraw()
+	assert app.snapshot().contains('Quarterly sales')
+	assert app.snapshot().contains('Q4')
 }

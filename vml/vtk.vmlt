@@ -94,6 +94,7 @@
     "Tree": {"create": "vtk.tree()"},
     "Table": {"create": "vtk.table({{fetch}}, {{row_count}})", "defaults": {"row_count": "0"}},
     "Canvas": {"create": "vtk.canvas({{width}}, {{height}}, {{paint}})"},
-    "DatePicker": {"create": "vtk.date_picker({{initial}})"}
+    "DatePicker": {"create": "vtk.date_picker({{initial}})"},
+    "Chart": {"create": "vtk.chart({{options}})", "defaults": {"options": "vtk.Chart{}"}}
   }
 }
