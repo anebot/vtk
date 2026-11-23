@@ -283,6 +283,50 @@ fn test_clicking_a_parent_item_switches_submenus_instead_of_closing() {
 	assert app.popups.len == 0
 }
 
+fn test_clicking_another_menu_title_switches_menus_instead_of_closing() {
+	mut app := new_app()
+	app.desktop = false
+	app.width = 40
+	app.height = 14
+	mut w := app.window('Doc', 30, 10)
+	mut text := label('Body')
+	w.add(mut text)
+	mut file := w.add_menu('File')
+	file.menu_item('Save', menu_test_launcher_action)
+	mut edit := w.add_menu('Edit')
+	edit.menu_item('Undo', menu_test_launcher_action)
+	app.redraw()
+	press := fn (mut app App, x int, y int) {
+		app.dispatch(Event{ kind: .mouse, x: x, y: y, button: .left, pressed: true })
+	}
+	press(mut app, file.x + 1, file.y)
+	assert app.popups.len == 1 && app.popups[0].popup_owner == file
+	press(mut app, edit.x + 1, edit.y)
+	assert app.popups.len == 1 && app.popups[0].popup_owner == edit
+	// The title of the open menu still toggles it closed.
+	press(mut app, edit.x + 1, edit.y)
+	assert app.popups.len == 0
+	// A press away from every menu dismisses them.
+	press(mut app, file.x + 1, file.y)
+	assert app.popups.len == 1
+	press(mut app, w.x + 1, w.y + 4)
+	assert app.popups.len == 0
+}
+
+fn test_bar_menu_switches_windows_while_open() {
+	mut app := new_app()
+	app.bar_clock = false
+	mut first := app.window('One', 30, 8)
+	mut second := app.window('Two', 30, 8)
+	app.redraw()
+	app.dispatch(Event{ kind: .mouse, x: 13, y: app.bar_y(), button: .left, pressed: true })
+	assert app.popups.len == 1 && app.popups[0].popup_owner.kids[0].link == ?&Ctl(first)
+	app.dispatch(Event{ kind: .mouse, x: 21, y: app.bar_y(), button: .left, pressed: true })
+	assert app.popups.len == 1 && app.popups[0].popup_owner.kids[0].link == ?&Ctl(second)
+	app.dispatch(Event{ kind: .mouse, x: 70, y: app.bar_y(), button: .left, pressed: true })
+	assert app.popups.len == 0
+}
+
 fn test_mouse_press_and_release_open_window_submenus_without_closing_them() {
 	mut app := new_app()
 	app.desktop = false

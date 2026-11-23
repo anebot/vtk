@@ -639,7 +639,7 @@ fn (mut app App) mouse(e Event) {
 			at--
 		}
 		if at < 0 {
-			if e.pressed && !e.motion { app.close_popups() }
+			if e.pressed && !e.motion { app.popup_outside_press(e) }
 			return
 		}
 		// Moving over a parent must not drop the submenu the pointer is heading

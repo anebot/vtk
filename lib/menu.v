@@ -68,6 +68,49 @@ fn (mut app App) push_menu(owner &Ctl, x int, y int) {
 	app.dirty = true
 }
 
+// A press outside every popup usually dismisses them, but the menu bar and the
+// app bar open the menu under the pointer instead of leaving none.
+fn (mut app App) popup_outside_press(e Event) {
+	if e.button != .left {
+		app.close_popups()
+		return
+	}
+	menu := app.menu_title_at(e.x, e.y)
+	if !isnil(menu) {
+		if app.popups.len > 0 && app.popups[0].popup_owner == menu {
+			app.close_popups()
+		} else {
+			app.open_menu(menu, menu.x, menu.y + 1)
+		}
+		return
+	}
+	if app.bar_height() > 0 && e.y == app.bar_y() {
+		previous := if app.popups.len > 0 { app.popups[0].popup_owner } else { unsafe { nil } }
+		app.bar_mouse(e)
+		// Bar actions that opened a menu keep it; the rest dismiss the old one.
+		if app.popups.len > 0 && !isnil(previous) && app.popups[0].popup_owner == previous {
+			app.close_popups()
+		}
+		return
+	}
+	app.close_popups()
+}
+
+fn (app &App) menu_title_at(x int, y int) &Ctl {
+	for i := app.windows.len - 1; i >= 0; i-- {
+		w := app.windows[i]
+		if !app.on_desktop(w) || w.closed || w.minimized || w.hidden || !w.rect().contains(x, y) {
+			continue
+		}
+		if !isnil(app.blocker(w)) { return unsafe { nil } }
+		for menu in w.kids {
+			if menu.kind == .menu && !menu.hidden && menu.rect().contains(x, y) { return menu }
+		}
+		return unsafe { nil }
+	}
+	return unsafe { nil }
+}
+
 pub fn (mut app App) close_popups() {
 	app.popups = []
 	app.app_popup = unsafe { nil }
