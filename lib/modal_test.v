@@ -116,6 +116,51 @@ fn test_settings_applies_saves_and_resets_bar_position() {
 	app.settings_dialog()
 }
 
+fn change_settings_window_buttons(mut app App) {
+	mut settings := app.top_window()
+	body := settings.kids[0]
+	option := body.kids.filter(it.kind == .checkbox && it.text == 'macOS window buttons')[0]
+	buttons := body.kids.last().kids
+	assert option.value == int(app.macos_buttons)
+	if !app.macos_buttons {
+		app.set_focus(option)
+		app.dispatch(Event{ key: int(Key.space) })
+		assert !app.macos_buttons
+		app.set_focus(buttons[0]) // Apply
+		app.dispatch(Event{ key: int(Key.enter) })
+		assert app.macos_buttons
+		app.redraw()
+		at := settings.y * app.width + settings.x + 1
+		assert app.screen.cells[at .. at + 3].map(it.glyph).join('') == '[■]'
+		app.set_focus(buttons[1]) // Save
+		app.dispatch(Event{ key: int(Key.enter) })
+	} else {
+		app.set_focus(buttons[2]) // Reset
+		app.dispatch(Event{ key: int(Key.enter) })
+		assert !app.macos_buttons && option.value == 0 && !app.settings_saved()
+	}
+	app.close(mut settings)
+}
+
+fn test_settings_applies_saves_reopens_and_resets_macos_window_buttons() {
+	path := os.join_path(os.temp_dir(), 'vtk-window-buttons-${os.getpid()}.ini')
+	defer { os.rm(path) or {} }
+	mut app := new_app()
+	app.settings_file(path)
+	// Existing settings files keep the default layout.
+	os.write_file(path, '[vtk]\nbar_top = 1\n') or { panic(err) }
+	app.settings_load() or { panic(err) }
+	assert !app.macos_buttons
+	app.after(0, change_settings_window_buttons)
+	app.settings_dialog()
+	mut loaded := new_app()
+	loaded.settings_file(path)
+	loaded.settings_load() or { panic(err) }
+	assert loaded.macos_buttons
+	loaded.after(0, change_settings_window_buttons)
+	loaded.settings_dialog()
+}
+
 fn choose_settings_desktop_color(mut app App) {
 	mut picker := app.top_window()
 	assert picker.text == 'Desktop background' && picker.modal_owner.text == 'Settings'

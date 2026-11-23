@@ -302,6 +302,7 @@ pub mut:
 	window_shadow    bool = true
 	dim_inactive     bool = true
 	title_gradient   bool
+	macos_buttons    bool
 	vim_mode         bool
 	touch_titles     bool
 	ctrl_c           CtrlC

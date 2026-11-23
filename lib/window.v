@@ -297,6 +297,45 @@ pub fn (mut app App) cascade() {
 	app.dirty = true
 }
 
+struct WindowTitleLayout {
+mut:
+	menu     int = -1
+	close    int = -1
+	minimize int = -1
+	maximize int = -1
+	start    int
+	end      int
+}
+
+fn (app &App) window_title_layout(w &Ctl) WindowTitleLayout {
+	mut title := WindowTitleLayout{ start: w.x + 5, end: w.x + w.w - 1 }
+	if w.controls & window_menu != 0 {
+		title.menu = if app.macos_buttons { w.x + w.w - 4 } else { w.x + 1 }
+	}
+	mut x := if app.macos_buttons { w.x + 1 } else { w.x + w.w - 4 }
+	buttons := if app.macos_buttons {
+		[window_close, window_minimize, window_maximize]
+	} else {
+		[window_close, window_maximize, window_minimize]
+	}
+	for control in buttons {
+		if w.controls & control == 0 { continue }
+		match control {
+			window_close { title.close = x }
+			window_minimize { title.minimize = x }
+			window_maximize { title.maximize = x }
+			else {}
+		}
+		if !app.macos_buttons { title.end = x }
+		x += if app.macos_buttons { 3 } else { -3 }
+	}
+	if app.macos_buttons {
+		title.start = max(title.start, x + 1)
+		if title.menu >= 0 { title.end = title.menu }
+	}
+	return title
+}
+
 fn (mut app App) draw_window(mut w Ctl) {
 	t := app.theme
 	active := app.top_window() == &w
@@ -306,24 +345,14 @@ fn (mut app App) draw_window(mut w Ctl) {
 	app.screen.fill(w.rect(), ` `, t.fg, t.bg)
 	app.screen.frame(w.rect(), true, frame, t.bg)
 	app.screen.fill(Rect{w.x, w.y, w.w, 1}, ` `, title_fg, title_bg)
-	if w.controls & window_menu != 0 { app.screen.text(w.x + 1, w.y, '[=]', title_fg, title_bg, 0) }
-	mut title_end := w.x + w.w - 1
-	mut x := w.x + w.w - 4
-	if w.controls & window_close != 0 {
-		app.screen.text(x, w.y, '[■]', title_fg, title_bg, 0)
-		title_end = x
-		x -= 3
+	title := app.window_title_layout(w)
+	if title.menu >= 0 { app.screen.text(title.menu, w.y, '[=]', title_fg, title_bg, 0) }
+	if title.close >= 0 { app.screen.text(title.close, w.y, '[■]', title_fg, title_bg, 0) }
+	if title.maximize >= 0 {
+		app.screen.text(title.maximize, w.y, if w.maximized { '[▣]' } else { '[□]' }, title_fg, title_bg, 0)
 	}
-	if w.controls & window_maximize != 0 {
-		app.screen.text(x, w.y, if w.maximized { '[▣]' } else { '[□]' }, title_fg, title_bg, 0)
-		title_end = x
-		x -= 3
-	}
-	if w.controls & window_minimize != 0 {
-		app.screen.text(x, w.y, '[_]', title_fg, title_bg, 0)
-		title_end = x
-	}
-	app.screen.aligned_text(w.x + 5, w.y, max(0, title_end - w.x - 5), ' ${w.text} ', .left, title_fg, title_bg, bold)
+	if title.minimize >= 0 { app.screen.text(title.minimize, w.y, '[_]', title_fg, title_bg, 0) }
+	app.screen.aligned_text(title.start, w.y, max(0, title.end - title.start), ' ${w.text} ', .left, title_fg, title_bg, bold)
 	if app.title_gradient && w.y >= 0 && w.y < app.screen.height {
 		rgb := color_as_rgb(title_bg)
 		end := color_as_rgb(if active || !app.dim_inactive { t.title_bg_end } else { t.inactive_title_bg_end })

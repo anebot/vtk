@@ -556,27 +556,21 @@ fn (mut app App) mouse(e Event) {
 		}
 		if e.button != .left || !e.pressed || e.motion { return }
 		if e.y == w.y {
-			mut x := w.x + w.w - 4
-			if w.controls & window_close != 0 {
-				if e.x >= x && e.x < x + 3 {
-					app.close(mut w)
-					return
-				}
-				x -= 3
+			title := app.window_title_layout(w)
+			if title.close >= 0 && e.x >= title.close && e.x < title.close + 3 {
+				app.close(mut w)
+				return
 			}
-			if w.controls & window_maximize != 0 {
-				if e.x >= x && e.x < x + 3 {
-					if w.maximized { app.restore(mut w) } else { app.maximize(mut w) }
-					return
-				}
-				x -= 3
+			if title.maximize >= 0 && e.x >= title.maximize && e.x < title.maximize + 3 {
+				if w.maximized { app.restore(mut w) } else { app.maximize(mut w) }
+				return
 			}
-			if w.controls & window_minimize != 0 && e.x >= x && e.x < x + 3 {
+			if title.minimize >= 0 && e.x >= title.minimize && e.x < title.minimize + 3 {
 				app.minimize(mut w)
 				return
 			}
-			if w.controls & window_menu != 0 && e.x > w.x && e.x < w.x + 4 {
-				app.window_menu(mut w, w.x, w.y + 1)
+			if title.menu >= 0 && e.x >= title.menu && e.x < title.menu + 3 {
+				app.window_menu(mut w, title.menu - 1, w.y + 1)
 				return
 			}
 			if w.controls & window_maximize != 0 {

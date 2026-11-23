@@ -238,6 +238,10 @@ bottom line; `app.bar_top` (or `bar_top = 1` in the INI file) controls placement
 Settings include a desktop background color picker with live color swatches and
 optional window title gradients. Active and inactive titles have separate gradient
 colors. Apply previews changes; Save also keeps them for future sessions.
+Enable **macOS window buttons** to place Close, Minimize and Maximize on the left,
+in that order, and the window menu on the right. `app.macos_buttons` (or
+`macos_buttons = 1` in the INI file) controls this layout; Reset restores the
+default layout.
 Settings persist theme colors, the bar position, visibility and clock,
 shadows, inactive dimming, mouse cursor visibility, Vim mode, and move/resize
 bindings. Theme presets are Borland, Light Borland, Dark, Light, Teal, Modern,

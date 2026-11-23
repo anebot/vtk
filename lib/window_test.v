@@ -93,6 +93,76 @@ fn test_window_titles_stop_before_controls_and_preserve_the_frame() {
 	assert app.screen.cells[row + 30].glyph == '['
 }
 
+fn test_window_button_layouts_draw_and_click_each_enabled_control() {
+	for macos in [false, true] {
+		for controls in 1 .. 16 {
+			order := if macos { [window_close, window_minimize, window_maximize] }
+				else { [window_minimize, window_maximize, window_close] }
+			buttons := order.filter(controls & it != 0)
+			for control in [window_menu, window_close, window_minimize, window_maximize] {
+				if controls & control == 0 { continue }
+				for column in 0 .. 3 {
+					mut app := new_app()
+					app.macos_buttons = macos
+					mut w := app.window('X'.repeat(80), 40, 8)
+					w.controls = controls
+					app.redraw()
+					original := w.rect()
+					offset := if control == window_menu {
+						if macos { w.w - 4 } else { 1 }
+					} else if macos { 1 + buttons.index(control) * 3 }
+						else { w.w - 1 - (buttons.len - buttons.index(control)) * 3 }
+					x, y := w.x + offset, w.y
+					glyphs := match control {
+						window_menu { '[=]' }
+						window_close { '[■]' }
+						window_minimize { '[_]' }
+						else { '[□]' }
+					}
+					at := y * app.width + x
+					assert app.screen.cells[at .. at + 3].map(it.glyph).join('') == glyphs
+					window_mouse_click(mut app, x + column, y)
+					match control {
+						window_menu { assert app.popups.len == 1 && !w.closed && !w.minimized && !w.maximized }
+						window_close { assert w.closed }
+						window_minimize { assert w.minimized && !w.closed }
+						else {
+							assert w.maximized && w.rect() == app.work_area()
+							app.redraw()
+							restore_x := w.x + if macos { offset } else { w.w - original.w + offset }
+							restore_at := w.y * app.width + restore_x
+							assert app.screen.cells[restore_at .. restore_at + 3].map(it.glyph).join('') == '[▣]'
+							window_mouse_click(mut app, restore_x + column, w.y)
+							assert !w.maximized && w.rect() == original
+						}
+					}
+					assert isnil(app.drag) && isnil(app.placement)
+				}
+			}
+		}
+	}
+}
+
+fn test_macos_title_clipping_and_dragging_keep_buttons_clear() {
+	mut app := new_app()
+	app.macos_buttons = true
+	mut w := app.window('界'.repeat(80), 40, 8)
+	app.redraw()
+	row := w.y * app.width + w.x
+	assert app.screen.cells[row + 1 .. row + 10].map(it.glyph).join('') == '[■][_][□]'
+	assert app.screen.cells[row + 34].glyph == '界' && app.screen.cells[row + 35].continuation
+	assert app.screen.cells[row + 36 .. row + 39].map(it.glyph).join('') == '[=]'
+	x, y := w.x + 15, w.y
+	app.dispatch(Event{ kind: .mouse, x: x, y: y, button: .left, pressed: true })
+	app.dispatch(Event{ kind: .mouse, x: x + 3, y: y + 2, button: .left, pressed: true, motion: true })
+	app.dispatch(Event{ kind: .mouse, x: x + 3, y: y + 2, button: .left })
+	assert w.x + 15 == x + 3 && w.y == y + 2
+	assert !w.closed && !w.minimized && !w.maximized && app.popups.len == 0
+	window_mouse_click(mut app, w.x + 15, w.y)
+	window_mouse_click(mut app, w.x + 15, w.y)
+	assert w.maximized
+}
+
 fn test_window_titlebars_use_their_own_colors_and_clear_the_top_frame_line() {
 	mut app := new_app()
 	app.desktop = false

@@ -213,6 +213,7 @@ pub fn (mut app App) settings_load() ! {
 			'window_shadow' { app.window_shadow = value == '1' }
 			'dim_inactive' { app.dim_inactive = value == '1' }
 			'title_gradient' { app.title_gradient = value == '1' }
+			'macos_buttons' { app.macos_buttons = value == '1' }
 			'mouse_cursor' { app.set_mouse_cursor(MouseCursor{ ...app.mouse_cursor, enabled: value == '1' }) }
 			'vim_mode' { app.vim_set(value == '1') }
 			'ascii' { app.theme.ascii = value == '1' }
@@ -266,6 +267,7 @@ pub fn (app &App) settings_save() ! {
 		'bar_clock = ${int(app.bar_clock)}', 'window_shadow = ${int(app.window_shadow)}',
 		'dim_inactive = ${int(app.dim_inactive)}', 'mouse_cursor = ${int(app.mouse_cursor.enabled)}',
 		'title_gradient = ${int(app.title_gradient)}',
+		'macos_buttons = ${int(app.macos_buttons)}',
 		'vim_mode = ${int(app.vim_mode)}', 'ascii = ${int(app.theme.ascii)}']
 	$for field in Theme.fields {
 		$if field.typ is int {
@@ -284,6 +286,7 @@ pub fn (mut app App) settings_reset() ! {
 	app.window_shadow = true
 	app.dim_inactive = true
 	app.title_gradient = false
+	app.macos_buttons = false
 	app.set_mouse_cursor(MouseCursor{ ...app.mouse_cursor, enabled: false })
 	app.move_key = Binding{ key: int(Key.f7), alt: true }
 	app.resize_key = Binding{ key: int(Key.f8), alt: true }
@@ -305,6 +308,7 @@ mut:
 	shadow       &Ctl = unsafe { nil }
 	dim          &Ctl = unsafe { nil }
 	gradient     &Ctl = unsafe { nil }
+	macos_buttons &Ctl = unsafe { nil }
 	mouse_cursor &Ctl = unsafe { nil }
 	vim          &Ctl = unsafe { nil }
 	move         &Ctl = unsafe { nil }
@@ -346,6 +350,7 @@ fn settings_apply(mut c Ctl, mut app App) {
 		s.shadow.value = int(app.window_shadow)
 		s.dim.value = int(app.dim_inactive)
 		s.gradient.value = int(app.title_gradient)
+		s.macos_buttons.value = int(app.macos_buttons)
 		s.mouse_cursor.value = int(app.mouse_cursor.enabled)
 		s.vim.value = int(app.vim_mode)
 		s.move.set_text(app.move_key.str())
@@ -371,6 +376,7 @@ fn settings_apply(mut c Ctl, mut app App) {
 	app.window_shadow = s.shadow.value != 0
 	app.dim_inactive = s.dim.value != 0
 	app.title_gradient = s.gradient.value != 0
+	app.macos_buttons = s.macos_buttons.value != 0
 	app.set_mouse_cursor(MouseCursor{ ...app.mouse_cursor, enabled: s.mouse_cursor.value != 0 })
 	app.vim_set(s.vim.value != 0)
 	if c.data == 1 {
@@ -422,6 +428,7 @@ pub fn (mut app App) settings_dialog() {
 	s.shadow = checkbox('Window shadows', app.window_shadow)
 	s.dim = checkbox('Dim inactive windows', app.dim_inactive)
 	s.gradient = checkbox('Gradient window titles', app.title_gradient)
+	s.macos_buttons = checkbox('macOS window buttons', app.macos_buttons)
 	s.mouse_cursor = checkbox('Block mouse cursor', app.mouse_cursor.enabled)
 	s.vim = checkbox('Vim mode', app.vim_mode)
 	s.move = entry(app.move_key.str(), 0)
@@ -431,7 +438,7 @@ pub fn (mut app App) settings_dialog() {
 	s.resize.expand = false
 	s.resize.col = 1
 	s.resize.row = 1
-	mut controls := [s.bar, s.bar_top, s.clock, s.shadow, s.dim, s.gradient, s.mouse_cursor, s.vim]
+	mut controls := [s.bar, s.bar_top, s.clock, s.shadow, s.dim, s.gradient, s.macos_buttons, s.mouse_cursor, s.vim]
 	for mut ctl in controls { body.add(mut ctl) }
 	mut shortcuts := grid()
 	mut move_label := label('Move shortcut')
