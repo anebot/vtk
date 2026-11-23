@@ -378,6 +378,11 @@ long cells wrap to the available width; resizing recomputes the layout. Set
 are display glyphs: selection, mouse hit testing and copying retain the original
 UTF-8 Markdown source. Fenced examples and source modes stay literal.
 Inline code accepts matching runs of multiple backticks. Fences retain source rows.
+Code blocks use a small single-pass tokenizer for common keywords, strings,
+numbers and comments, including unknown or omitted language tags. `diff` and
+`patch` fences use unified diff colors; untagged blocks detect diff headers.
+Use a `text` or `plaintext` fence to keep a block uncolored. Highlighting retains
+source positions and code shading; an explicit `code_block.fg` overrides it.
 Task clicks in View, double-clicks in Edit, and Space in View change only
 the task's state byte as one undo entry. Code blocks are inert. Set
 `md.task_interactive = false` for strict source viewers. `md.linkfn` receives

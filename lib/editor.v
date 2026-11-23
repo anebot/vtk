@@ -172,6 +172,7 @@ struct Glyph {
 	at   int
 	end  int
 	attr int
+	color ?int
 	element MarkdownElement
 	task int = -1
 	link string
@@ -373,12 +374,15 @@ fn (mut app App) draw_editor(mut c Ctl) {
 		mut col := 0
 		for g in row.glyphs {
 			selected := g.at >= a && g.at < b
-			mut paint := MarkdownPaint{ fg: row.color or { fg }, bg: bg, attr: g.attr | row.attr }
+			mut paint := MarkdownPaint{ fg: fg, bg: bg, attr: g.attr | row.attr }
 			if c.kind == .markdown {
 				paint = c.md.styles.paint(.text, t, paint)
 				if row.element != .text { paint = c.md.styles.paint(row.element, t, paint) }
 				if g.link != '' { paint = c.md.styles.paint(.link, t, paint) }
 				if g.element != .text { paint = c.md.styles.paint(g.element, t, paint) }
+			}
+			if c.kind != .markdown || c.md.styles.code_block.fg == none {
+				paint = MarkdownPaint{ ...paint, fg: g.color or { row.color or { paint.fg } } }
 			}
 			gfg := if selected { t.sel_fg } else if c.disabled { t.dim } else { paint.fg }
 			gbg := if selected { t.sel_bg } else { paint.bg }

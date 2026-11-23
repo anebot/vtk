@@ -52,6 +52,7 @@ fn (c &Ctl) markdown_rows() []TextRow {
 	mut offset := 0
 	mut fence := ''
 	mut fence_len := 0
+	mut highlighter := code_highlighter('')
 	section_a, section_b := c.markdown_section_range()
 	source := c.md.mode in [.source, .source_read]
 	lines := c.text.split('\n')
@@ -71,9 +72,11 @@ fn (c &Ctl) markdown_rows() []TextRow {
 			if fence == '' {
 				fence = trim[0].ascii_str()
 				fence_len = fence_run
+				highlighter = code_highlighter(trim[fence_run..])
 			} else {
 				fence = ''
 				fence_len = 0
+				highlighter = code_highlighter('')
 			}
 		}
 		row.code = was_code || line.starts_with('\t') || line.starts_with('    ')
@@ -132,6 +135,11 @@ fn (c &Ctl) markdown_rows() []TextRow {
 					}
 				}
 			}
+		}
+		if row.code && !is_fence {
+			highlighter.highlight(line, mut row)
+		} else if !is_fence {
+			highlighter = code_highlighter('')
 		}
 		if offset >= section_a && offset <= section_b { rows << row }
 		if c.md.layout == .pages && (line_no + 1) % max(1, c.md.page_lines) == 0 {
