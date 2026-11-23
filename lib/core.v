@@ -77,6 +77,7 @@ pub type ScrollCallback = fn (mut Ctl, int, mut App) bool
 pub type CloseCallback = fn (mut Ctl, mut App) bool
 pub type CellCallback = fn (&Ctl, int, int) string
 pub type PaintCallback = fn (mut Ctl, mut Screen)
+pub type TabReorderCallback = fn (mut Ctl, int, int, mut App)
 
 // Ctl is the shared control model. Positions are zero-based terminal cells;
 // editor positions are UTF-8 byte offsets, just as in HTK.
@@ -89,6 +90,7 @@ pub mut:
 	text          string
 	text_align    TextAlign
 	changed       ?Callback
+	reordered     ?TabReorderCallback
 	submit        ?Callback
 	keyfn         ?KeyCallback
 	scrollfn      ?ScrollCallback
@@ -133,6 +135,7 @@ pub mut:
 	scrollbar     bool
 	scroll_hold   bool
 	readonly      bool
+	reorderable   bool
 	dismissable   bool
 	controls      int         = window_default_controls
 	cursor_shape  CursorShape = .bar
@@ -397,6 +400,8 @@ mut:
 	drag_start       Rect
 	drag_x           int
 	drag_y           int
+	tab_drag_last_x  int
+	tab_drag_last_y  int
 	title_click      &Ctl = unsafe { nil }
 	title_click_at   i64
 	title_click_x    int

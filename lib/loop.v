@@ -497,6 +497,22 @@ fn (mut app App) mouse(e Event) {
 	}
 	if !isnil(app.drag) {
 		mut c := app.drag
+		if c.kind == .tabpage {
+			if e.button == .none && !e.pressed { app.drag = unsafe { nil }; return }
+			if e.button != .left { return }
+			if !e.pressed { app.drag = unsafe { nil } }
+			mut strip := c.parent
+			if isnil(strip) || !strip.reorderable || strip.kind != .tabs
+				|| strip.kids.index(c) != strip.value || app.popups.len > 0 {
+				app.drag = unsafe { nil }
+				return
+			}
+			if e.x != app.tab_drag_last_x || e.y != app.tab_drag_last_y {
+				app.tab_drag_last_x, app.tab_drag_last_y = e.x, e.y
+				strip.drag_tab(c, e)
+			}
+			return
+		}
 		if !e.pressed {
 			app.drag = unsafe { nil }
 			return
@@ -697,6 +713,14 @@ fn (mut app App) mouse(e Event) {
 			for i, page in c.kids {
 				if e.x >= page.tab_x && e.x < page.tab_x + page.tab_w {
 					c.value = i
+					if c.reorderable {
+						c.layout(c.rect())
+						app.drag = page
+						app.drag_start = Rect{page.tab_x, c.y, page.tab_w, 2}
+						app.drag_x = e.x
+						app.drag_y = e.y
+						app.tab_drag_last_x, app.tab_drag_last_y = e.x, e.y
+					}
 					c.fire()
 					break
 				}

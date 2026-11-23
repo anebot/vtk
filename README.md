@@ -182,6 +182,25 @@ Serial mode). The selected tab opens into its page and uses bold accent text,
 keeping the page's background even when focused. Narrow strips keep the
 selected header visible, clipping long titles inside their outlines.
 
+Tab dragging is disabled by default. Enable it for an individual tab control in
+code with `pages.reorderable = true`. The grabbed header follows the pointer while
+neighbouring tabs reflow as it crosses them; release snaps it into its new slot.
+The same page stays selected, retaining its controls and their state. Both header
+rows support dragging. Reordering does not emit `changed`; the usual click still
+does. Use the optional `reordered` callback to keep application data in the same
+order. Its `from` and `to` arguments are zero-based indices, and `value` and
+`children()` already reflect the new order when it runs:
+
+```v
+fn tab_moved(mut pages vtk.Ctl, from int, to int, mut app vtk.App) {
+	// Move application-owned data from `from` to `to`, if needed.
+}
+
+mut pages := vtk.tabs()
+pages.reorderable = true
+pages.reordered = tab_moved
+```
+
 Comboboxes support `control.text_align = .left`, `.center`, or `.right` for
 the selected value and dropdown choices; left is the default. Alignment uses
 terminal cell widths and keeps the dropdown arrow fixed at the right edge.
