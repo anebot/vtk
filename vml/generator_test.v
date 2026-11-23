@@ -4,17 +4,28 @@ import os
 
 fn test_vtk_generation_matches_examples() {
 	template := read_template(vtk_template.to_string()) or { panic(err) }
-	for example in ['hello', 'preferences', 'markdown'] {
+	mut covered := map[string]bool{}
+	for example in ['hello', 'preferences', 'markdown', 'widgets'] {
 		file := os.join_path(@VMODROOT, 'vml', 'examples', example, 'ui.vml')
 		source := os.read_file(file) or { panic(err) }
+		root := parse(source, file) or { panic(err) }
+		collect_example_tags(root, mut covered)
 		generated := generate(source, file, 'build_ui', template) or { panic(err) }
 		assert generated == os.read_file(file[..file.len - 4] + '.v') or { panic(err) }
 		if example == 'hello' {
 			assert generated.index('mut name :=') or { -1 } < generated.index('greet.link = name') or { -1 }
 			assert generated.contains(".add_tab('Greeting', mut ")
-			assert generated.contains('progress.set_value(25)')
+			assert generated.contains('progress.set_value(0)')
 		}
 	}
+	for tag, _ in template.widgets {
+		assert covered[tag], 'no VML example demonstrates ${tag}'
+	}
+}
+
+fn collect_example_tags(node Node, mut covered map[string]bool) {
+	covered[node.tag] = true
+	for child in node.children { collect_example_tags(child, mut covered) }
 }
 
 fn test_template_controls_construction_properties_and_attachment() {

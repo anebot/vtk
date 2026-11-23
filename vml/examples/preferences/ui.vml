@@ -4,10 +4,15 @@ Window title="VML preferences" width=54 height=18 dismissable {
 		Group title=Desktop {
 			Grid {
 				Label text=Theme;
-				Combo $theme col=1 value=0 {
+				Combo $theme col=1 value={theme_index(app.theme)} {
 					Item text=Borland;
+					Item text="Light Borland";
 					Item text=Dark;
 					Item text=Light;
+					Item text=Teal;
+					Item text=Modern;
+					Item text=Serial;
+					Item text=wineight;
 				}
 				Label text="Virtual desktops" row=1;
 				Spin $desktops col=1 row=1 low=1 high=4 value={app.get_desktop_count()};
@@ -20,17 +25,22 @@ Window title="VML preferences" width=54 height=18 dismissable {
 			}
 		}
 		CheckBox $gradient text="Gradient window titles" checked={app.title_gradient};
-		Label text="Changes apply to this session.";
+		Label $status text="Changes apply to this session.";
 		ButtonBar {
-			Button text=Apply changed={fn [theme, desktops, cursor, gradient] (mut _ vtk.Ctl, mut app vtk.App) {
-				app.theme = match theme.value {
-					1 { vtk.theme_preset(.dark) }
-					2 { vtk.theme_preset(.light) }
-					else { vtk.theme_preset(.borland) }
-				}
+			Button text=Defaults changed={fn [mut theme, mut desktops, mut cursor, mut gradient, mut status] (mut _ vtk.Ctl, mut app vtk.App) {
+				theme.set_value(0)
+				desktops.set_value(1)
+				cursor.set_value(0)
+				gradient.set_value(0)
+				status.set_text('Defaults selected; press Apply.')
+				app.set_focus(theme)
+			}};
+			Button text=Apply changed={fn [theme, desktops, cursor, gradient, mut status] (mut _ vtk.Ctl, mut app vtk.App) {
+				app.theme = vtk.theme_preset(theme_presets[theme.value])
 				app.set_desktop_count(desktops.value)
 				app.set_mouse_cursor(vtk.MouseCursor{ enabled: cursor.value == 1 })
 				app.title_gradient = gradient.value != 0
+				status.set_text('Preferences applied to this session.')
 				app.notify('Preferences applied', 2000)
 			}};
 		}

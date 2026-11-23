@@ -7,16 +7,24 @@ Window $window title="VML hello" width=48 height=16 dismissable {
 				# The entry is declared later; property references can point forward.
 				Button $greet text="Say hello" changed={say_hello} link={name};
 				Entry $name text=World byte-limit=40 min-w=24;
-				CheckBox text="Remember me" checked !disabled;
+				CheckBox text="Blocky progress" checked !disabled
+					changed={fn [mut progress] (mut check vtk.Ctl, mut _ vtk.App) {
+						progress.blocky = check.value != 0
+						progress.invalidate()
+					}};
 			}
 			VBox title=About {
 				Label text="Ordinary V, with no runtime markup parser.";
 			}
 		}
-		Progress $progress value=25 blocky;
+		HBox {
+			Button text="Run progress" changed={run_progress} link={progress};
+			Progress $progress value=0 blocky;
+		}
 	}
 	-{
 		app.layout()
+		app.set_default_button(mut window, greet)
 		app.set_focus(name)
 	}-
 }

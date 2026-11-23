@@ -1,0 +1,93 @@
+# Compile with: v run vml vml/examples/widgets/ui.vml
+Window title="VML widgets" width=76 height=23 dismissable {
+	VBox expand {
+		Tabs {
+			VBox title=Controls {
+				Flow {
+					Switch text="Enable controls" on
+						changed={fn [mut level, mut amount, mut progress, mut activity, mut canvas, mut status] (mut toggle vtk.Ctl, mut _ vtk.App) {
+							disabled := toggle.value == 0
+							level.disabled = disabled
+							amount.disabled = disabled
+							progress.disabled = disabled
+							canvas.disabled = disabled
+							activity.hidden = disabled
+							status.set_text(if disabled { 'Controls disabled' } else { 'Controls enabled' })
+						}};
+					Label text="Slider and spin stay in sync.";
+				}
+				Grid {
+					Label text=Level;
+					Slider $level col=1 low=0 high=100 value=40
+						changed={fn [mut amount, mut progress, mut status] (mut slider vtk.Ctl, mut _ vtk.App) {
+							amount.set_value(slider.value)
+							progress.set_value(slider.value)
+							status.set_text('Level: ${slider.value}% | Also changes the canvas blue channel')
+						}};
+					Label text="Exact value" row=1;
+					Spin $amount col=1 row=1 low=0 high=100 value=40
+						changed={fn [mut level] (mut spin vtk.Ctl, mut _ vtk.App) {
+							level.set_value(spin.value)
+						}};
+				}
+				Separator;
+				Progress $progress value=40 blocky !expand;
+				Spinner $activity text="Controls enabled";
+				Label text="Use arrows on the slider or spin; Home/End select the limits.";
+			}
+			Split title=Data share=300 {
+				Tree $topics expand scrollbar
+					changed={fn [mut status] (mut tree vtk.Ctl, mut _ vtk.App) {
+						if node := tree.tree_selection() { status.set_text('Tree: ${node.text}') }
+					}} {
+					-{
+						root := topics.tree_add(none, 'VTK')
+						topics.tree_add(root, 'Controls')
+						topics.tree_add(root, 'Layouts')
+						topics.tree_add(root, 'Editors')
+					}-
+				}
+				Table $numbers fetch={table_cell} row-count=100 scrollbar
+					changed={fn [mut status] (mut table vtk.Ctl, mut _ vtk.App) {
+						number := table.value + 1
+						status.set_text('Table: ${number} squared is ${number * number}')
+					}} {
+					-{
+						numbers.table_column('Number')
+						numbers.table_column('Square')
+					}-
+				}
+			}
+			VBox title=Calendar {
+				Toolbar {
+					ToolButton text="Next week" changed={fn [mut calendar] (mut _ vtk.Ctl, mut app vtk.App) {
+						calendar.set_date(calendar.date().add_days(7))
+						app.set_focus(calendar)
+					}};
+				}
+				DatePicker $calendar initial={today()}
+					changed={fn [mut status] (mut picker vtk.Ctl, mut _ vtk.App) {
+						status.set_text('Selected date: ${picker.text}')
+					}};
+				Label text="Arrows select a date; Page Up/Down change the month.";
+			}
+			Scroll title=Canvas {
+				Box vertical {
+					Label text="Scroll the gradient; click or drag to adjust its blue channel.";
+					Canvas $canvas width=68 height=30 paint={paint_gradient} link={level}
+						mousefn={fn [mut level] (mut canvas vtk.Ctl, event vtk.Event, mut _ vtk.App) bool {
+							if event.button != .left || !event.pressed { return false }
+							bounds := canvas.rect()
+							if bounds.w > 1 { level.set_value((event.x - bounds.x) * 100 / (bounds.w - 1)) }
+							return true
+						}};
+				}
+			}
+		}
+		StatusBar $status text="Choose a widget | Tab changes focus | Ctrl-C quits";
+	}
+	-{
+		app.layout()
+		app.set_focus(level)
+	}-
+}

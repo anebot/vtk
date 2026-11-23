@@ -6,29 +6,62 @@ import vtk
 pub fn build_ui(mut app vtk.App) &vtk.Ctl {
 	mut vml_0 := app.window('VML Markdown preview', 76, 22)
 	mut vml_1 := vtk.box(true)
-	mut vml_2 := vtk.split(false, 500)
-	mut vml_3 := vtk.box(true)
-	mut vml_4 := vtk.label('Markdown source')
+	mut vml_2 := vtk.toolbar()
+	mut vml_3 := vtk.toolbutton('Undo')
+	mut vml_4 := vtk.toolbutton('Redo')
+	mut vml_5 := vtk.toolbutton('Reset sample')
+	mut vml_6 := vtk.checkbox('Line numbers', true)
+	mut vml_7 := vtk.label('Split')
+	mut vml_8 := vtk.slider(200, 800)
+	mut panes := vtk.split(false, 500)
+	mut vml_10 := vtk.box(true)
+	mut vml_11 := vtk.label('Markdown source')
 	mut source := vtk.multiline(sample_markdown)
-	mut vml_6 := vtk.box(true)
-	mut vml_7 := vtk.label('Preview')
+	mut vml_13 := vtk.box(true)
+	mut vml_14 := vtk.label('Preview')
 	mut preview := vtk.markdown(sample_markdown)
-	mut vml_9 := vtk.statusbar('Edit on the left | Drag the divider | Ctrl-C quits')
+	mut status := vtk.statusbar(document_status(sample_markdown))
 	vml_0.dismissable = true
 	vml_1.expand = true
-	vml_3.add(mut vml_4)
+	vml_3.changed = fn [mut source] (mut _ vtk.Ctl, mut _ vtk.App) {
+					source.undo()
+				}
+	vml_2.add(mut vml_3)
+	vml_4.changed = fn [mut source] (mut _ vtk.Ctl, mut _ vtk.App) {
+					source.redo()
+				}
+	vml_2.add(mut vml_4)
+	vml_5.changed = fn [mut source] (mut _ vtk.Ctl, mut _ vtk.App) {
+					source.replace_range(0, source.text.len, sample_markdown)
+				}
+	vml_2.add(mut vml_5)
+	vml_6.changed = fn [mut source] (mut check vtk.Ctl, mut _ vtk.App) {
+					source.line_numbers = check.value != 0
+					source.invalidate()
+				}
+	vml_2.add(mut vml_6)
+	vml_2.add(mut vml_7)
+	vml_8.set_value(500)
+	vml_8.changed = fn [mut panes] (mut slider vtk.Ctl, mut _ vtk.App) {
+					panes.set_value(slider.value)
+				}
+	vml_2.add(mut vml_8)
+	vml_1.add(mut vml_2)
+	vml_10.add(mut vml_11)
 	source.line_numbers = true
 	source.scrollbar = true
-	source.changed = update_preview
-	source.link = preview
-	vml_3.add(mut source)
-	vml_2.add(mut vml_3)
-	vml_6.add(mut vml_7)
+	source.changed = fn [mut preview, mut status] (mut source vtk.Ctl, mut _ vtk.App) {
+							preview.set_text(source.text)
+							status.set_text(document_status(source.text))
+						}
+	vml_10.add(mut source)
+	panes.add(mut vml_10)
+	vml_13.add(mut vml_14)
 	preview.scrollbar = true
-	vml_6.add(mut preview)
-	vml_2.add(mut vml_6)
-	vml_1.add(mut vml_2)
-	vml_1.add(mut vml_9)
+	vml_13.add(mut preview)
+	panes.add(mut vml_13)
+	vml_1.add(mut panes)
+	vml_1.add(mut status)
 	vml_0.add(mut vml_1)
 	preview.markdown_mode(.read)
 	preview.md.task_interactive = false

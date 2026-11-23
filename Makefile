@@ -4,7 +4,7 @@ EXAMPLES = htk word vim draw widgets terminal
 BINARIES = $(addprefix $(BUILD_DIR)/,$(EXAMPLES))
 SOURCES = $(wildcard lib/*.v examples/support/*.v) v.mod
 VML_SOURCES = vml/main.v vml/parser.v vml/generator.v vml/vtk.vmlt
-VML_EXAMPLES = hello preferences markdown
+VML_EXAMPLES = hello preferences markdown widgets
 VML_UIS = $(addsuffix /ui.v,$(addprefix vml/examples/,$(VML_EXAMPLES)))
 VML_BINARIES = $(addprefix $(BUILD_DIR)/vml-,$(VML_EXAMPLES))
 

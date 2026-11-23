@@ -11,9 +11,11 @@ pub fn build_ui(mut app vtk.App) &vtk.Ctl {
 	mut vml_4 := vtk.label('A UI compiled from .vml')
 	mut greet := vtk.button('Say hello')
 	mut name := vtk.entry('World', 40)
-	mut vml_7 := vtk.checkbox('Remember me', true)
+	mut vml_7 := vtk.checkbox('Blocky progress', true)
 	mut vml_8 := vtk.box(true)
 	mut vml_9 := vtk.label('Ordinary V, with no runtime markup parser.')
+	mut vml_10 := vtk.box(false)
+	mut vml_11 := vtk.button('Run progress')
 	mut progress := vtk.progress()
 	window.dismissable = true
 	vml_1.expand = true
@@ -24,16 +26,25 @@ pub fn build_ui(mut app vtk.App) &vtk.Ctl {
 	name.min_w = 24
 	vml_3.add(mut name)
 	vml_7.disabled = false
+	vml_7.changed = fn [mut progress] (mut check vtk.Ctl, mut _ vtk.App) {
+							progress.blocky = check.value != 0
+							progress.invalidate()
+						}
 	vml_3.add(mut vml_7)
 	vml_2.add_tab('Greeting', mut vml_3)
 	vml_8.add(mut vml_9)
 	vml_2.add_tab('About', mut vml_8)
 	vml_1.add(mut vml_2)
-	progress.set_value(25)
+	vml_11.changed = run_progress
+	vml_11.link = progress
+	vml_10.add(mut vml_11)
+	progress.set_value(0)
 	progress.blocky = true
-	vml_1.add(mut progress)
+	vml_10.add(mut progress)
+	vml_1.add(mut vml_10)
 	window.add(mut vml_1)
 	app.layout()
+	app.set_default_button(mut window, greet)
 	app.set_focus(name)
 	return window
 }

@@ -1,19 +1,41 @@
 # Compile with: v run vml vml/examples/markdown/ui.vml
 Window title="VML Markdown preview" width=76 height=22 dismissable {
 	VBox expand {
-		Split share=500 {
+		Toolbar {
+			ToolButton text=Undo changed={fn [mut source] (mut _ vtk.Ctl, mut _ vtk.App) {
+				source.undo()
+			}};
+			ToolButton text=Redo changed={fn [mut source] (mut _ vtk.Ctl, mut _ vtk.App) {
+				source.redo()
+			}};
+			ToolButton text="Reset sample" changed={fn [mut source] (mut _ vtk.Ctl, mut _ vtk.App) {
+				source.replace_range(0, source.text.len, sample_markdown)
+			}};
+			CheckBox text="Line numbers" checked changed={fn [mut source] (mut check vtk.Ctl, mut _ vtk.App) {
+				source.line_numbers = check.value != 0
+				source.invalidate()
+			}};
+			Label text=Split;
+			Slider low=200 high=800 value=500 changed={fn [mut panes] (mut slider vtk.Ctl, mut _ vtk.App) {
+				panes.set_value(slider.value)
+			}};
+		}
+		Split $panes share=500 {
 			VBox {
 				Label text="Markdown source";
 				# Edits update a control declared later in the markup.
 				Multiline $source text={sample_markdown} line-numbers scrollbar
-					changed={update_preview} link={preview};
+					changed={fn [mut preview, mut status] (mut source vtk.Ctl, mut _ vtk.App) {
+						preview.set_text(source.text)
+						status.set_text(document_status(source.text))
+					}};
 			}
 			VBox {
 				Label text=Preview;
 				Markdown $preview text={sample_markdown} scrollbar;
 			}
 		}
-		StatusBar text="Edit on the left | Drag the divider | Ctrl-C quits";
+		StatusBar $status text={document_status(sample_markdown)};
 	}
 	-{
 		preview.markdown_mode(.read)
