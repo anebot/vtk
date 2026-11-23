@@ -1,0 +1,99 @@
+{
+  "module_name": "main",
+  "imports": ["vtk"],
+  "params": "mut app vtk.App",
+  "result": "&vtk.Ctl",
+  "property": "{{id}}.{{name}} = {{value}}",
+  "properties": {
+    "text": "{{id}}.set_text({{value}})",
+    "value": "{{id}}.set_value({{value}})"
+  },
+  "widgets": {
+    "Window": {
+      "create": "app.window({{title}}, {{width}}, {{height}})",
+      "defaults": {"title": "'VML'", "width": "40", "height": "12"},
+      "add": "{{parent}}.add(mut {{child}})"
+    },
+    "Box": {
+      "create": "vtk.box({{vertical}})",
+      "defaults": {"vertical": "true"},
+      "add": "{{parent}}.add(mut {{child}})"
+    },
+    "VBox": {
+      "create": "vtk.box(true)",
+      "add": "{{parent}}.add(mut {{child}})"
+    },
+    "HBox": {
+      "create": "vtk.box(false)",
+      "add": "{{parent}}.add(mut {{child}})"
+    },
+    "Grid": {
+      "create": "vtk.grid()",
+      "add": "{{parent}}.add(mut {{child}})"
+    },
+    "Flow": {
+      "create": "vtk.flow()",
+      "add": "{{parent}}.add(mut {{child}})"
+    },
+    "Split": {
+      "create": "vtk.split({{vertical}}, {{share}})",
+      "defaults": {"vertical": "false", "share": "500"},
+      "add": "{{parent}}.add(mut {{child}})"
+    },
+    "Scroll": {
+      "create": "vtk.scroll()",
+      "add": "{{parent}}.add(mut {{child}})"
+    },
+    "Group": {
+      "create": "vtk.group({{title}})",
+      "defaults": {"title": "''"},
+      "add": "{{parent}}.add(mut {{child}})"
+    },
+    "Toolbar": {
+      "create": "vtk.toolbar()",
+      "add": "{{parent}}.add(mut {{child}})"
+    },
+    "ButtonBar": {
+      "create": "vtk.button_bar()",
+      "add": "{{parent}}.add(mut {{child}})"
+    },
+    "StatusBar": {
+      "create": "vtk.statusbar({{text}})",
+      "defaults": {"text": "''"},
+      "add": "{{parent}}.add(mut {{child}})"
+    },
+    "Tabs": {
+      "create": "vtk.tabs()",
+      "add": "{{parent}}.add_tab({{title}}, mut {{child}})"
+    },
+    "Label": {"create": "vtk.label({{text}})", "defaults": {"text": "''"}},
+    "Separator": {"create": "vtk.separator()"},
+    "Button": {"create": "vtk.button({{text}})", "defaults": {"text": "''"}},
+    "ToolButton": {"create": "vtk.toolbutton({{text}})", "defaults": {"text": "''"}},
+    "Entry": {
+      "create": "vtk.entry({{text}}, {{byte_limit}})",
+      "defaults": {"text": "''", "byte_limit": "0"}
+    },
+    "Multiline": {"create": "vtk.multiline({{text}})", "defaults": {"text": "''"}},
+    "Markdown": {"create": "vtk.markdown({{text}})", "defaults": {"text": "''"}},
+    "CheckBox": {
+      "create": "vtk.checkbox({{text}}, {{checked}})",
+      "defaults": {"text": "''", "checked": "false"}
+    },
+    "Switch": {
+      "create": "vtk.switch_ctl({{text}}, {{on}})",
+      "defaults": {"text": "''", "on": "false"}
+    },
+    "Slider": {"create": "vtk.slider({{low}}, {{high}})", "defaults": {"low": "0", "high": "100"}},
+    "Spin": {"create": "vtk.spin({{low}}, {{high}})", "defaults": {"low": "0", "high": "100"}},
+    "Progress": {"create": "vtk.progress()"},
+    "Spinner": {"create": "vtk.spinner({{text}})", "defaults": {"text": "''"}},
+    "Combo": {"create": "vtk.combo()", "add": "{{parent}}.add(mut {{child}})"},
+    "Radio": {"create": "vtk.radio()", "add": "{{parent}}.add(mut {{child}})"},
+    "Item": {"create": "vtk.new_ctl(.item)"},
+    "Tree": {"create": "vtk.tree()"},
+    "Table": {"create": "vtk.table({{fetch}}, {{row_count}})", "defaults": {"row_count": "0"}},
+    "Canvas": {"create": "vtk.canvas({{width}}, {{height}}, {{paint}})"},
+    "DatePicker": {"create": "vtk.date_picker({{initial}})"}
+  }
+}

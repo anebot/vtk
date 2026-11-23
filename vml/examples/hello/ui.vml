@@ -1,0 +1,22 @@
+# Compile with: v run vml vml/examples/hello/ui.vml
+Window $window title="VML hello" width=48 height=16 dismissable {
+	VBox expand {
+		Tabs {
+			VBox title=Greeting {
+				Label text="A UI compiled from .vml";
+				# The entry is declared later; property references can point forward.
+				Button $greet text="Say hello" changed={say_hello} link={name};
+				Entry $name text=World byte-limit=40 min-w=24;
+				CheckBox text="Remember me" checked !disabled;
+			}
+			VBox title=About {
+				Label text="Ordinary V, with no runtime markup parser.";
+			}
+		}
+		Progress $progress value=25 blocky;
+	}
+	-{
+		app.layout()
+		app.set_focus(name)
+	}-
+}

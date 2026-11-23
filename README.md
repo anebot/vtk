@@ -24,7 +24,8 @@ make test
 ./build/draw
 ```
 
-`make` builds all six examples in `build/`. You can also run them directly:
+`make` builds all six examples, the VML compiler, and its UI example in `build/`.
+You can also run the original examples directly:
 
 ```sh
 v run examples/htk.v
@@ -38,6 +39,20 @@ v test .
 
 V 0.5.2 and a C compiler are sufficient. There are no VPM dependencies.
 Copying the entire checkout into a V module search path as `vtk` works too.
+
+Declarative UI files can be compiled into V builder functions with
+[VML](vml/README.md). Its Gtkon-style syntax uses a separate `vtk.vmlt` descriptor
+for constructors, properties, and child attachment:
+
+```sh
+make vml
+./build/vmlc path/to/dialog.vml
+./build/vml-hello
+```
+
+Compile the generated `.v` file alongside your application and call
+`build_dialog(mut app)`. VML is only needed during generation; the application
+uses ordinary VTK controls and callbacks.
 
 ```v
 import vtk
