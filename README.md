@@ -266,6 +266,28 @@ the task's state byte as one undo entry. Code blocks are inert. Set
 clicked links in read-only views or with Ctrl-click. Rulers, column width,
 page separators and current-section layout are configurable through `md`.
 
+Markdown appearance is configured per control through `md.styles`, separately
+from parsing and layout. Inline code uses normal text colors and a slight
+background tint rather than reverse video; fenced blocks use the same tint,
+including blank lines. These defaults follow dark and light theme changes.
+
+```v
+viewer.md.styles = vtk.MarkdownStyles{
+    code_shading: 5
+    inline_code: vtk.MarkdownStyle{ attr: 0 }
+    code_block: vtk.MarkdownStyle{ attr: 0 }
+    link: vtk.MarkdownStyle{ attr: vtk.underline }
+}
+```
+
+Each element style accepts optional `fg` and `bg` colors and an `attr` mask.
+Styles are available for text, headings, inline code, code blocks, links, quotes,
+table headers and table borders. Unset colors inherit or use the active theme;
+attributes add to explicit Markdown emphasis. `code_shading` is a clamped
+0–100 percentage of foreground mixed into the background (default 6); 0 disables
+automatic shading. Explicit code backgrounds take priority. Selection colors
+override code styling, and disabled controls retain the theme's dim foreground.
+
 `control.vim_mode(true)` or `app.vim_set(true)` enables per-editor Normal,
 Insert, Visual and Visual-line modes. Motions include h/j/k/l, w/b/W/B,
 0/^/$ and gg/G; edits include i/a/I/A, o/O, J, x, dd/yy, dw/cw, p/P, undo

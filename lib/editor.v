@@ -171,6 +171,7 @@ struct Glyph {
 	at   int
 	end  int
 	attr int
+	element MarkdownElement
 	task int = -1
 	link string
 }
@@ -182,7 +183,7 @@ mut:
 	line    int
 	glyphs  []Glyph
 	code    bool
-	heading bool
+	element MarkdownElement
 	no_wrap bool
 	color   ?int
 	attr    int
@@ -219,7 +220,7 @@ fn (c &Ctl) editor_rows() []TextRow {
 	mut result := []TextRow{}
 	for row in lines {
 		if row.no_wrap { result << row; continue }
-		mut part := TextRow{ start: row.start, end: row.end, line: row.line, code: row.code, heading: row.heading, color: row.color, attr: row.attr }
+		mut part := TextRow{ start: row.start, end: row.end, line: row.line, code: row.code, element: row.element, color: row.color, attr: row.attr }
 		mut col := 0
 		for glyph in row.glyphs {
 			gw := if glyph.r == `\t` {
@@ -230,7 +231,7 @@ fn (c &Ctl) editor_rows() []TextRow {
 			if col > 0 && col + gw > width {
 				part.end = glyph.at
 				result << part
-				part = TextRow{ start: glyph.at, end: row.end, line: row.line, code: row.code, heading: row.heading, color: row.color, attr: row.attr }
+				part = TextRow{ start: glyph.at, end: row.end, line: row.line, code: row.code, element: row.element, color: row.color, attr: row.attr }
 				col = 0
 			}
 			part.glyphs << glyph
@@ -327,14 +328,18 @@ fn (mut app App) draw_editor(mut c Ctl) {
 	caret := c.caret_row(rows)
 	c.scroll_into_view(caret, height)
 	c.top = clamp(c.top, 0, rows.len - height)
-	fg := if c.disabled {
+	mut fg := if c.disabled {
 		t.dim
 	} else if c.kind == .entry {
 		t.field_fg
 	} else {
 		t.fg
 	}
-	bg := if c.kind == .entry { t.field_bg } else { t.bg }
+	mut bg := if c.kind == .entry { t.field_bg } else { t.bg }
+	if c.kind == .markdown {
+		paint := c.md.styles.paint(.text, t, MarkdownPaint{ fg: fg, bg: bg })
+		fg, bg = paint.fg, paint.bg
+	}
 	app.screen.fill(c.rect(), ` `, fg, bg)
 	margin := c.editor_gutter()
 	inset := if c.kind == .markdown { int(c.md.ruler_top) } else { 0 }
@@ -359,32 +364,31 @@ fn (mut app App) draw_editor(mut c Ctl) {
 			app.screen.text(c.x + margin - 3, y, ' | ', t.dim, bg, 0)
 		}
 		old := app.screen.set_clip(Rect{c.x + margin, y, view_w, 1})
+		if c.kind == .markdown && row.element == .code_block {
+			text_paint := c.md.styles.paint(.text, t, MarkdownPaint{ fg: fg, bg: bg })
+			paint := c.md.styles.paint(.code_block, t, text_paint)
+			app.screen.fill(Rect{c.x + margin, y, view_w, 1}, ` `, paint.fg, paint.bg)
+		}
 		mut col := 0
 		for g in row.glyphs {
 			selected := g.at >= a && g.at < b
-			gfg := if selected {
-				t.sel_fg
-			} else if c.disabled {
-				fg
-			} else if row.heading {
-				t.accent
-			} else {
-				row.color or { fg }
+			mut paint := MarkdownPaint{ fg: row.color or { fg }, bg: bg, attr: g.attr | row.attr }
+			if c.kind == .markdown {
+				paint = c.md.styles.paint(.text, t, paint)
+				if row.element != .text { paint = c.md.styles.paint(row.element, t, paint) }
+				if g.link != '' { paint = c.md.styles.paint(.link, t, paint) }
+				if g.element != .text { paint = c.md.styles.paint(g.element, t, paint) }
 			}
-			gbg := if selected {
-				t.sel_bg
-			} else if row.code {
-				t.field_bg
-			} else {
-				bg
-			}
+			gfg := if selected { t.sel_fg } else if c.disabled { t.dim } else { paint.fg }
+			gbg := if selected { t.sel_bg } else { paint.bg }
+			attribute := if selected && c.kind == .markdown { paint.attr & ~reverse } else { paint.attr }
 			if g.r == `\t` {
 				n := tab_width - col % tab_width
 				app.screen.fill(Rect{c.x + margin + col - c.left, y, n, 1}, ` `, gfg, gbg)
 				col += n
 			} else {
-				if c.secret { app.screen.put(c.x + margin + col - c.left, y, `*`, gfg, gbg, g.attr | row.attr) }
-				else { app.screen.put_grapheme(c.x + margin + col - c.left, y, glyph_text(g), glyph_width(g), gfg, gbg, g.attr | row.attr) }
+				if c.secret { app.screen.put(c.x + margin + col - c.left, y, `*`, gfg, gbg, attribute) }
+				else { app.screen.put_grapheme(c.x + margin + col - c.left, y, glyph_text(g), glyph_width(g), gfg, gbg, attribute) }
 				col += if c.secret { 1 } else { glyph_width(g) }
 			}
 		}

@@ -29,6 +29,7 @@ pub mut:
 	section_at       int
 	task_interactive bool = true
 	linkfn           ?fn (mut Ctl, string, mut App)
+	styles           MarkdownStyles
 mut:
 	last_task  int = -1
 	last_click i64
@@ -75,6 +76,7 @@ fn (c &Ctl) markdown_rows() []TextRow {
 			}
 		}
 		row.code = was_code || line.starts_with('\t') || line.starts_with('    ')
+		if row.code && !is_fence { row.element = .code_block }
 		if !source && !row.code && !is_fence {
 			if table := parse_markdown_table(lines, line_no, offset) {
 				if offset >= section_a && offset <= section_b {
@@ -89,17 +91,16 @@ fn (c &Ctl) markdown_rows() []TextRow {
 			row.glyphs = line_glyphs(line, offset, 0, -1)
 		} else if !is_fence {
 			mut skip := 0
-			mut attr := 0
 			if trim.starts_with('#') {
 				mut n := 0
 				for n < trim.len && trim[n] == `#` { n++ }
 				if n <= 6 && n < trim.len && trim[n] == ` ` {
 					skip = indent + n + 1
-					attr = bold
-					row.heading = true
+					row.element = .heading
 				}
 			}
 			if trim.starts_with('> ') {
+				row.element = .quote
 				skip = indent + 2
 				row.glyphs << Glyph{ r: `│`, at: offset, end: offset + skip }
 			}
@@ -118,7 +119,7 @@ fn (c &Ctl) markdown_rows() []TextRow {
 			if trim in ['---', '***', '___'] {
 				row.glyphs = line_glyphs('────────────────', offset, 0, -1)
 			} else {
-				row.glyphs << inline_markdown(line[skip..], offset + skip, attr)
+				row.glyphs << inline_markdown(line[skip..], offset + skip, 0)
 			}
 		}
 		if source && c.md.task_interactive {
@@ -209,7 +210,9 @@ fn inline_markdown(text string, offset int, initial_attr int) []Glyph {
 			if span_end > i {
 				mut opening := i
 				for opening < text.len && text[opening] == 96 { opening++ }
-				out << line_glyphs(text[opening..end], offset + opening, attr | reverse, -1)
+				for glyph in line_glyphs(text[opening..end], offset + opening, attr, -1) {
+					out << Glyph{ ...glyph, element: .inline_code }
+				}
 				i = span_end
 				continue
 			}
@@ -229,7 +232,7 @@ fn inline_markdown(text string, offset int, initial_attr int) []Glyph {
 				close := i + 1 + close_rel
 				if end_rel := text[close + 2..].index(')') {
 					end := close + 2 + end_rel
-					for g in line_glyphs(text[i + 1..close], offset + i + 1, attr | underline, -1) {
+					for g in line_glyphs(text[i + 1..close], offset + i + 1, attr, -1) {
 						out << Glyph{ ...g, link: text[close + 2..end] }
 					}
 					i = end + 1

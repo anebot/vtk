@@ -50,6 +50,7 @@ fn grapheme_glyphs(glyphs []Glyph) []Glyph {
 		mut end := first + 1
 		for end < glyphs.len && glyphs[end].at == glyphs[end - 1].end
 			&& glyphs[end].attr == glyphs[first].attr && glyphs[end].link == glyphs[first].link
+			&& glyphs[end].element == glyphs[first].element
 			&& glyphs[end].task == glyphs[first].task {
 			end++
 		}

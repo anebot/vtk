@@ -27,7 +27,7 @@ fn test_markdown_tables_render_alignment_inline_styles_and_source_spans() {
 			assert glyph.link == 'https://example.com'
 		}
 		if glyph.r == `4` {
-			assert glyph.attr & reverse != 0
+			assert glyph.element == .inline_code
 		}
 	}
 	assert markdown_row_text(rows[3]).ends_with(' 42 │')

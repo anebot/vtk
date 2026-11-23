@@ -147,10 +147,10 @@ fn markdown_wrap_cell(glyphs []Glyph, width int) [][]Glyph {
 }
 
 fn markdown_table_border(widths []int, left rune, middle rune, right rune, source MarkdownTableRow) TextRow {
-	mut glyphs := [Glyph{ r: left, at: source.at, end: source.at }]
+	mut glyphs := [Glyph{ r: left, at: source.at, end: source.at, element: .table_border }]
 	for i, width in widths {
-		for _ in 0 .. width + 2 { glyphs << Glyph{ r: `─`, at: source.at, end: source.at } }
-		glyphs << Glyph{ r: if i + 1 == widths.len { right } else { middle }, at: source.at, end: source.at }
+		for _ in 0 .. width + 2 { glyphs << Glyph{ r: `─`, at: source.at, end: source.at, element: .table_border } }
+		glyphs << Glyph{ r: if i + 1 == widths.len { right } else { middle }, at: source.at, end: source.at, element: .table_border }
 	}
 	return TextRow{ start: source.at, end: source.end, line: source.line, glyphs: glyphs, no_wrap: true }
 }
@@ -159,10 +159,10 @@ fn (c &Ctl) render_markdown_table(table MarkdownTable) []TextRow {
 	count := table.alignments.len
 	mut natural := []int{len: count, init: 2}
 	mut content := [][][]Glyph{}
-	for row_index, row in table.rows {
+	for row in table.rows {
 		mut cells := [][]Glyph{}
 		for i, cell in row.cells {
-			glyphs := inline_markdown(cell.text, cell.at, if row_index == 0 { bold } else { 0 })
+			glyphs := inline_markdown(cell.text, cell.at, 0)
 			natural[i] = max(natural[i], markdown_glyph_width(glyphs))
 			cells << glyphs
 		}
@@ -192,7 +192,7 @@ fn (c &Ctl) render_markdown_table(table MarkdownTable) []TextRow {
 			wrapped << parts
 		}
 		for visual_line in 0 .. height {
-			mut glyphs := [Glyph{ r: `│`, at: row.at, end: row.at }]
+			mut glyphs := [Glyph{ r: `│`, at: row.at, end: row.at, element: .table_border }]
 			for i, parts in wrapped {
 				cell := row.cells[i]
 				part := if visual_line < parts.len { parts[visual_line] } else { []Glyph{} }
@@ -207,9 +207,9 @@ fn (c &Ctl) render_markdown_table(table MarkdownTable) []TextRow {
 				for _ in 0 .. space - before + 1 {
 					glyphs << Glyph{ r: ` `, at: cell.end, end: cell.end }
 				}
-				glyphs << Glyph{ r: `│`, at: cell.end, end: cell.end }
+				glyphs << Glyph{ r: `│`, at: cell.end, end: cell.end, element: .table_border }
 			}
-			result << TextRow{ start: row.at, end: row.end, line: row.line, glyphs: glyphs, no_wrap: true, heading: row_index == 0 }
+			result << TextRow{ start: row.at, end: row.end, line: row.line, glyphs: glyphs, no_wrap: true, element: if row_index == 0 { .table_header } else { .text } }
 		}
 		if row_index == 0 {
 			result << markdown_table_border(widths, `├`, `┼`, `┤`, table.separator)
