@@ -75,7 +75,7 @@ pub fn (mut app App) close_popups() {
 
 fn (mut app App) layout_popups() {
 	anchored := app.popup_at_bar
-	if anchored && ((!isnil(app.app_popup) && !app.desktop) || app.bar_height() == 0 || app.height < 4 || app.width < 5) {
+	if anchored && ((!isnil(app.app_popup) && !app.desktop) || app.bar_height() == 0 || app.height < 4 || app.width < 7) {
 		app.close_popups()
 		return
 	}

@@ -43,7 +43,7 @@ fn (app &App) bar_clock_rect() Rect {
 }
 
 fn (app &App) bar_buttons_rect() Rect {
-	x := if app.desktop { 6 } else { 0 }
+	x := if app.desktop { 8 } else { 0 }
 	clock_width := if app.bar_clock && app.desktop { 6 } else { 0 }
 	return Rect{x, app.bar_y(), max(0, app.width - x - clock_width), 1}
 }
@@ -59,7 +59,7 @@ fn (mut app App) draw_bar() {
 	t := app.theme
 	y := app.bar_y()
 	app.screen.fill(Rect{0, y, app.width, 1}, ` `, t.bar_fg, t.bar_bg)
-	if app.desktop { app.screen.text(0, y, '[App]', t.bar_fg, t.bar_bg, bold) }
+	if app.desktop { app.screen.text(0, y, '[Start]', t.bar_fg, t.bar_bg, bold) }
 	buttons := app.bar_buttons_rect()
 	mut x := buttons.x - app.bar_offset
 	old := app.screen.set_clip(buttons)
@@ -134,7 +134,7 @@ pub fn (mut app App) app_menu(x int, y int) {
 		app.close_popups()
 		return
 	}
-	if anchored && (app.height < 4 || app.width < 5) { return }
+	if anchored && (app.height < 4 || app.width < 7) { return }
 	mut menu := context_menu()
 	for i, launcher in app.launchers {
 		mut item := menu.menu_item(launcher.name, launcher_action)
@@ -173,7 +173,7 @@ fn (mut app App) bar_mouse(e Event) bool {
 		}
 		return true
 	}
-	if app.desktop && e.x < 5 {
+	if app.desktop && e.x >= 0 && e.x < 7 {
 		app.app_menu(0, e.y)
 		return true
 	}

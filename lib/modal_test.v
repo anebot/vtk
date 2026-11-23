@@ -94,7 +94,7 @@ fn check_settings_bar_position(mut app App) {
 	app.dispatch(Event{ key: int(Key.enter) })
 	app.redraw()
 	assert app.bar_top && settings.y >= 1
-	assert app.screen.cells[..5].map(it.glyph).join('') == '[App]'
+	assert app.screen.cells[..7].map(it.glyph).join('') == '[Start]'
 	app.set_focus(buttons[1]) // Save
 	app.dispatch(Event{ key: int(Key.enter) })
 	mut loaded := new_app()

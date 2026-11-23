@@ -263,7 +263,7 @@ Buttons keep their creation order when windows are raised, minimized or pinned.
 
 Tab / Shift-Tab cycle focus; Ctrl-Tab / Ctrl-Shift-Tab cycle windows.
 F10 or Alt-M opens the window menubar. Ctrl-G opens the system menu and
-Alt-A / Alt-F10 opens App. Ctrl-O opens App when the focused control does
+Alt-S / Alt-F10 opens Start (Alt-A still works). Ctrl-O opens Start when the focused control does
 not handle it. Menus also accept h/j/k/l. Escape closes dismissable windows.
 Alt-F7 and Alt-F8 enter keyboard Move and Resize; arrows move one cell,
 Shift-arrows five, Enter accepts and Escape restores the original rectangle.
@@ -281,7 +281,7 @@ application modality. Results live in each dialog. `prompt`, `msgbox` and
 Settings is application-modal and blocks both existing and newly opened windows.
 
 Settings use **`~/vtk.ini`**, with a `[vtk]` section. `app.settings_file(path)`
-overrides the location. Enable **Window bar at top** to place the `[App]` bar
+overrides the location. Enable **Window bar at top** to place the `[Start]` bar
 on the first screen line, with its menus opening downward. The default is the
 bottom line; `app.bar_top` (or `bar_top = 1` in the INI file) controls placement.
 Settings include a desktop background color picker with live color swatches and

@@ -212,7 +212,7 @@ pub fn (mut app App) dispatch(e Event) {
 		app.window_menu(mut w, w.x + 1, w.y + 1)
 		return
 	}
-	if (e.alt && e.key in [int(`a`), int(Key.f10)]) || (e.ctrl && e.key == `o` && (isnil(app.focus) || app.focus.kind == .terminal)) {
+	if (e.alt && e.key in [int(`a`), int(`s`), int(Key.f10)]) || (e.ctrl && e.key == `o` && (isnil(app.focus) || app.focus.kind == .terminal)) {
 		app.app_menu(0, app.bar_y())
 		return
 	}
