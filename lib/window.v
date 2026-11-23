@@ -318,7 +318,7 @@ fn (app &App) window_title_layout(w &Ctl) WindowTitleLayout {
 	}
 	mut x := if app.macos_buttons { w.x + 1 } else { w.x + w.w - 4 }
 	buttons := if app.macos_buttons {
-		[window_close, window_menu, window_minimize]
+		[window_close, window_minimize, window_menu]
 	} else {
 		[window_close, window_maximize, window_minimize]
 	}
