@@ -4,6 +4,63 @@ module word
 import os
 import vtk
 
+enum Cmd {
+	new_document
+	open_file
+	save
+	save_as
+	close_window
+	undo
+	redo
+	copy
+	paste
+	select_all
+	bold
+	italic
+	code
+	emoji
+	link
+	find
+	find_replace
+	toggle_outline
+	toggle_source
+	toggle_read_only
+	toggle_vim
+	history
+	line_numbers
+	ruler_top
+	ruler_left
+	insert_heading
+	insert_list
+	insert_quote
+	insert_code_block
+	wrap_none
+	wrap_character
+	wrap_word
+	page_width
+	toggle_toolbar
+	align_left
+	align_center
+	align_right
+	align_justify
+	insert_table
+	choose_font
+	about
+}
+
+enum FindCmd {
+	prev
+	next
+	replace
+	replace_all
+	close
+}
+
+struct MenuEntry {
+	label string
+	cmd   Cmd
+}
+
 @[heap]
 struct Document {
 mut:
@@ -151,11 +208,15 @@ fn save_prefs(doc &Document) {
 	os.write_file(prefs_file(), lines.join('\n') + '\n') or { return }
 }
 
-const view_names = ['Outline', 'Toolbar', 'Source', 'Read only', 'Vim mode']
-const view_ids = [17, 34, 18, 19, 20]
-const wrap_names = ['Disabled', 'Character', 'Word']
-const page_names = ['Line numbers', 'Top ruler', 'Left ruler']
-const align_names = ['Left', 'Center', 'Right', 'Justify']
+const view_entries = [MenuEntry{'Outline', .toggle_outline}, MenuEntry{'Toolbar', .toggle_toolbar},
+	MenuEntry{'Source', .toggle_source}, MenuEntry{'Read only', .toggle_read_only},
+	MenuEntry{'Vim mode', .toggle_vim}]
+const wrap_entries = [MenuEntry{'Disabled', .wrap_none}, MenuEntry{'Character', .wrap_character},
+	MenuEntry{'Word', .wrap_word}]
+const page_entries = [MenuEntry{'Line numbers', .line_numbers}, MenuEntry{'Top ruler', .ruler_top},
+	MenuEntry{'Left ruler', .ruler_left}]
+const align_entries = [MenuEntry{'Left', .align_left}, MenuEntry{'Center', .align_center},
+	MenuEntry{'Right', .align_right}, MenuEntry{'Justify', .align_justify}]
 const app_name = 'VtkWord'
 const app_version = '0.1.0'
 const font_styles = [vtk.FontStyle.none, .bold, .italic, .script, .doublestruck, .underline,
@@ -171,21 +232,21 @@ fn sync_view_menu(mut doc Document) {
 	shown := [!doc.outline.hidden, !doc.toolbar.hidden, mode in [.source, .source_read],
 		mode in [.read, .source_read], doc.view.vim.enabled]
 	for i, mut item in doc.view_items {
-		item.text = ticked(view_names[i], shown[i])
+		item.text = ticked(view_entries[i].label, shown[i])
 	}
 }
 
 fn sync_wrap_menu(mut doc Document) {
 	mode := int(doc.view.wrap_mode())
 	for i, mut item in doc.wrap_items {
-		item.text = ticked(wrap_names[i], i == mode)
+		item.text = ticked(wrap_entries[i].label, i == mode)
 	}
 }
 
 fn sync_page_menu(mut doc Document) {
 	shown := [doc.view.line_numbers, doc.view.md.ruler_top, doc.view.md.ruler_left]
 	for i, mut item in doc.page_items {
-		item.text = ticked(page_names[i], shown[i])
+		item.text = ticked(page_entries[i].label, shown[i])
 	}
 }
 
@@ -193,7 +254,7 @@ fn sync_align_menu(mut doc Document) {
 	start, _ := doc.view.selection()
 	align := doc.view.markdown_align_at(start)
 	for i, mut item in doc.align_items {
-		item.text = ticked(align_names[i], int(align) == i + 1)
+		item.text = ticked(align_entries[i].label, int(align) == i + 1)
 	}
 }
 
@@ -269,9 +330,12 @@ mut:
 
 fn table_prompt_accept(mut c vtk.Ctl, mut app vtk.App) {
 	mut prompt := unsafe { &TablePrompt(c.user) }
-	if int(c.data) == 1 {
-		prompt.result = table_markdown(prompt.columns.value, prompt.rows.value)
-	}
+	prompt.result = table_markdown(prompt.columns.value, prompt.rows.value)
+	app.close(mut prompt.window)
+}
+
+fn table_prompt_cancel(mut c vtk.Ctl, mut app vtk.App) {
+	mut prompt := unsafe { &TablePrompt(c.user) }
 	app.close(mut prompt.window)
 }
 
@@ -406,12 +470,12 @@ fn find_replace_submit(mut c vtk.Ctl, mut app vtk.App) {
 
 fn find_action(mut c vtk.Ctl, mut app vtk.App) {
 	mut state := unsafe { &FindState(c.user) }
-	match c.data {
-		1 { find_step(mut state, false, false, mut app) }
-		2 { find_step(mut state, true, false, mut app) }
-		3 { find_replace(mut state, mut app) }
-		4 { find_replace_all(mut state, mut app) }
-		else { app.close(mut state.window) }
+	match unsafe { FindCmd(int(c.data)) } {
+		.prev { find_step(mut state, false, false, mut app) }
+		.next { find_step(mut state, true, false, mut app) }
+		.replace { find_replace(mut state, mut app) }
+		.replace_all { find_replace_all(mut state, mut app) }
+		.close { app.close(mut state.window) }
 	}
 }
 
@@ -446,10 +510,10 @@ fn find_dialog(mut doc Document, mut app vtk.App, focus_replace bool) {
 	mut actions := vtk.button_bar()
 	mut buttons := [vtk.button(' < Prev '), vtk.button(' Next > '), vtk.button(' Replace '),
 		vtk.button(' Replace all '), vtk.button(' Close ')]
-	ids := [1, 2, 3, 4, 0]
+	find_cmds := [FindCmd.prev, .next, .replace, .replace_all, .close]
 	for i, mut button in buttons {
 		button.user = state
-		button.data = ids[i]
+		button.data = i64(int(find_cmds[i]))
 		button.changed = find_action
 		if i < 2 { nav.add(mut button) } else { actions.add(mut button) }
 	}
@@ -520,11 +584,9 @@ fn insert_table(mut doc Document, mut app vtk.App) {
 	body.add(mut fields)
 	mut bar := vtk.button_bar()
 	mut insert := vtk.button(' Insert ')
-	insert.data = 1
 	insert.changed = table_prompt_accept
 	mut cancel := vtk.button(' Cancel ')
-	cancel.data = 0
-	cancel.changed = table_prompt_accept
+	cancel.changed = table_prompt_cancel
 	bar.add(mut insert)
 	bar.add(mut cancel)
 	body.add(mut bar)
@@ -550,9 +612,9 @@ fn insert_table(mut doc Document, mut app vtk.App) {
 
 fn action(mut c vtk.Ctl, mut app vtk.App) {
 	mut doc := unsafe { &Document(c.user) }
-	match c.data {
-		1 { new_document(mut app, '', doc.standalone) }
-		2 {
+	match unsafe { Cmd(int(c.data)) } {
+		.new_document { new_document(mut app, '', doc.standalone) }
+		.open_file {
 			if path := app.file_pick_for(doc.window, if doc.path == '' {
 				'.'
 			} else {
@@ -561,35 +623,38 @@ fn action(mut c vtk.Ctl, mut app vtk.App) {
 				new_document(mut app, path, doc.standalone)
 			}
 		}
-		3 { save(mut doc, false, mut app) }
-		4 { save(mut doc, true, mut app) }
-		5 { app.close(mut doc.window); return }
-		6 { doc.view.undo() }
-		7 { doc.view.redo() }
-		8 {
+		.save { save(mut doc, false, mut app) }
+		.save_as { save(mut doc, true, mut app) }
+		.close_window {
+			app.close(mut doc.window)
+			return
+		}
+		.undo { doc.view.undo() }
+		.redo { doc.view.redo() }
+		.copy {
 			app.set_focus(doc.view)
 			app.copy_focus()
 		}
-		9 { doc.view.replace_selection(app.clipboard_text()) }
-		10 {
+		.paste { doc.view.replace_selection(app.clipboard_text()) }
+		.select_all {
 			doc.view.anchor = 0
 			doc.view.cursor = doc.view.text.len
 		}
-		11 { wrap(mut doc, '**', '**') }
-		12 { wrap(mut doc, '*', '*') }
-		13 { wrap(mut doc, '`', '`') }
-		14 {
+		.bold { wrap(mut doc, '**', '**') }
+		.italic { wrap(mut doc, '*', '*') }
+		.code { wrap(mut doc, '`', '`') }
+		.emoji {
 			if emoji := app.emoji_pick(doc.window) { doc.view.replace_selection(emoji) }
 		}
-		15 {
+		.link {
 			if target := app.prompt_for(doc.window, 'Link', 'Target URL or path:', '') {
 				wrap(mut doc, '[', '](${target})')
 			}
 		}
-		16 { find_dialog(mut doc, mut app, false) }
-		40 { find_dialog(mut doc, mut app, true) }
-		17 { doc.outline.hidden = !doc.outline.hidden }
-		18 {
+		.find { find_dialog(mut doc, mut app, false) }
+		.find_replace { find_dialog(mut doc, mut app, true) }
+		.toggle_outline { doc.outline.hidden = !doc.outline.hidden }
+		.toggle_source {
 			mode := match doc.view.md.mode {
 				.edit { vtk.MarkdownMode.source }
 				.source { vtk.MarkdownMode.edit }
@@ -598,7 +663,7 @@ fn action(mut c vtk.Ctl, mut app vtk.App) {
 			}
 			doc.view.markdown_mode(mode)
 		}
-		19 {
+		.toggle_read_only {
 			mode := match doc.view.md.mode {
 				.edit { vtk.MarkdownMode.read }
 				.source { vtk.MarkdownMode.source_read }
@@ -607,20 +672,19 @@ fn action(mut c vtk.Ctl, mut app vtk.App) {
 			}
 			doc.view.markdown_mode(mode)
 		}
-		20 { doc.view.vim_mode(!doc.view.vim.enabled) }
-		21 { app.history_for(doc.window, mut doc.view) }
-		22 { doc.view.line_numbers = !doc.view.line_numbers }
-		23 { doc.view.md.ruler_top = !doc.view.md.ruler_top }
-		24 { doc.view.md.ruler_left = !doc.view.md.ruler_left }
-		25 { app.close(mut doc.window); return }
-		26 { wrap(mut doc, '\n# ', '') }
-		27 { wrap(mut doc, '\n- ', '') }
-		28 { wrap(mut doc, '\n> ', '') }
-		29 { wrap(mut doc, '\n```\n', '\n```\n') }
-		30 { doc.view.set_wrap_mode(.none) }
-		31 { doc.view.set_wrap_mode(.character) }
-		32 { doc.view.set_wrap_mode(.word) }
-		33 {
+		.toggle_vim { doc.view.vim_mode(!doc.view.vim.enabled) }
+		.history { app.history_for(doc.window, mut doc.view) }
+		.line_numbers { doc.view.line_numbers = !doc.view.line_numbers }
+		.ruler_top { doc.view.md.ruler_top = !doc.view.md.ruler_top }
+		.ruler_left { doc.view.md.ruler_left = !doc.view.md.ruler_left }
+		.insert_heading { wrap(mut doc, '\n# ', '') }
+		.insert_list { wrap(mut doc, '\n- ', '') }
+		.insert_quote { wrap(mut doc, '\n> ', '') }
+		.insert_code_block { wrap(mut doc, '\n```\n', '\n```\n') }
+		.wrap_none { doc.view.set_wrap_mode(.none) }
+		.wrap_character { doc.view.set_wrap_mode(.character) }
+		.wrap_word { doc.view.set_wrap_mode(.word) }
+		.page_width {
 			initial := if doc.view.md.column_width > 0 {
 				doc.view.md.column_width.str()
 			} else {
@@ -631,21 +695,25 @@ fn action(mut c vtk.Ctl, mut app vtk.App) {
 				doc.view.md.column_width = if n > 0 { n } else { 0 }
 			}
 		}
-		34 { doc.toolbar.hidden = !doc.toolbar.hidden }
-		35 { doc.view.markdown_align(.left) }
-		36 { doc.view.markdown_align(.center) }
-		37 { doc.view.markdown_align(.right) }
-		38 { doc.view.markdown_align(.justify) }
-		39 { insert_table(mut doc, mut app) }
-		41 { choose_font(mut doc, mut app) }
-		42 { app.about_for(doc.window, app_name, app_version) }
+		.toggle_toolbar { doc.toolbar.hidden = !doc.toolbar.hidden }
+		.align_left { doc.view.markdown_align(.left) }
+		.align_center { doc.view.markdown_align(.center) }
+		.align_right { doc.view.markdown_align(.right) }
+		.align_justify { doc.view.markdown_align(.justify) }
+		.insert_table { insert_table(mut doc, mut app) }
+		.choose_font { choose_font(mut doc, mut app) }
+		.about { app.about_for(doc.window, app_name, app_version) }
 		else {}
 	}
 	sync_view_menu(mut doc)
 	sync_wrap_menu(mut doc)
 	sync_page_menu(mut doc)
 	sync_align_menu(mut doc)
-	if int(c.data) in [17, 18, 19, 20, 22, 23, 24, 30, 31, 32, 33, 34] { save_prefs(doc) }
+	if unsafe { Cmd(int(c.data)) } in [.toggle_outline, .toggle_source, .toggle_read_only, .toggle_vim,
+		.line_numbers, .ruler_top, .ruler_left, .wrap_none, .wrap_character, .wrap_word, .page_width,
+		.toggle_toolbar] {
+		save_prefs(doc)
+	}
 	refresh_status(mut doc)
 	app.invalidate()
 	app.set_focus(doc.view)
@@ -657,38 +725,50 @@ fn key(mut c vtk.Ctl, e vtk.Event, mut app vtk.App) bool {
 		schedule_status(mut app, mut doc)
 		return false
 	}
-	id := match e.key {
-		`n` { 1 }
-		`o` { 2 }
-		`s` {
-			if e.shift { 4 } else { 3 }
-		}
-		`w` { 5 }
-		`z` {
-			if e.shift { 7 } else { 6 }
-		}
-		`y` { 7 }
-		`v` { 9 }
-		`a` { 10 }
-		`b` { 11 }
-		`i` { 12 }
-		`f` { 16 }
-		`q` { 25 }
-		else { 0 }
-	}
-	if id == 0 {
+	cmd := shortcut_cmd(e) or {
 		schedule_status(mut app, mut doc)
 		return false
 	}
-	mut trigger := vtk.Ctl{ user: c.user, data: id }
+	mut trigger := vtk.Ctl{ user: c.user, data: i64(int(cmd)) }
 	action(mut trigger, mut app)
 	return true
 }
 
-fn menu_item(mut menu vtk.Ctl, doc &Document, text string, id int) {
+fn shortcut_cmd(e vtk.Event) ?Cmd {
+	match e.key {
+		`n` { return Cmd.new_document }
+		`o` { return Cmd.open_file }
+		`s` {
+			if e.shift { return Cmd.save_as }
+			return Cmd.save
+		}
+		`w` { return Cmd.close_window }
+		`z` {
+			if e.shift { return Cmd.redo }
+			return Cmd.undo
+		}
+		`y` { return Cmd.redo }
+		`v` { return Cmd.paste }
+		`a` { return Cmd.select_all }
+		`b` { return Cmd.bold }
+		`i` { return Cmd.italic }
+		`f` { return Cmd.find }
+		`q` { return Cmd.close_window }
+		else {}
+	}
+	return none
+}
+
+fn menu_item(mut menu vtk.Ctl, doc &Document, text string, cmd Cmd) {
 	mut item := menu.menu_item(text, action)
 	item.user = doc
-	item.data = id
+	item.data = i64(int(cmd))
+}
+
+fn menu_items(mut menu vtk.Ctl, doc &Document, entries []MenuEntry) {
+	for entry in entries {
+		menu_item(mut menu, doc, entry.label, entry.cmd)
+	}
 }
 
 fn new_document(mut app vtk.App, path string, standalone bool) {
@@ -727,10 +807,11 @@ fn new_document(mut app vtk.App, path string, standalone bool) {
 	mut body := vtk.box(true)
 	doc.toolbar = vtk.toolbar()
 	doc.toolbar.hidden = prefs.toolbar_hidden
+	toolbar_cmds := [Cmd.bold, .italic, .code, .emoji, .link, .find]
 	for i, name in ['B', 'I', 'Code', 'Emoji', 'Link', 'Find'] {
 		mut b := vtk.toolbutton(name)
 		b.user = doc
-		b.data = 11 + i
+		b.data = i64(int(toolbar_cmds[i]))
 		b.changed = action
 		doc.toolbar.add(mut b)
 	}
@@ -744,70 +825,79 @@ fn new_document(mut app vtk.App, path string, standalone bool) {
 	doc.window.add(mut body)
 	app.maximize(mut doc.window)
 	mut file := doc.window.add_menu('File')
-	for i, name in ['New   Ctrl-N', 'Open...   Ctrl-O', 'Save   Ctrl-S', 'Save as...', 'Close   Ctrl-W'] {
-		menu_item(mut file, doc, name, i + 1)
-	}
+	menu_items(mut file, doc, [
+		MenuEntry{'New   Ctrl-N', .new_document},
+		MenuEntry{'Open...   Ctrl-O', .open_file},
+		MenuEntry{'Save   Ctrl-S', .save},
+		MenuEntry{'Save as...', .save_as},
+		MenuEntry{'Close   Ctrl-W', .close_window},
+	])
 	file.menu_separator()
-	menu_item(mut file, doc, 'Quit   Ctrl-Q', 25)
+	menu_item(mut file, doc, 'Quit   Ctrl-Q', .close_window)
 	mut edit := doc.window.add_menu('Edit')
-	for i, name in ['Undo', 'Redo'] {
-		menu_item(mut edit, doc, name, i + 6)
-	}
-	menu_item(mut edit, doc, 'History...', 21)
+	menu_items(mut edit, doc, [MenuEntry{'Undo', .undo}, MenuEntry{'Redo', .redo}])
+	menu_item(mut edit, doc, 'History...', .history)
 	edit.menu_separator()
-	for i, name in ['Copy', 'Paste', 'Select all'] {
-		menu_item(mut edit, doc, name, i + 8)
-	}
+	menu_items(mut edit, doc, [
+		MenuEntry{'Copy', .copy},
+		MenuEntry{'Paste', .paste},
+		MenuEntry{'Select all', .select_all},
+	])
 	edit.menu_separator()
-	menu_item(mut edit, doc, 'Find...   Ctrl-F', 16)
-	menu_item(mut edit, doc, 'Replace...', 40)
+	menu_item(mut edit, doc, 'Find...   Ctrl-F', .find)
+	menu_item(mut edit, doc, 'Replace...', .find_replace)
 	mut view := doc.window.add_menu('View')
-	for i, name in view_names {
-		mut item := view.menu_item(name, action)
+	for entry in view_entries {
+		mut item := view.menu_item(entry.label, action)
 		item.user = doc
-		item.data = view_ids[i]
+		item.data = i64(int(entry.cmd))
 		doc.view_items << item
 	}
 	view.menu_separator()
 	mut wrap_menu := view.add_menu('Wrap')
-	for i, name in wrap_names {
-		mut item := wrap_menu.menu_item(name, action)
+	for entry in wrap_entries {
+		mut item := wrap_menu.menu_item(entry.label, action)
 		item.user = doc
-		item.data = 30 + i
+		item.data = i64(int(entry.cmd))
 		doc.wrap_items << item
 	}
 	mut page := view.add_menu('Page')
-	for i, name in page_names {
-		mut item := page.menu_item(name, action)
+	for entry in page_entries {
+		mut item := page.menu_item(entry.label, action)
 		item.user = doc
-		item.data = 22 + i
+		item.data = i64(int(entry.cmd))
 		doc.page_items << item
 	}
 	page.menu_separator()
-	menu_item(mut page, doc, 'Page width...', 33)
+	menu_item(mut page, doc, 'Page width...', .page_width)
 	mut insert := doc.window.add_menu('Insert')
-	menu_item(mut insert, doc, 'Emoji...', 14)
-	menu_item(mut insert, doc, 'Link...', 15)
+	menu_item(mut insert, doc, 'Emoji...', .emoji)
+	menu_item(mut insert, doc, 'Link...', .link)
 	insert.menu_separator()
-	for i, name in ['Heading', 'List', 'Quote', 'Code block'] {
-		menu_item(mut insert, doc, name, i + 26)
-	}
-	menu_item(mut insert, doc, 'Table...', 39)
+	menu_items(mut insert, doc, [
+		MenuEntry{'Heading', .insert_heading},
+		MenuEntry{'List', .insert_list},
+		MenuEntry{'Quote', .insert_quote},
+		MenuEntry{'Code block', .insert_code_block},
+	])
+	menu_item(mut insert, doc, 'Table...', .insert_table)
 	mut format := doc.window.add_menu('Format')
-	for i, name in ['Bold', 'Italic', 'Code'] {
-		menu_item(mut format, doc, name, i + 11)
-	}
-	menu_item(mut format, doc, 'Font...', 41)
+	menu_items(mut format, doc, [
+		MenuEntry{'Bold', .bold},
+		MenuEntry{'Italic', .italic},
+		MenuEntry{'Code', .code},
+	])
+	menu_item(mut format, doc, 'Font...', .choose_font)
 	format.menu_separator()
 	mut align_menu := format.add_menu('Align')
-	for i, name in align_names {
-		mut item := align_menu.menu_item(name, action)
+	for entry in align_entries {
+		mut item := align_menu.menu_item(entry.label, action)
 		item.user = doc
-		item.data = 35 + i
+		item.data = i64(int(entry.cmd))
 		doc.align_items << item
 	}
 	mut help := doc.window.add_menu('Help')
-	menu_item(mut help, doc, 'About', 42)
+	menu_item(mut help, doc, 'About', .about)
 	sync_view_menu(mut doc)
 	sync_wrap_menu(mut doc)
 	sync_page_menu(mut doc)
