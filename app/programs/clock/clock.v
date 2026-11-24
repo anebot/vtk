@@ -261,6 +261,17 @@ pub fn launch(mut app vtk.App) {
 	clock.schedule(mut app)
 }
 
+pub fn open_or_raise(mut app vtk.App) {
+	for window in app.window_list() {
+		if window.is_closed() { continue }
+		if mut clock := window.context[Clock]() {
+			app.raise(mut clock.window)
+			return
+		}
+	}
+	launch(mut app)
+}
+
 pub fn run() {
 	mut app := vtk.new_app()
 	app.ctrl_c = .quit

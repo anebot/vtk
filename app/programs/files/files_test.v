@@ -15,6 +15,7 @@ fn test_launch_opens_windows_that_share_drag_state() {
 	assert app.window_list().len == 1
 	mut first := app.window_list().last()
 	assert first.text.starts_with('Files - ')
+	first.set_text('Renamed Files window')
 	launch(mut app)
 	assert app.window_list().len == 2
 	mut second := app.window_list().last()
