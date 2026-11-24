@@ -414,21 +414,24 @@ fn paste_paths(text string) []string {
 }
 
 fn decode_uri(text string) string {
-	mut out := ''
+	if !text.contains_u8(`%`) { return text }
+	mut out := []u8{cap: text.len}
 	mut i := 0
 	for i < text.len {
-		if text[i] == `%` && i + 2 < text.len {
-			value := text[i + 1..i + 3].parse_int(16, 8) or { 0 }
+		if text[i] == `%` && i + 2 < text.len && text[i + 1].is_hex_digit()
+			&& text[i + 2].is_hex_digit() {
+			value := text[i + 1..i + 3].parse_uint(16, 8) or { 0 }
+			// NUL cannot appear in a file path.
 			if value > 0 {
-				out += u8(value).ascii_str()
+				out << u8(value)
 				i += 3
 				continue
 			}
 		}
-		out += text[i].ascii_str()
+		out << text[i]
 		i++
 	}
-	return out
+	return out.bytestr()
 }
 
 // ---------------------------------------------------------------------------
