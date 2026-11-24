@@ -8,6 +8,15 @@ fn test_decode_uri_preserves_utf8_and_literal_path_characters() {
 	assert decode_uri('%25%00%+1%GG%2%') == '%%00%+1%GG%2%'
 }
 
+fn test_sort_keeps_folders_first_and_preserves_ties() {
+	mut entries := [Entry{name: 'same'}, Entry{name: 'before'}, Entry{name: 'Zoo', dir: true},
+		Entry{name: 'SAME'}, Entry{name: 'aardvark', dir: true}]
+	sort_entries(mut entries, .name, false)
+	assert entries.map(it.name) == ['aardvark', 'Zoo', 'before', 'same', 'SAME']
+	sort_entries(mut entries, .name, true)
+	assert entries.map(it.name) == ['Zoo', 'aardvark', 'same', 'SAME', 'before']
+}
+
 fn test_launch_opens_windows_that_share_drag_state() {
 	mut app := vtk.new_app()
 	app.dispatch(vtk.Event{ kind: .resize, width: 100, height: 30 })

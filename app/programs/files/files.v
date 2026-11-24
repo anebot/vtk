@@ -3,6 +3,7 @@
 // drag and drop between its own windows and from the host terminal.
 module files
 
+import arrays
 import os
 import time
 import vtk
@@ -330,38 +331,10 @@ fn compare_entries(a Entry, b Entry, by SortBy, desc bool) int {
 	return if desc { -order } else { order }
 }
 
-struct SortBuffer {
-mut:
-	list   []Entry
-	buffer []Entry
-}
-
-// Stable bottom-up merge sort keeps equal keys in directory order.
-fn sorted(entries []Entry, by SortBy, desc bool) []Entry {
-	mut buf := SortBuffer{ list: entries.clone() }
-	if buf.list.len < 2 { return buf.list }
-	buf.buffer = []Entry{len: buf.list.len}
-	mut width := 1
-	for width < buf.list.len {
-		for start := 0; start < buf.list.len; start += 2 * width {
-			middle := imin(start + width, buf.list.len)
-			end := imin(start + 2 * width, buf.list.len)
-			mut a := start
-			mut b := middle
-			for at in start .. end {
-				if a < middle && (b >= end || compare_entries(buf.list[a], buf.list[b], by, desc) <= 0) {
-					buf.buffer[at] = buf.list[a]
-					a++
-				} else {
-					buf.buffer[at] = buf.list[b]
-					b++
-				}
-			}
-		}
-		buf.list, buf.buffer = buf.buffer, buf.list
-		width *= 2
-	}
-	return buf.list
+fn sort_entries(mut entries []Entry, by SortBy, desc bool) {
+	arrays.stable_sort(mut entries, fn [by, desc] (a Entry, b Entry) bool {
+		return compare_entries(a, b, by, desc) < 0
+	})
 }
 
 fn unique_target(source string, dest string) string {
@@ -447,12 +420,11 @@ fn (mut p Pane) index_of(path string) int {
 
 fn (mut p Pane) refresh() {
 	p.issue = ''
-	if entries := read_entries(p.path, p.show_hidden) {
-		p.entries = sorted(entries, p.sort, p.descending)
-	} else {
-		p.entries = []Entry{}
+	p.entries = read_entries(p.path, p.show_hidden) or {
 		p.issue = err.msg()
+		[]Entry{}
 	}
+	sort_entries(mut p.entries, p.sort, p.descending)
 	mut keep := map[string]bool{}
 	for e in p.entries {
 		if p.selected[e.path] { keep[e.path] = true }
@@ -511,10 +483,8 @@ fn (mut p Pane) build_columns() {
 	}
 	mut cols := []Column{cap: paths.len}
 	for i, path in paths {
-		mut entries := []Entry{}
-		if found := read_entries(path, p.show_hidden) {
-			entries = sorted(found, p.sort, p.descending)
-		}
+		mut entries := read_entries(path, p.show_hidden) or { []Entry{} }
+		sort_entries(mut entries, p.sort, p.descending)
 		mut cursor := -1
 		if i + 1 < paths.len {
 			child := os.base(paths[i + 1])
@@ -1711,8 +1681,8 @@ fn choose_sort(mut c vtk.Ctl, mut _ vtk.App) {
 		p.sort = by
 		p.descending = false
 	}
-	mut found := read_entries(p.path, p.show_hidden) or { []Entry{} }
-	p.entries = sorted(found, p.sort, p.descending)
+	p.entries = read_entries(p.path, p.show_hidden) or { []Entry{} }
+	sort_entries(mut p.entries, p.sort, p.descending)
 	p.cursor = p.index_of(p.cursor_path)
 	if p.view == .columns { p.build_columns() }
 	p.update_status()
