@@ -491,7 +491,6 @@ fn new_drawing(mut app vtk.App) &Drawing {
 		canvas: vtk.canvas(64, 8, paint)
 		status: vtk.statusbar('')
 	}
-	app.move(mut drawing.window, drawing.window.rect().x, 0)
 	drawing.window.set_context(drawing)
 	drawing.window.closing = closing
 	drawing.window.keyfn = key

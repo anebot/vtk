@@ -2,6 +2,15 @@ module paint
 
 import vtk
 
+fn test_paint_windows_follow_desktop_cascade() {
+	mut app := vtk.new_app()
+	defer { app.fini() }
+	app.dispatch(vtk.Event{kind: .resize, width: 120, height: 40})
+	first := new_drawing(mut app)
+	second := new_drawing(mut app)
+	assert second.window.rect().y > first.window.rect().y
+}
+
 fn test_undo_redo_preserve_points_and_new_stroke_discards_redo() {
 	mut app := vtk.new_app()
 	defer { app.fini() }
