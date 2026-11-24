@@ -1,5 +1,5 @@
 module main
 
-import vtk.examples.spread
+import vtk.app.spread
 
 fn main() { spread.run() }
