@@ -51,8 +51,8 @@ fn (mut d Driver) stop() {
 
 fn (mut d Driver) read(timeout int, terminals []&Ctl) string {
 	// Console mode does not expose resize events or readable pipe events.
-	wait := limit_wait(timeout, if terminals.len > 0 { 25 } else { 100 })
-	d.terminals_ready = terminals.len > 0
+	d.terminals_ready = terminals.any(!it.closed && !it.term.exited)
+	wait := limit_wait(timeout, if d.terminals_ready { 25 } else { 100 })
 	if C.WaitForSingleObject(d.input, u32(wait)) != 0 { return '' }
 	if d.read_buffer.len == 0 { d.read_buffer = []u8{len: 16384} }
 	mut n := u32(0)

@@ -3,6 +3,7 @@ module vtk
 
 import os
 import term.termios
+import time
 
 #include <unistd.h>
 #include <poll.h>
@@ -55,6 +56,7 @@ mut:
 	output_at    int
 	resized      bool
 	terminals_ready bool
+	terminal_check_at i64
 }
 
 fn terminal_on_signal(signal os.Signal) { C.vtk_tty_record_signal(int(signal)) }
@@ -131,19 +133,24 @@ fn (mut d Driver) read(timeout int, terminals []&Ctl) string {
 	d.polls << C.pollfd{fd: if d.output_busy() { d.write_fd } else { -1 }, events: i16(C.POLLOUT)}
 	d.terminals_ready = false
 	mut wait := if d.wake[0] < 0 { limit_wait(timeout, 100) } else { timeout }
+	mut has_terminals := false
 	for c in terminals {
 		if c.closed || c.term.pty.fd < 0 { continue }
-		if c.term.pty.drained {
-			if !c.term.exited {
-				wait = limit_wait(wait, 100)
-				d.terminals_ready = true
-			}
-			continue
-		}
+		has_terminals = true
+		if c.term.pty.drained { continue }
 		flags := C.POLLIN | if c.term.pending != '' { C.POLLOUT } else { 0 }
 		d.polls << C.pollfd{fd: c.term.pty.fd, events: i16(flags)}
 	}
+	// The shell can exit without a hangup if another process holds the slave open.
+	if has_terminals { wait = limit_wait(wait, d.terminal_check_at - time.ticks()) }
 	C.poll(d.polls.data, u32(d.polls.len), wait)
+	if has_terminals {
+		now := time.ticks()
+		if now >= d.terminal_check_at {
+			d.terminal_check_at = now + 100
+			d.terminals_ready = true
+		}
+	}
 	if d.polls[1].revents != 0 {
 		mut signals := [32]u8{}
 		C.read(d.wake[0], &signals[0], signals.len)

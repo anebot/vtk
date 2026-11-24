@@ -702,14 +702,25 @@ mut window := app.terminal_window(
 window.set_text('Shell: renamed')
 ```
 
-Both options are optional: `app.terminal_window()` inherits the application's
+`app.terminal_window()` inherits the application's
 current directory and uses `Terminal` as the title. The directory is applied to
 the child process without changing the application's working directory. Relative
 paths resolve against the application's current directory; paths are passed
 directly to the OS, so spaces and quotes need no shell escaping. Directory and
 shell startup failures return an error before creating a window. Embedded
-controls accept the same options: `vtk.terminal(72, 18, directory: worktree)!`;
-`title` only applies to `terminal_window`.
+controls can also set the directory with `vtk.terminal(72, 18, directory: worktree)!`.
+
+When its shell exits, a standalone terminal window adds `[exited]` to its title
+and requests a normal window close. Set `keep_open: true` to keep the window and
+its final output visible. A window's `closing` callback can also veto the close.
+Embedded terminals leave their containing window open.
+
+Both constructors accept an `on_exit` callback with the signature
+`fn (mut Ctl, mut App)`. The event loop calls it once after detecting child exit,
+reading available output and releasing the PTY. The callback runs before the
+automatic window close. Get the terminal state with `control.terminal_state()`
+and check `has_exited()` on that state. Explicit terminal and window cleanup
+skip the callback.
 
 Try `v run examples/terminal.v /path/to/worktree 'Shell: feature-worktree'`.
 

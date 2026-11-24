@@ -105,11 +105,14 @@ fn (mut app App) advance(timeout_ms int) bool {
 	app.tick()
 	app.update_sources()
 	if !app.driver.active || app.driver.terminals_ready {
-		for mut terminal in app.terminals { app.pump_terminal(mut terminal) }
+		// Retain the list if an exit callback rebuilds app.terminals in a nested step.
+		mut terminals := unsafe { app.terminals }
+		for mut terminal in terminals { app.pump_terminal(mut terminal) }
 	}
 	if app.windows.any(it.closed) {
 		for mut w in app.windows.filter(it.closed) { app.dispose_ctl(mut w) }
 	}
+	app.update_sources()
 	if app.needs_frame() && (!app.driver.active || (!app.driver.output_busy() && time.ticks() >= app.next_frame)) {
 		if app.dirty || app.damage.count > 0 { app.repaint() }
 		app.cursor_dirty = false

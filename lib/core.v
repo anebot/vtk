@@ -258,6 +258,7 @@ pub fn (mut c Ctl) detach() {
 		at := c.parent.kids.index(&c)
 		if at >= 0 { c.parent.kids.delete(at) }
 	}
+	if !isnil(c.term) { c.term.standalone_window = none }
 	c.parent = unsafe { nil }
 	c.app = unsafe { nil }
 	if !isnil(app) {

@@ -16,7 +16,7 @@ fn (mut app App) update_sources() {
 
 fn (mut app App) collect_sources(c &Ctl) {
 	if c.closed { return }
-	if !isnil(c.term) { app.terminals << c }
+	if !isnil(c.term) && !c.term.exited { app.terminals << c }
 	if c.kind == .spinner { app.spinners << c }
 	for child in c.kids { app.collect_sources(child) }
 }

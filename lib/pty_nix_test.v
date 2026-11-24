@@ -137,6 +137,83 @@ fn test_terminal_startup_errors_leave_no_window_or_changed_directory() ! {
 	assert os.getwd() == cwd
 }
 
+fn test_terminal_window_handles_ctrl_d_and_preserves_final_output() ! {
+	directory := util.temp_dir(pattern: 'vtk-terminal-exit-')!
+	defer { os.rmdir_all(directory) or {} }
+	shell := os.join_path(directory, 'test-shell')
+	os.write_file(shell, '#!/bin/sh\nread -r input && exit 1\nprintf "final output"\n')!
+	os.chmod(shell, 0o755)!
+	previous_shell := os.getenv_opt('SHELL')
+	os.setenv('SHELL', shell, true)
+	defer {
+		if value := previous_shell { os.setenv('SHELL', value, true) } else { os.unsetenv('SHELL') }
+	}
+	for mode in ['close', 'keep', 'veto'] {
+		mut app := new_app()
+		defer { app.fini() }
+		mut w := app.terminal_window(
+			keep_open: mode == 'keep'
+			on_exit: fn (mut control Ctl, mut owner App) {
+				assert control.root().app == &owner
+				assert control.term.has_exited() && control.term.pty.fd == -1
+				assert control.term.cells[..12].map(it.glyph).join('') == 'final output'
+				control.data++
+			}
+		)!
+		w.set_text('Renamed shell')
+		w.closing = fn [mode] (mut window Ctl, mut _ App) bool {
+			assert window.text == '[exited] Renamed shell'
+			assert window.kids[0].data == 1
+			window.data++
+			return mode != 'veto'
+		}
+		control := w.kids[0]
+		app.dispatch(Event{kind: .key, key: `d`, ctrl: true})
+		wait_for_terminal_exit(mut app, control)
+		app.step(0)
+		assert control.data == 1
+		assert w.text == '[exited] Renamed shell'
+		assert w.data == if mode == 'keep' { 0 } else { 1 }
+		assert w.is_closed() == (mode == 'close')
+		assert app.is_running() == (mode != 'close')
+		assert app.terminals.len == 0
+		if mode != 'close' { assert app.snapshot().contains('[exited] Renamed shell') }
+	}
+}
+
+fn test_reparented_terminal_notifies_its_current_app_and_keeps_its_window() ! {
+	previous_shell := os.getenv_opt('SHELL')
+	os.setenv('SHELL', '/bin/sh', true)
+	defer {
+		if value := previous_shell { os.setenv('SHELL', value, true) } else { os.unsetenv('SHELL') }
+	}
+	mut first := new_app()
+	defer { first.fini() }
+	mut original := first.terminal_window(on_exit: fn (mut control Ctl, mut owner App) {
+		assert control.root().app == &owner && control.term.has_exited()
+		control.data++
+	})!
+	mut control := original.kids[0]
+	first.step(0)
+	mut second := new_app()
+	defer { second.fini() }
+	mut window := second.window('Embedded shell', 40, 8)
+	window.add(mut control)
+	second.set_focus(control)
+	second.dispatch(Event{kind: .key, key: `d`, ctrl: true})
+	wait_for_terminal_exit(mut second, control)
+	second.step(0)
+	assert control.data == 1
+	assert original.text == 'Terminal' && !original.is_closed()
+	assert window.text == 'Embedded shell' && !window.is_closed()
+}
+
+fn wait_for_terminal_exit(mut app App, control &Ctl) {
+	deadline := time.ticks() + 3000
+	for !control.term.has_exited() && time.ticks() < deadline { app.step(5) }
+	assert control.term.has_exited()
+}
+
 fn test_window_lifecycle_paths_close_live_terminal_processes() {
 	previous_shell := os.getenv_opt('SHELL')
 	os.setenv('SHELL', '/bin/sh', true)
@@ -152,12 +229,16 @@ fn test_window_lifecycle_paths_close_live_terminal_processes() {
 	for action in actions {
 		mut app := new_app()
 		mut w := app.window('Shell', 30, 8)
-		mut control := terminal(10, 2, TerminalOptions{}) or { panic(err) }
+		mut control := terminal(10, 2, on_exit: fn (mut _ Ctl, mut _ App) {
+			assert false, 'toolkit teardown must not notify child exit'
+		}) or { panic(err) }
 		defer { control.term.close() }
 		w.add(mut control)
 		assert control.term.pty.alive()
 		action(mut app, mut w)
 		assert control.term.has_exited() && control.term.pty.fd == -1 && !control.term.pty.alive()
+		app.step(0)
+		assert control.term.on_exit == none
 		app.fini()
 	}
 }

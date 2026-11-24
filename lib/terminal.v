@@ -15,6 +15,9 @@ mut:
 	cy            int
 	cursor_hidden bool
 	exited        bool
+	on_exit       ?Callback
+	standalone_window ?&Ctl
+	keep_open     bool
 	pty         Pty
 	saved_x     int
 	saved_y     int
@@ -41,13 +44,15 @@ pub fn new_terminal(cols int, rows int) &Terminal {
 	return t
 }
 
-// TerminalOptions selects the child shell's starting directory and window title.
+// TerminalOptions configures the child shell and standalone terminal window.
 // An empty directory inherits the application's current directory.
 @[params]
 pub struct TerminalOptions {
 pub:
 	directory string
 	title     string = 'Terminal'
+	keep_open bool // Keep a standalone terminal window open after the shell exits.
+	on_exit   ?Callback // Called once when the event loop observes the child exit.
 }
 
 pub fn terminal(cols int, rows int, options TerminalOptions) !&Ctl {
@@ -55,6 +60,7 @@ pub fn terminal(cols int, rows int, options TerminalOptions) !&Ctl {
 	directory := if options.directory == '' { '' } else { os.abs_path(options.directory) }
 	mut t := new_terminal(cols, rows)
 	t.pty = spawn_pty(t.cols, t.rows, directory)!
+	t.on_exit = options.on_exit
 	return &Ctl{ kind: .terminal, term: t, pw: cols, ph: rows, intrinsic_w: cols, intrinsic_h: rows, expand: true, focusable: true }
 }
 
@@ -62,6 +68,8 @@ pub fn (mut app App) terminal_window(options TerminalOptions) !&Ctl {
 	mut control := terminal(72, 18, options)!
 	mut w := app.window(options.title, 74, 20)
 	w.add(mut control)
+	control.term.standalone_window = w
+	control.term.keep_open = options.keep_open
 	app.set_focus(control)
 	return w
 }
@@ -511,12 +519,31 @@ pub fn (mut t Terminal) close() {
 	t.pty.close()
 	t.exited = true
 	t.pending = ''
+	t.mouse_mode = 0
+	t.on_exit = none
+	t.standalone_window = none
+}
+
+fn (mut app App) terminal_exited(mut c Ctl) {
+	mut t := c.term
+	callback, window := t.on_exit, t.standalone_window
+	t.close()
+	app.sources_dirty = true
+	app.dirty = true
+	if app.drag == &c { app.drag = unsafe { nil } }
+	if mut w := window { w.set_text('[exited] ${w.text}') }
+	if f := callback { f(mut c, mut app) }
+	if mut w := window {
+		if !t.keep_open && !w.closed && w.app == &app && c.parent == w { app.close(mut w) }
+	}
 }
 
 fn (mut app App) pump_terminal(mut c Ctl) {
-	if c.closed || isnil(c.term) { return }
+	if c.closed || c.root().app != &app || isnil(c.term) || c.term.exited { return }
 	mut t := c.term
-	t.flush_input()
+	// Check first so all available output is read after the child has exited.
+	alive := t.pty.alive()
+	if alive { t.flush_input() }
 	t.damage_end = 0
 	x, y, hidden := t.cx, t.cy, t.cursor_hidden
 	mut budget := 65536
@@ -526,7 +553,10 @@ fn (mut app App) pump_terminal(mut c Ctl) {
 		t.feed(bytes)
 		budget -= bytes.len
 	}
-	t.exited = !t.pty.alive()
+	if !alive && budget > 0 {
+		app.terminal_exited(mut c)
+		return
+	}
 	if !c.is_drawable() { return }
 	r := app.visible_paint_rect(c)
 	if r.w <= 0 || r.h <= 0 { return }
@@ -571,7 +601,7 @@ fn (mut app App) draw_terminal(mut c Ctl) {
 fn (mut app App) update_terminal_cursor(c &Ctl) {
 	x, y := c.x + min(c.w - 1, c.term.cx), c.y + c.term.cy
 	app.screen.cursor_x = -1
-	if c.disabled || c.term.cursor_hidden || app.popups.len > 0
+	if c.disabled || c.term.exited || c.term.cursor_hidden || app.popups.len > 0
 		|| c.owner_window_ptr() != app.top_window_ptr() || !app.visible_paint_rect(c).contains(x, y) { return }
 	app.screen.cursor_x, app.screen.cursor_y = x, y
 	app.screen.cursor_shape = .block
