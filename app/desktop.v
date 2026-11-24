@@ -68,6 +68,10 @@ fn launch_calc(mut app vtk.App, _ voidptr) {
 	launch_source(mut app, 'Calc', 'calc', 'app/calc.v')
 }
 
+fn launch_clock(mut app vtk.App, _ voidptr) {
+	launch_source(mut app, 'Clock', 'clock', 'app/clock.v')
+}
+
 fn main() {
 	mut app := vtk.new_app()
 	app.start_programs = true
@@ -87,6 +91,7 @@ fn main() {
 	app.register('Spread', launch_spread, unsafe { nil })
 	app.register('Paint', launch_paint, unsafe { nil })
 	app.register('Calc', launch_calc, unsafe { nil })
+	app.register('Clock', launch_clock, unsafe { nil })
 	if snapshot {
 		_, height := app.size()
 		app.app_menu(0, height - 1)
@@ -95,6 +100,6 @@ fn main() {
 		println(app.snapshot())
 		return
 	}
-	app.notify('Click Start or press Alt-S. Programs lists Word, Slides, Spread, Paint, Calc and Terminal.', 6000)
+	app.notify('Click Start or press Alt-S. Programs lists Word, Slides, Spread, Paint, Calc, Clock and Terminal.', 6000)
 	app.run() or { eprintln(err) }
 }
