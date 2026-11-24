@@ -20,10 +20,19 @@ const notes_close = '<!-- /vtk:speaker-notes -->'
 const thumbnail_height = 12
 const default_sidebar_share = 260
 const chart_max_series = 6
+const transition_frames = 16
+const transition_frame_ms = 25
+const bayer_thresholds = [0, 8, 2, 10, 12, 4, 14, 6, 3, 11, 1, 9, 15, 7, 13, 5]!
 
 const font_styles = [vtk.FontStyle.none, .bold, .italic, .script, .doublestruck, .underline,
 	.strikethrough, .fraktur, .bolditalic, .sansserif, .sansserifitalic, .monospace, .boldscript,
 	.boldfraktur, .sansserifbold, .sansserifbolditalic, .openface, .smallcaps]
+
+enum SlideTransition {
+	none
+	slide
+	fade
+}
 
 enum Action {
 	new_slide
@@ -38,6 +47,7 @@ enum Action {
 	toggle_sidebar
 	toggle_notes
 	source
+	settings
 	present
 	present_start
 	bold
@@ -78,6 +88,13 @@ mut:
 	deck   &Deck    = unsafe { nil }
 	window &vtk.Ctl = unsafe { nil }
 	picked int      = -1
+}
+
+struct SettingsDialog {
+mut:
+	deck   &Deck    = unsafe { nil }
+	window &vtk.Ctl = unsafe { nil }
+	radio  &vtk.Ctl = unsafe { nil }
 }
 
 struct Run {
@@ -173,9 +190,15 @@ mut:
 	source              bool
 	sidebar_visible     bool = true
 	notes_visible       bool = true
-	drag_id             int  = -1
-	drag_from           int  = -1
-	drag_to             int  = -1
+	transition          SlideTransition
+	transition_active   bool
+	transition_from     int
+	transition_to       int
+	transition_step     int
+	transition_hook     int
+	drag_id             int = -1
+	drag_from           int = -1
+	drag_to             int = -1
 	images              ImageCache
 	presentation        &vtk.Ctl = unsafe { nil }
 	presentation_canvas &vtk.Ctl = unsafe { nil }
@@ -208,6 +231,46 @@ fn slide_accent() int {
 
 fn slide_warm() int {
 	return vtk.color_rgb(255, 209, 20)
+}
+
+fn transition_names() []string {
+	return ['No transition', 'Slide', 'Fade out → in']
+}
+
+fn transition_from_int(value int) SlideTransition {
+	return match value {
+		1 { .slide }
+		2 { .fade }
+		3 { .fade }
+		else { .none }
+	}
+}
+
+fn transition_label(transition SlideTransition) string {
+	return transition_names()[int(transition)]
+}
+
+fn prefs_file() string {
+	return os.join_path(os.home_dir(), '.vtk-slides.ini')
+}
+
+fn load_prefs() SlideTransition {
+	text := os.read_file(prefs_file()) or { return .none }
+	for line in text.split_into_lines() {
+		trim := line.trim_space()
+		if trim == '' || trim.starts_with('#') {
+			continue
+		}
+		parts := trim.split_nth('=', 2)
+		if parts.len == 2 && parts[0].trim_space() == 'transition' {
+			return transition_from_int(parts[1].trim_space().int())
+		}
+	}
+	return .none
+}
+
+fn save_prefs(deck &Deck) {
+	vtk.save_atomic(prefs_file(), 'transition = ${int(deck.transition)}\n') or { return }
 }
 
 fn templates() []SlideTemplate {
@@ -1102,7 +1165,9 @@ fn draw_slide(mut screen vtk.Screen, area vtk.Rect, body string, options SlidePa
 		slide_dim()
 	}
 	screen.fill(area, ` `, fg, bg)
-	screen.frame(area, options.selected || options.drag_target, frame_color, bg)
+	if !options.presentation {
+		screen.frame(area, options.selected || options.drag_target, frame_color, bg)
+	}
 	mut inner := vtk.Rect{area.x + 1, area.y + 1, area.w - 2, area.h - 2}
 	if options.presentation {
 		pad_x := max(2, min(8, inner.w / 12))
@@ -1827,6 +1892,48 @@ fn template_pick(mut c vtk.Ctl, mut app vtk.App) {
 	app.close(mut picker.window)
 }
 
+fn settings_apply(mut c vtk.Ctl, mut app vtk.App) {
+	mut dialog := unsafe { &SettingsDialog(c.user) }
+	if int(c.data) == 1 {
+		dialog.deck.transition = transition_from_int(dialog.radio.value)
+		save_prefs(dialog.deck)
+		dialog.deck.refresh()
+	}
+	app.close(mut dialog.window)
+}
+
+fn settings_dialog(mut deck Deck, mut app vtk.App) {
+	mut body := vtk.box(true)
+	mut heading := vtk.label('Presentation transition')
+	body.add(mut heading)
+	mut radio := vtk.radio()
+	for name in transition_names() {
+		radio.add_item(name)
+	}
+	radio.value = int(deck.transition)
+	body.add(mut radio)
+	mut hint := vtk.label('Current: ${transition_label(deck.transition)}. Used when moving between slides in presentation mode.')
+	body.add(mut hint)
+	mut row := vtk.button_bar()
+	mut ok := vtk.button(' OK ')
+	mut cancel := vtk.button('Cancel')
+	row.add(mut ok)
+	row.add(mut cancel)
+	body.add(mut row)
+	mut window := app.dialog('Slides settings', mut body)
+	dialog := &SettingsDialog{
+		deck:   &deck
+		window: window
+		radio:  radio
+	}
+	ok.user, ok.changed, ok.data = dialog, settings_apply, 1
+	cancel.user, cancel.changed, cancel.data = dialog, settings_apply, 0
+	app.set_default_button(mut window, ok)
+	app.set_focus(radio)
+	app.modal_for(mut window, deck.window)
+	app.destroy_ctl(mut window)
+}
+
 fn (mut deck Deck) toggle_sidebar(mut app vtk.App) {
 	deck.sidebar_visible = !deck.sidebar_visible
 	deck.sidebar_pane.hidden = !deck.sidebar_visible
@@ -1860,6 +1967,7 @@ fn present_slide(mut deck Deck, start int, mut app vtk.App) {
 	if deck.slides.len == 0 {
 		return
 	}
+	deck.clear_transition(mut app)
 	deck.presentation_index = vtk.clamp(start, 0, deck.slides.len - 1)
 	width, height := app.size()
 	mut window := app.window('VTK Slides - presentation', width, height - 1)
@@ -1883,6 +1991,7 @@ fn present_slide(mut deck Deck, start int, mut app vtk.App) {
 
 fn presentation_closing(mut w vtk.Ctl, mut app vtk.App) bool {
 	mut deck := unsafe { &Deck(w.user) }
+	deck.clear_transition(mut app)
 	if deck.presentation == &w {
 		deck.presentation = unsafe { nil }
 		deck.presentation_canvas = unsafe { nil }
@@ -1891,18 +2000,150 @@ fn presentation_closing(mut w vtk.Ctl, mut app vtk.App) bool {
 	return true
 }
 
-fn paint_presentation(mut c vtk.Ctl, mut screen vtk.Screen) {
-	deck := unsafe { &Deck(c.user) }
-	if deck.presentation_index < 0 || deck.presentation_index >= deck.slides.len {
-		return
-	}
-	draw_slide(mut screen, c.rect(), deck.slides[deck.presentation_index].body, SlidePaint{
+fn (deck &Deck) presentation_paint(index int) SlidePaint {
+	return SlidePaint{
 		presentation: true
 		cache:        &deck.images
 		base_dir:     deck.base_dir()
-		page:         deck.presentation_index + 1
+		page:         index + 1
 		pages:        deck.slides.len
+	}
+}
+
+fn paint_presentation(mut c vtk.Ctl, mut screen vtk.Screen) {
+	deck := unsafe { &Deck(c.user) }
+	if deck.transition_active {
+		deck.draw_transition(mut screen, c.rect())
+		return
+	}
+	if deck.presentation_index < 0 || deck.presentation_index >= deck.slides.len {
+		return
+	}
+	draw_slide(mut screen, c.rect(), deck.slides[deck.presentation_index].body,
+		deck.presentation_paint(deck.presentation_index))
+}
+
+fn fade_mask(mut screen vtk.Screen, area vtk.Rect, coverage f64, bg int) {
+	if coverage <= 0 {
+		return
+	}
+	steps := f64(vtk.clamp(int(coverage * 16), 0, 16)) / 16
+	for y in area.y .. area.y + area.h {
+		for x in area.x .. area.x + area.w {
+			threshold := f64(bayer_thresholds[(y & 3) * 4 + (x & 3)]) / 16
+			if threshold < steps {
+				screen.put(x, y, ` `, slide_foreground(), bg, 0)
+			}
+		}
+	}
+}
+
+fn (deck &Deck) draw_transition(mut screen vtk.Screen, area vtk.Rect) {
+	if deck.transition_from < 0 || deck.transition_from >= deck.slides.len
+		|| deck.transition_to < 0 || deck.transition_to >= deck.slides.len {
+		return
+	}
+	bg := slide_background()
+	screen.fill(area, ` `, slide_foreground(), bg)
+	progress := f64(deck.transition_step) / f64(transition_frames)
+	from_paint := deck.presentation_paint(deck.transition_from)
+	to_paint := deck.presentation_paint(deck.transition_to)
+	match deck.transition {
+		.slide {
+			offset := int(f64(area.w) * progress)
+			mut from := vtk.Rect{}
+			mut to := vtk.Rect{}
+			if deck.transition_to > deck.transition_from {
+				// Next: the old slide exits left and the new one enters from the right.
+				from = vtk.Rect{area.x - offset, area.y, area.w, area.h}
+				to = vtk.Rect{area.x + area.w - offset, area.y, area.w, area.h}
+			} else {
+				// Previous: the old slide exits right and the new one enters from the left.
+				from = vtk.Rect{area.x + offset, area.y, area.w, area.h}
+				to = vtk.Rect{area.x - area.w + offset, area.y, area.w, area.h}
+			}
+			draw_slide(mut screen, to, deck.slides[deck.transition_to].body, to_paint)
+			draw_slide(mut screen, from, deck.slides[deck.transition_from].body, from_paint)
+		}
+		.fade {
+			if progress < 0.5 {
+				draw_slide(mut screen, area, deck.slides[deck.transition_from].body, from_paint)
+				fade_mask(mut screen, area, progress * 2, bg)
+			} else {
+				draw_slide(mut screen, area, deck.slides[deck.transition_to].body, to_paint)
+				fade_mask(mut screen, area, (1 - progress) * 2, bg)
+			}
+		}
+		.none {
+			draw_slide(mut screen, area, deck.slides[deck.transition_to].body, to_paint)
+		}
+	}
+}
+
+fn (mut deck Deck) clear_transition(mut app vtk.App) {
+	if deck.transition_hook > 0 {
+		app.cancel_hook(deck.transition_hook)
+		deck.transition_hook = 0
+	}
+	deck.transition_active = false
+	deck.transition_step = 0
+}
+
+fn (mut deck Deck) start_transition(target int, mut app vtk.App) {
+	deck.clear_transition(mut app)
+	if deck.transition == .none || target == deck.presentation_index {
+		deck.presentation_index = target
+		app.invalidate()
+		return
+	}
+	deck.transition_from = deck.presentation_index
+	deck.transition_to = target
+	deck.transition_active = true
+	deck.transition_hook = app.every(transition_frame_ms, fn [mut deck] (mut app vtk.App) {
+		deck.tick_transition(mut app)
 	})
+	app.invalidate()
+}
+
+fn (mut deck Deck) tick_transition(mut app vtk.App) {
+	if !deck.transition_active || deck.presentation == unsafe { nil } {
+		deck.clear_transition(mut app)
+		return
+	}
+	deck.transition_step++
+	if deck.transition_step >= transition_frames {
+		deck.finish_transition(mut app)
+		return
+	}
+	app.invalidate()
+}
+
+fn (mut deck Deck) finish_transition(mut app vtk.App) {
+	if !deck.transition_active {
+		return
+	}
+	deck.presentation_index = deck.transition_to
+	deck.clear_transition(mut app)
+	app.invalidate()
+}
+
+fn (mut deck Deck) go_to(index int, mut app vtk.App) {
+	if deck.slides.len == 0 {
+		return
+	}
+	if deck.transition_active {
+		deck.finish_transition(mut app)
+	}
+	target := vtk.clamp(index, 0, deck.slides.len - 1)
+	if target == deck.presentation_index {
+		return
+	}
+	if deck.transition == .none {
+		deck.presentation_index = target
+		app.invalidate()
+	} else {
+		deck.start_transition(target, mut app)
+	}
 }
 
 fn presentation_key(mut c vtk.Ctl, e vtk.Event, mut app vtk.App) bool {
@@ -1912,25 +2153,28 @@ fn presentation_key(mut c vtk.Ctl, e vtk.Event, mut app vtk.App) bool {
 		return true
 	}
 	last := deck.slides.len - 1
+	if deck.transition_active
+		&& e.key in [int(vtk.Key.right), int(vtk.Key.down), int(vtk.Key.page_down), int(vtk.Key.space),
+			int(vtk.Key.enter), int(vtk.Key.left), int(vtk.Key.up), int(vtk.Key.page_up),
+			int(vtk.Key.backspace), int(vtk.Key.home), int(vtk.Key.end)] {
+		deck.finish_transition(mut app)
+		return true
+	}
 	if e.key in [int(vtk.Key.right), int(vtk.Key.down), int(vtk.Key.page_down), int(vtk.Key.space),
 		int(vtk.Key.enter)] {
-		deck.presentation_index = vtk.clamp(deck.presentation_index + 1, 0, last)
-		app.invalidate()
+		deck.go_to(deck.presentation_index + 1, mut app)
 		return true
 	}
 	if e.key in [int(vtk.Key.left), int(vtk.Key.up), int(vtk.Key.page_up), int(vtk.Key.backspace)] {
-		deck.presentation_index = vtk.clamp(deck.presentation_index - 1, 0, last)
-		app.invalidate()
+		deck.go_to(deck.presentation_index - 1, mut app)
 		return true
 	}
 	if e.key == int(vtk.Key.home) {
-		deck.presentation_index = 0
-		app.invalidate()
+		deck.go_to(0, mut app)
 		return true
 	}
 	if e.key == int(vtk.Key.end) {
-		deck.presentation_index = last
-		app.invalidate()
+		deck.go_to(last, mut app)
 		return true
 	}
 	return true
@@ -1940,6 +2184,7 @@ fn (mut deck Deck) stop_presentation(mut app vtk.App) {
 	if deck.presentation == unsafe { nil } {
 		return
 	}
+	deck.clear_transition(mut app)
 	mut window := deck.presentation
 	deck.presentation = unsafe { nil }
 	deck.presentation_canvas = unsafe { nil }
@@ -1973,6 +2218,7 @@ fn window_key(mut w vtk.Ctl, e vtk.Event, mut app vtk.App) bool {
 			if e.shift { Action.delete_slide } else { Action.clone_slide }
 		}
 		`e` { Action.source }
+		`,` { Action.settings }
 		else { return false }
 	}
 	deck.action(action, mut app)
@@ -2008,6 +2254,7 @@ fn editor_key(mut c vtk.Ctl, e vtk.Event, mut app vtk.App) bool {
 		`i` { Action.italic }
 		`k` { Action.code }
 		`e` { Action.source }
+		`,` { Action.settings }
 		`z` { Action.undo }
 		`y` { Action.redo }
 		else { return false }
@@ -2049,6 +2296,7 @@ fn (mut deck Deck) action(action Action, mut app vtk.App) {
 		.toggle_sidebar { deck.toggle_sidebar(mut app) }
 		.toggle_notes { deck.toggle_notes(mut app) }
 		.source { deck.toggle_source(mut app) }
+		.settings { settings_dialog(mut deck, mut app) }
 		.present { present_slide(mut deck, deck.current, mut app) }
 		.present_start { present_slide(mut deck, 0, mut app) }
 		.bold { wrap_selection(mut deck, '**', '**', mut app) }
@@ -2080,7 +2328,7 @@ fn (mut deck Deck) action(action Action, mut app vtk.App) {
 		.about { app.about_for(deck.window, app_name, app_version) }
 		.help {
 			app.msgbox_for(deck.window, 'VTK Slides',
-				'Edit slides as Markdown. **bold**, *italic*, `code`, lists, tables and images are rendered in previews and presentations.\n\nShape blocks:\n```slide\nrect 10 10 40 30 #59adff\nline 10 80 90 80 #ffd114\ncircle 75 25 10 #79c942\n```\n\nCoordinates are percentages of the slide. Shapes accept #rrggbb or named colors.\n\nChart blocks:\n```chart columns|Revenue\n|Q1|Q2|Q3|Q4\nRevenue|12|18|15|24\nPlan|10|14|18|20\n```\n\nImages are Markdown image links: ![caption](image.png). PNG and JPEG are decoded.\n\nDecks save as Markdown separated by <!-- slide -->. Speaker notes live below the slide editor and are saved in hidden HTML comments, so they never appear in previews or presentations. F5 presents, F9 toggles the sidebar, Ctrl-E shows source, Ctrl-Shift-N toggles notes.')
+				'Edit slides as Markdown. **bold**, *italic*, `code`, lists, tables and images are rendered in previews and presentations.\n\nShape blocks:\n```slide\nrect 10 10 40 30 #59adff\nline 10 80 90 80 #ffd114\ncircle 75 25 10 #79c942\n```\n\nCoordinates are percentages of the slide. Shapes accept #rrggbb or named colors.\n\nChart blocks:\n```chart columns|Revenue\n|Q1|Q2|Q3|Q4\nRevenue|12|18|15|24\nPlan|10|14|18|20\n```\n\nImages are Markdown image links: ![caption](image.png). PNG and JPEG are decoded.\n\nDecks save as Markdown separated by <!-- slide -->. Speaker notes live below the slide editor and are saved in hidden HTML comments, so they never appear in previews or presentations. File > Settings chooses the presentation transition: none, slide (direction follows next/previous), or fade out/in. F5 presents, F9 toggles the sidebar, Ctrl-E shows source, Ctrl-Shift-N toggles notes.')
 		}
 	}
 	deck.refresh()
@@ -2090,6 +2338,7 @@ fn (mut deck Deck) action(action Action, mut app vtk.App) {
 fn new_deck(mut app vtk.App, path string) &Deck {
 	mut deck := &Deck{
 		sidebar_visible: true
+		transition:      load_prefs()
 	}
 	deck.slides = if path == '' {
 		demo_deck()
@@ -2172,6 +2421,8 @@ fn new_deck(mut app vtk.App, path string) &Deck {
 	menu_item(mut file, deck, 'Open...   Ctrl-O', .open)
 	menu_item(mut file, deck, 'Save   Ctrl-S', .save)
 	menu_item(mut file, deck, 'Save as...   Ctrl-Shift-S', .save_as)
+	file.menu_separator()
+	menu_item(mut file, deck, 'Settings...   Ctrl-,', .settings)
 	file.menu_separator()
 	menu_item(mut file, deck, 'Present   F5', .present)
 	menu_item(mut file, deck, 'Present from start', .present_start)

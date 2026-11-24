@@ -22,6 +22,72 @@ fn test_parse_single_series_chart() {
 	assert data.series[0] == [10.0, 20.0, 15.0]
 }
 
+fn test_transition_values() {
+	assert transition_from_int(0) == SlideTransition.none
+	assert transition_from_int(1) == SlideTransition.slide
+	assert transition_from_int(2) == SlideTransition.fade
+	assert transition_from_int(99) == SlideTransition.none
+	assert transition_label(.slide) == 'Slide'
+}
+
+fn slides_test_launcher(mut app vtk.App, _ voidptr) {
+	app.invalidate()
+}
+
+fn test_transition_hook_runs() {
+	mut app := vtk.new_app()
+	app.register('test', slides_test_launcher, unsafe { nil })
+	mut deck := &Deck{
+		slides:             [Slide{
+			id:   1
+			body: '# Alpha'
+		}, Slide{
+			id:   2
+			body: '# Beta'
+		}]
+		transition:         .fade
+		presentation:       &vtk.Ctl{}
+		presentation_index: 0
+	}
+	deck.start_transition(1, mut app)
+	assert deck.transition_active
+	for _ in 0 .. 20 {
+		app.step(30)
+	}
+	assert !deck.transition_active
+	assert deck.presentation_index == 1
+	app.fini()
+}
+
+fn test_transition_render() {
+	for transition in [SlideTransition.slide, .fade] {
+		for step in [0, 4, 8, 12, 15] {
+			mut deck := Deck{
+				slides:            [Slide{
+					id:   1
+					body: '# Alpha'
+				}, Slide{
+					id:   2
+					body: '# Beta'
+				}]
+				transition:        transition
+				transition_active: true
+				transition_from:   0
+				transition_to:     1
+				transition_step:   step
+			}
+			mut screen := vtk.Screen{}
+			screen.resize(60, 18)
+			deck.draw_transition(mut screen, vtk.Rect{0, 0, 60, 18})
+			image := screen.snapshot()
+			assert image.len > 0
+			if step == 0 {
+				assert image.contains('Alpha')
+			}
+		}
+	}
+}
+
 fn test_parse_shapes_with_colors() {
 	area := vtk.Rect{0, 0, 100, 50}
 	rect := parse_shape('rect 10 20 40 30 #ff8800', area, vtk.cyan) or {

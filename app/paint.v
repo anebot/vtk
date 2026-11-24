@@ -68,7 +68,7 @@ mut:
 	shape      PencilShape
 	size       int = 1
 	erase      bool
-	grid       bool = true
+	grid       bool
 	active     bool
 	window     &vtk.Ctl = unsafe { nil }
 	canvas     &vtk.Ctl = unsafe { nil }

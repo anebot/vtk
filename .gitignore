@@ -1,4 +1,7 @@
 /build/
+/app/word
+/app/slides
+/app/spread
 /examples/htk
 /examples/word
 /examples/vim
