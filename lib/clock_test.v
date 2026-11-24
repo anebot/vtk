@@ -80,7 +80,7 @@ fn test_clock_callback_can_open_a_menu_and_date_picker() {
 	mut app := new_app()
 	app.window('Desktop', 30, 12)
 	app.clock_clicked = fn (_ Event, mut app App) {
-		if date := app.date_pick(app.top_window_ptr(), 'Calendar', time.Time{ year: 2024, month: 2, day: 28 }) {
+		if date := app.date_pick(app.top_window(), 'Calendar', time.Time{ year: 2024, month: 2, day: 28 }) {
 			app.clipboard_set(picker_date_text(date))
 		}
 	}

@@ -30,25 +30,23 @@ fn test_transition_values() {
 	assert transition_label(.slide) == 'Slide'
 }
 
-fn slides_test_launcher(mut app vtk.App, _ voidptr) {
+fn slides_test_launcher(mut app vtk.App) {
 	app.invalidate()
 }
 
 fn test_transition_hook_runs() {
 	mut app := vtk.new_app()
-	app.register('test', slides_test_launcher, unsafe { nil })
-	mut deck := &Deck{
-		slides:             [Slide{
+	app.register('test', slides_test_launcher)
+	mut deck := new_deck_state(vtk.new_ctl(.window))
+	deck.slides = [Slide{
 			id:   1
 			body: '# Alpha'
 		}, Slide{
 			id:   2
 			body: '# Beta'
-		}]
-		transition:         .fade
-		presentation:       &vtk.Ctl{}
-		presentation_index: 0
-	}
+	}]
+	deck.transition = .fade
+	deck.presentation = vtk.new_ctl(.window)
 	deck.start_transition(1, mut app)
 	assert deck.transition_active
 	for _ in 0 .. 20 {
@@ -62,20 +60,18 @@ fn test_transition_hook_runs() {
 fn test_transition_render() {
 	for transition in [SlideTransition.slide, .fade] {
 		for step in [0, 4, 8, 12, 15] {
-			mut deck := Deck{
-				slides:            [Slide{
+			mut deck := new_deck_state(vtk.new_ctl(.window))
+			deck.slides = [Slide{
 					id:   1
 					body: '# Alpha'
 				}, Slide{
 					id:   2
 					body: '# Beta'
-				}]
-				transition:        transition
-				transition_active: true
-				transition_from:   0
-				transition_to:     1
-				transition_step:   step
-			}
+			}]
+			deck.transition = transition
+			deck.transition_active = true
+			deck.transition_to = 1
+			deck.transition_step = step
 			mut screen := vtk.Screen{}
 			screen.resize(60, 18)
 			deck.draw_transition(mut screen, vtk.Rect{0, 0, 60, 18})
@@ -118,7 +114,8 @@ fn test_deck_roundtrip() {
 		body:  '# Two\n\n```slide\nrect 10 10 20 20 #59adff\n```'
 		notes: 'Second note.'
 	}]
-	mut deck := Deck{ slides: slides }
+	mut deck := new_deck_state(vtk.new_ctl(.window))
+	deck.slides = slides
 	text := deck.text()
 	assert text.contains('<!-- slide -->')
 	parsed := parse_deck(text)

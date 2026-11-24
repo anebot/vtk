@@ -31,23 +31,23 @@ mut:
 }
 
 fn sheet_cell(c &vtk.Ctl, row int, column int) string {
-	mut context := unsafe { &SheetView(c.user) }
+	mut context := c.context[SheetView]() or { return '' }
 	return context.sheet.display(row, column)
 }
 
 fn sheet_raw(c &vtk.Ctl, row int, column int) string {
-	context := unsafe { &SheetView(c.user) }
+	context := c.context[SheetView]() or { return '' }
 	return context.sheet.raw(row, column)
 }
 
 fn sheet_edit(mut c vtk.Ctl, edits []vtk.TableCellEdit) ! {
-	mut context := unsafe { &SheetView(c.user) }
+	mut context := c.context[SheetView]() or { return error('missing sheet context') }
 	context.sheet.apply(edits)!
 	context.view.modified = context.view.book.dirty()
 }
 
 fn sheet_style(c &vtk.Ctl, row int, column int) vtk.TableCellStyle {
-	mut context := unsafe { &SheetView(c.user) }
+	mut context := c.context[SheetView]() or { return vtk.TableCellStyle{} }
 	if style := context.sheet.data.styles[address(row, column)] { return style }
 	if row == 0 { return vtk.TableCellStyle{fg: vtk.white, bg: vtk.blue, attr: vtk.bold} }
 	if context.sheet.raw(row, column).starts_with('=') {
@@ -57,7 +57,7 @@ fn sheet_style(c &vtk.Ctl, row int, column int) vtk.TableCellStyle {
 }
 
 fn sheet_compare(c &vtk.Ctl, left int, right int, column int) int {
-	mut context := unsafe { &SheetView(c.user) }
+	mut context := c.context[SheetView]() or { return 0 }
 	mut visiting := map[string]bool{}
 	a := context.sheet.number(left, column, mut visiting) or {
 		context.sheet.number(right, column, mut visiting) or {
@@ -72,7 +72,7 @@ fn sheet_compare(c &vtk.Ctl, left int, right int, column int) int {
 fn (view &BookView) current() ?&SheetView {
 	pages := view.tabs.children()
 	if view.tabs.value < 0 || view.tabs.value >= pages.len { return none }
-	return unsafe { &SheetView(pages[view.tabs.value].user) }
+	return pages[view.tabs.value].context[SheetView]()
 }
 
 fn (mut view BookView) update() {
@@ -90,7 +90,7 @@ fn (mut view BookView) update() {
 }
 
 fn sheet_selected(mut c vtk.Ctl, mut _ vtk.App) {
-	mut context := unsafe { &SheetView(c.user) }
+	mut context := c.context[SheetView]() or { return }
 	context.view.update()
 }
 
@@ -99,12 +99,12 @@ fn sheet_changed(mut c vtk.Ctl, mut app vtk.App) {
 }
 
 fn sheet_tab_changed(mut c vtk.Ctl, mut _ vtk.App) {
-	mut view := unsafe { &BookView(c.user) }
+	mut view := c.context[BookView]() or { return }
 	view.update()
 }
 
 fn sheet_tab_moved(mut c vtk.Ctl, from int, to int, mut _ vtk.App) {
-	mut view := unsafe { &BookView(c.user) }
+	mut view := c.context[BookView]() or { return }
 	sheet := view.book.sheets[from]
 	view.book.sheets.delete(from)
 	view.book.sheets.insert(to, sheet)
@@ -113,7 +113,7 @@ fn sheet_tab_moved(mut c vtk.Ctl, from int, to int, mut _ vtk.App) {
 }
 
 fn configure_selection(mut c vtk.Ctl, mut app vtk.App) {
-	mut view := unsafe { &BookView(c.user) }
+	mut view := c.context[BookView]() or { return }
 	mut current := view.current() or { return }
 	current.grid.table.selection = match view.mode.value { 0 { .rows } 1 { .columns } 2 { .cells } else { .none } }
 	current.grid.table.multi_select = view.multiple.value != 0
@@ -128,17 +128,18 @@ fn configure_selection(mut c vtk.Ctl, mut app vtk.App) {
 }
 
 fn book_action(mut c vtk.Ctl, mut app vtk.App) {
-	mut view := unsafe { &BookView(c.user) }
-	view.action(unsafe { Action(c.data) }, mut app)
+	mut view := c.context[BookView]() or { return }
+	cmd := Action.from(c.data) or { return }
+	view.action(cmd, mut app)
 }
 
 fn book_key(mut c vtk.Ctl, event vtk.Event, mut app vtk.App) bool {
-	mut view := unsafe { &BookView(c.user) }
+	mut view := c.context[BookView]() or { return false }
 	return view.key(event, mut app)
 }
 
 fn sheet_key(mut c vtk.Ctl, event vtk.Event, mut app vtk.App) bool {
-	mut context := unsafe { &SheetView(c.user) }
+	mut context := c.context[SheetView]() or { return false }
 	return context.view.key(event, mut app)
 }
 
@@ -158,7 +159,7 @@ fn (mut view BookView) key(event vtk.Event, mut app vtk.App) bool {
 }
 
 fn book_closing(mut c vtk.Ctl, mut app vtk.App) bool {
-	view := unsafe { &BookView(c.user) }
+	view := c.context[BookView]() or { return true }
 	if view.book.dirty() && !app.confirm_for(&c, 'Unsaved workbook', 'Discard unsaved changes and quit?') { return false }
 	return true
 }
@@ -183,9 +184,10 @@ fn (mut view BookView) add_sheet(sheet &Sheet) {
 	grid.table.compare = sheet_compare
 	grid.table.edited, grid.table.sorted = sheet_changed, sheet_changed
 	context := &SheetView{view: &view, sheet: sheet, grid: grid}
-	grid.user, grid.changed, grid.keyfn = context, sheet_selected, sheet_key
+	grid.set_context(context)
+	grid.changed, grid.keyfn = sheet_selected, sheet_key
 	mut page := view.tabs.add_tab(sheet.data.name, mut grid)
-	page.user = context
+	page.set_context(context)
 	grid.table_select(0, 0, 0, 0)
 }
 
@@ -307,13 +309,19 @@ fn create_view(mut app vtk.App, book Book) &BookView {
 	mode.value = 2
 	mut multiple := vtk.checkbox('Multiple', true)
 	mut view := &BookView{book: book, window: window, tabs: tabs, formula: formula, address: address_label, status: status, mode: mode, multiple: multiple, modified: book.dirty()}
-	window.user, window.closing, window.keyfn = view, book_closing, book_key
-	tabs.user, tabs.changed, tabs.reordered = view, sheet_tab_changed, sheet_tab_moved
-	formula.user, formula.submit, formula.keyfn = view, book_action, book_key
+	window.set_context(view)
+	window.closing, window.keyfn = book_closing, book_key
+	tabs.set_context(view)
+	tabs.changed, tabs.reordered = sheet_tab_changed, sheet_tab_moved
+	formula.set_context(view)
+	formula.submit, formula.keyfn = book_action, book_key
 	formula.data = i64(Action.apply)
-	apply.user, apply.changed, apply.data = view, book_action, i64(Action.apply)
-	mode.user, mode.changed = view, configure_selection
-	multiple.user, multiple.changed = view, configure_selection
+	apply.set_context(view)
+	apply.changed, apply.data = book_action, i64(Action.apply)
+	mode.set_context(view)
+	mode.changed = configure_selection
+	multiple.set_context(view)
+	multiple.changed = configure_selection
 	for title, actions in {
 		'File': [Action.new_sheet, .open, .save, .save_as, .import_csv, .export_csv, .quit]
 		'Edit': [Action.edit, .copy, .paste, .undo, .redo, .color, .clear_color]
@@ -322,15 +330,18 @@ fn create_view(mut app vtk.App, book Book) &BookView {
 		mut menu := window.add_menu(title)
 		for action in actions {
 			mut item := menu.menu_item(action.str().replace('_', ' '), book_action)
-			item.user, item.data = view, i64(action)
+			item.set_context(view)
+			item.data = i64(action)
 		}
 	}
 	mut help := window.add_menu('Help')
 	mut about := help.menu_item('About', book_action)
-	about.user, about.data = view, i64(Action.about)
+	about.set_context(view)
+	about.data = i64(Action.about)
 	for title, action in {'Undo': Action.undo, 'Redo': .redo, 'Sort ↑': .ascending, 'Sort ↓': .descending, 'Edit': .edit, 'Color': .color, 'Chart': .chart, 'Help': .help} {
 		mut button := vtk.button(title)
-		button.user, button.changed, button.data = view, book_action, i64(action)
+		button.set_context(view)
+		button.changed, button.data = book_action, i64(action)
 		toolbar.add(mut button)
 	}
 	toolbar.add(mut mode); toolbar.add(mut multiple)
@@ -344,7 +355,7 @@ fn create_view(mut app vtk.App, book Book) &BookView {
 	return view
 }
 
-pub fn launch(mut app vtk.App, _ voidptr) {
+pub fn launch(mut app vtk.App) {
 	_ := create_view(mut app, demo_book())
 }
 

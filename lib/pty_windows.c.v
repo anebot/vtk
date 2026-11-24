@@ -77,7 +77,7 @@ fn spawn_pty(cols int, rows int, directory string) !Pty {
 	startup.StartupInfo.cb = u32(sizeof(C.STARTUPINFOEXW))
 	mut info := C.PROCESS_INFORMATION{}
 	shell := if os.getenv('COMSPEC') != '' { os.getenv('COMSPEC') } else { 'cmd.exe' }
-	working_directory := if directory == '' { &u16(unsafe { nil }) } else { directory.to_wide() }
+	working_directory := if directory == '' { voidptr(0) } else { voidptr(directory.to_wide()) }
 	if !C.CreateProcessW(0, shell.to_wide(), 0, 0, false, 0x80000, 0, working_directory, &startup, &info) {
 		p.close()
 		return error('cannot start ConPTY shell')

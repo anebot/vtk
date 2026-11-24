@@ -233,8 +233,7 @@ pub fn (mut c Ctl) table_sort(column int, direction TableSortDirection) bool {
 	c.table.anchor_row, c.table.anchor_column = -1, -1
 	c.scroll_hold = false
 	c.invalidate()
-	mut app := c.root().app
-	if !isnil(app) { if callback := c.table.sorted { callback(mut c, mut app) } }
+	if mut app := c.root().app { if callback := c.table.sorted { callback(mut c, mut app) } }
 	return true
 }
 
@@ -275,8 +274,7 @@ pub fn (mut c Ctl) table_move_column(from int, to int) bool {
 	c.table.column_order.insert(to, column)
 	c.table.anchor_row, c.table.anchor_column = -1, -1
 	c.invalidate()
-	mut app := c.root().app
-	if !isnil(app) { if callback := c.table.column_reordered { callback(mut c, from, to, mut app) } }
+	if mut app := c.root().app { if callback := c.table.column_reordered { callback(mut c, from, to, mut app) } }
 	return true
 }
 
@@ -291,8 +289,7 @@ pub fn (mut c Ctl) table_move_row(from int, to int) bool {
 	c.table.sort_column, c.table.sort_direction = -1, .none
 	c.table.anchor_row, c.table.anchor_column = -1, -1
 	c.invalidate()
-	mut app := c.root().app
-	if !isnil(app) { if callback := c.table.row_reordered { callback(mut c, from, to, mut app) } }
+	if mut app := c.root().app { if callback := c.table.row_reordered { callback(mut c, from, to, mut app) } }
 	return true
 }
 
@@ -302,8 +299,7 @@ pub fn (mut c Ctl) table_set_column_width(column int, width int) bool {
 	limit := if options.max_width > 0 { max(options.min_width, options.max_width) } else { 10000 }
 	c.table.widths[column] = clamp(width, max(1, options.min_width), limit)
 	c.invalidate()
-	mut app := c.root().app
-	if !isnil(app) { if callback := c.table.column_resized { callback(mut c, mut app) } }
+	if mut app := c.root().app { if callback := c.table.column_resized { callback(mut c, mut app) } }
 	return true
 }
 
@@ -330,8 +326,7 @@ pub fn (mut c Ctl) table_apply(edits []TableCellEdit) ! {
 	callback(mut c, edits)!
 	if c.destroyed { return }
 	if c.table.sort_direction != .none || c.table.known_rows != c.row_count { c.table_refresh() } else { c.invalidate() }
-	mut app := c.root().app
-	if !isnil(app) { if edited := c.table.edited { edited(mut c, mut app) } }
+	if mut app := c.root().app { if edited := c.table.edited { edited(mut c, mut app) } }
 }
 
 pub fn (c &Ctl) table_selection_text() string {

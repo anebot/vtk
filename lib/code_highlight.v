@@ -87,8 +87,8 @@ fn (mut h CodeHighlighter) token(line string, start int) (int, ?int) {
 	if line[i].is_letter() || line[i] == `_` || line[i] >= 0x80 {
 		i++
 		for i < line.len && (line[i].is_alnum() || line[i] == `_` || line[i] >= 0x80) { i++ }
-		// The bounds above are checked; borrow the token for this lookup only.
-		color := match line.substr_unsafe(start, i) {
+		token := &line[start..i]
+		color := match *token {
 			'as', 'async', 'await', 'break', 'case', 'catch', 'class', 'const', 'continue',
 			'def', 'default', 'defer', 'do', 'else', 'enum', 'export', 'extern', 'fn', 'for',
 			'from', 'func', 'function', 'if', 'impl', 'import', 'in', 'interface', 'let',

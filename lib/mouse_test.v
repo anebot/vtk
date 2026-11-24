@@ -8,18 +8,18 @@ mut:
 
 fn record_enter(mut c Ctl, mut app App) {
 	assert c.hovered && app.hovered_ctl() == ?&Ctl(&c)
-	mut log := unsafe { &HoverLog(c.user) }
+	mut log := c.context[HoverLog]() or { panic('missing callback context') }
 	log.events << 'enter:${c.text}'
 }
 
 fn record_leave(mut c Ctl, mut app App) {
 	assert !c.hovered && app.hovered_ctl() != ?&Ctl(&c)
-	mut log := unsafe { &HoverLog(c.user) }
+	mut log := c.context[HoverLog]() or { panic('missing callback context') }
 	log.events << 'leave:${c.text}'
 }
 
 fn watch_hover(mut c Ctl, log &HoverLog) {
-	c.user = log
+	c.set_context(log)
 	c.mouse_enter = record_enter
 	c.mouse_leave = record_leave
 }
@@ -75,15 +75,15 @@ fn test_hover_transitions_do_not_activate_or_focus_controls() {
 	pointer_move(mut app, one.x + 1, one.y)
 	app.redraw()
 	assert log.events == ['enter:One']
-	assert one.value == 0 && two.value == 0 && app.focus == two
+	assert one.value == 0 && two.value == 0 && same_ctl(app.focus, two)
 	pointer_move(mut app, two.x, two.y)
 	assert log.events == ['enter:One', 'leave:One', 'enter:Two']
 	assert !one.hovered && two.hovered
 	app.dispatch(Event{ kind: .mouse, x: one.x, y: one.y, button: .left, pressed: true })
-	assert app.focus == one && one.value == 1
+	assert same_ctl(app.focus, one) && one.value == 1
 	app.dispatch(Event{ kind: .mouse, x: two.x, y: two.y, button: .left, pressed: true, motion: true })
 	app.dispatch(Event{ kind: .mouse, x: two.x, y: two.y, button: .left })
-	assert one.value == 1 && two.value == 0 && app.focus == one
+	assert one.value == 1 && two.value == 0 && same_ctl(app.focus, one)
 	pointer_move(mut app, 0, 0)
 	assert (app.hovered_ctl() == none) && !two.hovered
 	assert log.events.last() == 'leave:Two'
@@ -158,7 +158,7 @@ fn test_hover_respects_occlusion_modals_popups_notices_and_clipping() {
 	order := app.windows.clone()
 	focus := app.focus
 	pointer_move(mut app, one.x, one.y)
-	assert app.windows == order && app.focus == focus
+	assert app.windows == order && same_ctl(app.focus, focus)
 	front.modal = false
 	mut menu := context_menu()
 	mut item := menu.menu_item('Action', count_click)
@@ -211,7 +211,7 @@ fn destroy_on_enter(mut c Ctl, mut app App) {
 
 fn record_destroy(mut c Ctl, mut app App) {
 	assert !c.hovered && app.hovered_ctl() != ?&Ctl(&c)
-	mut log := unsafe { &HoverLog(c.user) }
+	mut log := c.context[HoverLog]() or { panic('missing callback context') }
 	log.events << 'destroy:${c.text}'
 }
 

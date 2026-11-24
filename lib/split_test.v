@@ -7,7 +7,7 @@ mut:
 }
 
 fn split_changed(mut c Ctl, mut _ App) {
-	mut probe := unsafe { &SplitDragProbe(c.user) }
+	mut probe := c.context[SplitDragProbe]() or { panic('missing callback context') }
 	probe.changes++
 	first, second := c.split_panes() or { panic('missing panes') }
 	space := (if c.vertical { c.h } else { c.w }) - 1
@@ -47,11 +47,11 @@ fn test_split_drag_is_opt_in_and_resizes_both_orientations_live() {
 				assert !panes.resizable
 				panes.resizable = enabled
 				probe := &SplitDragProbe{}
-				panes.user = probe
+				panes.set_context(probe)
 				panes.changed = split_changed
 				initial := if vertical { first.h } else { first.w }
 				split_test_move(mut app, panes, initial, true, false)
-				assert (app.drag == panes) == enabled
+				assert (same_ctl(app.drag, panes)) == enabled
 				assert panes.value == 500 && probe.changes == 0
 				for delta in 1 .. 4 {
 					split_test_move(mut app, panes, initial + delta, true, true)
@@ -67,13 +67,13 @@ fn test_split_drag_is_opt_in_and_resizes_both_orientations_live() {
 					}
 					assert probe.changes == if enabled { delta } else { 0 }
 					assert first.text == 'unsaved draft' && first.cursor == 4 && first.anchor == 1
-					assert app.focus == first
+					assert same_ctl(app.focus, first)
 				}
 				split_test_move(mut app, panes, initial + 3, false, false)
-				assert isnil(app.drag)
+				assert app.drag == none
 				assert probe.changes == if enabled { 3 } else { 0 }
 				share := panes.value
-				mut window := panes.owner_window_ptr()
+				mut window := panes.owner_window() or { panic('expected a window') }
 				app.maximize(mut window)
 				app.redraw()
 				space := (if vertical { panes.h } else { panes.w }) - 1
@@ -94,7 +94,7 @@ fn test_split_drag_clamps_outside_the_window_to_pane_minimums() {
 		initial := if vertical { first.h } else { first.w }
 		split_test_move(mut app, panes, initial, true, false)
 		split_test_move(mut app, panes, -100, true, true)
-		assert app.drag == panes
+		assert same_ctl(app.drag, panes)
 		assert (if vertical { first.h } else { first.w }) == if vertical { 3 } else { 8 }
 		// Wheels and unrelated buttons must not move or release a captured divider.
 		share := panes.value
@@ -105,11 +105,11 @@ fn test_split_drag_clamps_outside_the_window_to_pane_minimums() {
 			Event{ kind: .mouse, button: .right, x: 1000, y: 1000 },
 		] {
 			app.dispatch(event)
-			assert panes.value == share && app.drag == panes
+			assert panes.value == share && same_ctl(app.drag, panes)
 		}
 		// Release applies its final position even without a preceding motion report.
 		split_test_move(mut app, panes, 1000, false, false)
-		assert isnil(app.drag)
+		assert app.drag == none
 		assert (if vertical { second.h } else { second.w }) == if vertical { 4 } else { 9 }
 		assert panes.value > 0 && panes.value < 1000
 	}
@@ -124,13 +124,13 @@ fn test_split_drag_starts_only_on_its_divider_and_preserves_preferred_size_on_cl
 		app.redraw()
 		initial := if vertical { first.h } else { first.w }
 		split_test_move(mut app, panes, initial, true, false)
-		assert app.drag == panes
+		assert same_ctl(app.drag, panes)
 		split_test_move(mut app, panes, initial, false, false)
-		assert panes.value == 0 && isnil(app.drag)
+		assert panes.value == 0 && app.drag == none
 		app.dispatch(Event{ kind: .mouse, button: .left, pressed: true, x: first.x + 1, y: first.y })
-		assert app.drag == first
+		assert same_ctl(app.drag, first)
 		app.dispatch(Event{ kind: .mouse, button: .left, x: first.x + 1, y: first.y })
-		assert isnil(app.drag) && panes.value == 0
+		assert app.drag == none && panes.value == 0
 	}
 }
 
@@ -156,19 +156,19 @@ fn test_nested_splits_resize_independently_and_ignore_hidden_panes() {
 	app.redraw()
 	assert outer.split_divider().x == first.x + first.w
 	split_test_move(mut app, inner, top.h, true, false)
-	assert app.drag == inner
+	assert same_ctl(app.drag, inner)
 	split_test_move(mut app, inner, top.h + 2, true, true)
 	assert outer.value == 500 && inner.value > 500
 	app.dispatch(Event{ kind: .mouse })
-	assert isnil(app.drag)
+	assert app.drag == none
 	share := inner.value
 	split_test_move(mut app, outer, first.w, true, false)
-	assert app.drag == outer
+	assert same_ctl(app.drag, outer)
 	split_test_move(mut app, outer, first.w + 3, true, true)
 	assert outer.value > 500 && inner.value == share
 	assert inner.x == first.x + first.w + 1
 	split_test_move(mut app, outer, first.w, false, false)
-	assert isnil(app.drag)
+	assert app.drag == none
 }
 
 fn test_incomplete_splits_and_decorative_separators_do_not_capture_a_drag() {
@@ -183,7 +183,7 @@ fn test_incomplete_splits_and_decorative_separators_do_not_capture_a_drag() {
 		app.redraw()
 		assert panes.split_divider().w == 0
 		split_test_move(mut app, panes, panes.w / 2, true, false)
-		assert isnil(app.drag)
+		assert app.drag == none
 	}
 	mut app := new_app()
 	app.desktop = false
@@ -193,7 +193,7 @@ fn test_incomplete_splits_and_decorative_separators_do_not_capture_a_drag() {
 	window.add(mut line)
 	app.redraw()
 	app.dispatch(Event{ kind: .mouse, button: .left, pressed: true, x: line.x + 1, y: line.y })
-	assert isnil(app.drag)
+	assert app.drag == none
 }
 
 fn split_destroy_on_resize(mut c Ctl, mut app App) {
@@ -206,13 +206,13 @@ fn test_split_drag_cancels_on_lifecycle_changes_and_callbacks_can_destroy_it() {
 		mut panes, first, _ := split_test_panes(mut app, false)
 		panes.resizable = true
 		split_test_move(mut app, panes, first.w, true, false)
-		assert app.drag == panes
+		assert same_ctl(app.drag, panes)
 		match action {
 			'disable' { panes.resizable = false }
 			'clear' { panes.clear() }
 			'hide' { panes.hidden = true }
 			'detach' { panes.detach() }
-			'close' { mut window := panes.owner_window_ptr(); app.close(mut window) }
+			'close' { mut window := panes.owner_window() or { panic('expected a window') }; app.close(mut window) }
 			'focus_out' { app.dispatch(Event{ kind: .focus_out }) }
 			'resize' { app.dispatch(Event{ kind: .resize, width: 90, height: 30 }) }
 			'modal' { mut dialog := app.window('Modal', 24, 6); dialog.modal = true }
@@ -222,7 +222,7 @@ fn test_split_drag_cancels_on_lifecycle_changes_and_callbacks_can_destroy_it() {
 		before := panes.value
 		split_test_move(mut app, panes, first.w + 2, true, true)
 		split_test_move(mut app, panes, first.w, false, false)
-		assert isnil(app.drag), action
+		assert app.drag == none, action
 		if action == 'callback' { assert panes.destroyed } else { assert panes.value == before, action }
 	}
 }
@@ -238,7 +238,7 @@ fn test_split_drag_leaves_insufficient_space_unchanged() {
 		split_test_move(mut app, panes, initial, true, false)
 		split_test_move(mut app, panes, 1, true, true)
 		split_test_move(mut app, panes, 1, false, false)
-		assert panes.value == 500 && isnil(app.drag)
+		assert panes.value == 500 && app.drag == none
 		assert (if vertical { first.h } else { first.w }) == initial
 	}
 }
@@ -251,7 +251,7 @@ fn test_split_drag_respects_minimums_with_more_cells_than_ratio_steps() {
 		first.min_w, first.min_h = 9, 9
 		second.min_w, second.min_h = 9, 9
 		app.dispatch(Event{ kind: .resize, width: if vertical { 40 } else { 1600 }, height: if vertical { 1600 } else { 40 } })
-		mut window := panes.owner_window_ptr()
+		mut window := panes.owner_window() or { panic('expected a window') }
 		app.maximize(mut window)
 		app.redraw()
 		initial := if vertical { first.h } else { first.w }
@@ -261,6 +261,6 @@ fn test_split_drag_respects_minimums_with_more_cells_than_ratio_steps() {
 		split_test_move(mut app, panes, -100, true, true)
 		assert (if vertical { first.h } else { first.w }) >= 9
 		split_test_move(mut app, panes, -100, false, false)
-		assert isnil(app.drag)
+		assert app.drag == none
 	}
 }

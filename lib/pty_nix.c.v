@@ -14,6 +14,7 @@ fn C.ptsname(int) &char
 fn C.fork() int
 fn C.setsid() int
 fn C.execv(&char, &&char) int
+fn C.setenv(&char, &char, int) int
 
 struct Pty {
 mut:
@@ -47,7 +48,7 @@ fn spawn_pty(cols int, rows int, directory string) !Pty {
 		return error('cannot open PTY slave')
 	}
 	path := if os.getenv('SHELL') != '' { os.getenv('SHELL') } else { '/bin/sh' }
-	argv := [path.str, &u8(unsafe { nil })]
+	argv := [voidptr(path.str), voidptr(0)]!
 	pid := C.fork()
 	if pid < 0 {
 		C.close(master)
@@ -63,9 +64,9 @@ fn spawn_pty(cols int, rows int, directory string) !Pty {
 		C.dup2(slave, 1)
 		C.dup2(slave, 2)
 		if slave > 2 { C.close(slave) }
-		unsafe { C.setenv(c'TERM', c'xterm-256color', 1) }
+		C.setenv(c'TERM', c'xterm-256color', 1)
 		if directory == '' || C.chdir(&char(directory.str)) == 0 {
-			C.execv(&char(path.str), &&char(argv.data))
+			C.execv(&char(path.str), &&char(&argv[0]))
 		}
 		failure := i32(C.errno)
 		for {

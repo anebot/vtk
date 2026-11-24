@@ -36,8 +36,8 @@ fn test_layout_focus_tabs_and_window_lifecycle() {
 	w.add(mut tabs)
 	app.redraw()
 	app.set_focus(first)
-	assert app.focus == first
-	assert w.hit_ptr(first.x, first.y) == first
+	assert same_ctl(app.focus, first)
+	assert same_ctl(w.hit(first.x, first.y), first)
 	assert !second.visible()
 	app.set_focus(tabs)
 	app.dispatch(Event{ key: int(Key.right) })
@@ -45,7 +45,7 @@ fn test_layout_focus_tabs_and_window_lifecycle() {
 	assert second.visible()
 	assert !first.visible()
 	app.dispatch(Event{ key: int(Key.tab) })
-	assert app.focus == second
+	assert same_ctl(app.focus, second)
 	app.maximize(mut w)
 	assert w.w == app.width
 	app.restore(mut w)
@@ -68,10 +68,10 @@ fn test_grid_split_and_reparent_cycles() {
 	root.layout(Rect{0, 0, 41, 8})
 	assert one.w == 20 && two.w == 20 && two.x == 21
 	one.add(mut root)
-	assert isnil(root.parent)
+	assert root.parent == none
 	mut parent := box(true)
 	parent.add(mut one)
-	assert root.kids.len == 1 && one.parent == parent
+	assert root.kids.len == 1 && same_ctl(one.parent, parent)
 }
 
 fn test_input_split_utf8_mouse_paste_and_modifiers() {
@@ -239,17 +239,17 @@ fn test_vim_utf8_edits_visual_and_undo_group() {
 }
 
 fn modal_close_hook(mut app App) {
-	mut dialog := app.top_window_ptr()
+	mut dialog := app.top_window() or { panic('expected a window') }
 	assert dialog.modal
-	if !isnil(dialog.modal_owner) {
-		assert app.blocker(dialog.modal_owner) == dialog
+	if dialog.modal_owner != none {
+		assert same_ctl(app.blocker(dialog.modal_owner), dialog)
 		mut other := app.window('Independent window', 24, 6)
-		assert isnil(app.blocker(other))
+		assert app.blocker(other) == none
 		app.close(mut other)
 	} else {
 		mut other := app.window('Blocked new window', 24, 6)
-		assert app.blocker(other) == dialog
-		assert app.top_window_ptr() == dialog
+		assert same_ctl(app.blocker(other), dialog)
+		assert same_ctl(app.top_window(), dialog)
 		app.close(mut other)
 	}
 	dialog.dialog_result = 42
@@ -323,7 +323,7 @@ fn test_frame_resize_preserves_opposite_edge_and_side_height() {
 	assert w.y == top && w.h == height
 	app.mouse(Event{ kind: .mouse, button: .left })
 	app.mouse(Event{ kind: .mouse, x: w.x + w.w - 1, y: w.y, button: .left, pressed: true })
-	assert !w.closed && app.drag == w
+	assert !w.closed && same_ctl(app.drag, w)
 }
 
 fn test_vim_selection_navigation_uses_arrows_and_respects_modifiers() {
@@ -357,9 +357,9 @@ fn test_vim_selection_navigation_uses_arrows_and_respects_modifiers() {
 	second := tree.tree_add(none, 'Second')
 	tree.selected_node = first
 	assert app.widget_key(mut tree, Event{ key: int(`j`) })
-	assert tree.selected_node == second
+	assert same_ctl(tree.selected_node, second)
 	assert app.widget_key(mut tree, Event{ key: int(`k`) })
-	assert tree.selected_node == first
+	assert same_ctl(tree.selected_node, first)
 	mut field := entry('', 0)
 	assert app.widget_key(mut field, Event{ key: int(`j`) })
 	assert app.widget_key(mut field, Event{ key: int(`k`) })

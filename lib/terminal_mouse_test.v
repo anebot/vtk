@@ -49,23 +49,24 @@ fn test_terminal_mouse_dispatch_capture_and_motion() {
 		padding: Insets{left: 1, top: 1}}
 	window.add(mut c)
 	app.redraw()
-	c.term.feed('\x1b[?1002;1006h')
+	mut term := c.term or { panic('expected a terminal') }
+	term.feed('\x1b[?1002;1006h')
 	x, y := c.x, c.y
 	app.dispatch(Event{kind: .mouse, x: x, y: y, button: .left, pressed: true})
-	assert app.focus == c && app.drag == c
+	assert same_ctl(app.focus, c) && same_ctl(app.drag, c)
 	app.dispatch(Event{kind: .mouse, x: x + 1, y: y + 1, button: .left, pressed: true, motion: true})
 	app.dispatch(Event{kind: .mouse, x: x + 1, y: y + 1, button: .wheel_up, pressed: true})
 	app.dispatch(Event{kind: .mouse, x: 0, y: 0, button: .left})
-	assert isnil(app.drag)
-	assert c.term.pending == '\x1b[<0;1;1M\x1b[<32;2;2M\x1b[<64;2;2M\x1b[<0;1;1m'
-	c.term.pending = ''
+	assert app.drag == none
+	assert term.pending == '\x1b[<0;1;1M\x1b[<32;2;2M\x1b[<64;2;2M\x1b[<0;1;1m'
+	term.pending = ''
 	app.dispatch(Event{kind: .mouse, x: x, y: y, motion: true})
-	assert c.term.pending == ''
-	c.term.feed('\x1b[?1003h')
+	assert term.pending == ''
+	term.feed('\x1b[?1003h')
 	app.dispatch(Event{kind: .mouse, x: x, y: y, motion: true})
-	assert c.term.pending == '\x1b[<35;1;1M'
-	c.term.feed('\x1b[?1003l')
-	c.term.pending = ''
+	assert term.pending == '\x1b[<35;1;1M'
+	term.feed('\x1b[?1003l')
+	term.pending = ''
 	app.dispatch(Event{kind: .mouse, x: x, y: y, button: .left, pressed: true})
-	assert c.term.pending == '' && isnil(app.drag)
+	assert term.pending == '' && app.drag == none
 }

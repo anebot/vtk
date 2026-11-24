@@ -55,16 +55,16 @@ fn test_wheel_during_text_drag_scrolls_without_turning_into_a_selection_click() 
 	app.redraw()
 	app.dispatch(Event{ kind: .mouse, button: .left, pressed: true, x: c.x + 2, y: c.y + 3 })
 	app.redraw()
-	assert app.drag == c
+	assert same_ctl(app.drag, c)
 	cursor, anchor, top := c.cursor, c.anchor, c.top
 	app.dispatch(Event{ kind: .mouse, button: .wheel_down, pressed: true, x: c.x + 2, y: c.y + 3 })
 	app.redraw()
 	assert c.top == top + 1
-	assert c.cursor == cursor && c.anchor == anchor && app.drag == c
+	assert c.cursor == cursor && c.anchor == anchor && same_ctl(app.drag, c)
 	app.dispatch(Event{ kind: .mouse, button: .wheel_down, x: c.x + 2, y: c.y + 3 })
-	assert app.drag == c // Wheel release cannot end a left-button capture.
+	assert same_ctl(app.drag, c) // Wheel release cannot end a left-button capture.
 	app.dispatch(Event{ kind: .mouse, button: .left, x: c.x + 2, y: c.y + 3 })
-	assert isnil(app.drag)
+	assert app.drag == none
 }
 
 fn test_sgr_wheel_axes_and_modifiers_remain_distinct() {
@@ -91,18 +91,18 @@ fn test_wheel_does_not_reposition_or_release_a_dragged_scrollbar() {
 	x, y := c.x + c.w - 1, c.y + c.h / 2
 	app.dispatch(Event{ kind: .mouse, button: .left, pressed: true, x: x, y: y })
 	app.redraw()
-	assert app.scroll_drag == c
+	assert same_ctl(app.scroll_drag, c)
 	top := c.top
 	for button in [MouseButton.wheel_up, .wheel_down, .wheel_left, .wheel_right] {
 		for pressed in [true, false] {
 			app.dispatch(Event{ kind: .mouse, button: button, pressed: pressed, x: x, y: y + 2 })
 			app.redraw()
-			assert c.top == top && app.scroll_drag == c
+			assert c.top == top && same_ctl(app.scroll_drag, c)
 		}
 	}
 	app.dispatch(Event{ kind: .mouse, button: .left, pressed: true, motion: true, x: x, y: y + 1 })
 	app.redraw()
 	assert c.top > top
 	app.dispatch(Event{ kind: .mouse, button: .left, x: x, y: y + 1 })
-	assert isnil(app.scroll_drag)
+	assert app.scroll_drag == none
 }

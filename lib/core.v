@@ -72,6 +72,9 @@ pub const window_maximize = 4
 pub const window_close = 8
 pub const window_default_controls = 15
 
+// ControlContext carries a typed reference for control callbacks.
+pub interface ControlContext {}
+
 pub type Callback = fn (mut Ctl, mut App)
 pub type KeyCallback = fn (mut Ctl, Event, mut App) bool
 pub type ScrollCallback = fn (mut Ctl, int, mut App) bool
@@ -104,7 +107,6 @@ pub mut:
 	mousefn       ?KeyCallback
 	mouse_enter   ?Callback
 	mouse_leave   ?Callback
-	user          voidptr
 	data          i64
 	value         int
 	expanded      bool
@@ -152,14 +154,15 @@ pub mut:
 	table         Table
 	chart         Chart
 mut:
-	parent        &Ctl = unsafe { nil }
+	callback_context ?ControlContext
+	parent        ?&Ctl
 	kids          []&Ctl
-	selected_node &Ctl = unsafe { nil }
-	default_button &Ctl = unsafe { nil }
-	popup_owner   &Ctl = unsafe { nil }
-	menu          &Ctl = unsafe { nil }
+	selected_node ?&Ctl
+	default_button ?&Ctl
+	popup_owner   ?&Ctl
+	menu          ?&Ctl
 	modal         bool
-	modal_owner   &Ctl = unsafe { nil }
+	modal_owner   ?&Ctl
 	hovered       bool
 	desktop_id    int = 1
 	x             int
@@ -182,10 +185,10 @@ mut:
 	maximized     bool
 	always_on_top bool
 	saved         Rect
-	term          &Terminal = unsafe { nil }
+	term          ?&Terminal
 	// Only roots (windows and standalone menus) retain the owning app.
-	app           &App = unsafe { nil }
-	modal_parent  &Ctl = unsafe { nil }
+	app           ?&App
+	modal_parent  ?&Ctl
 	window_order  int
 	date_value    time.Time
 	click_time    i64
@@ -216,17 +219,54 @@ pub fn new_ctl(kind Kind) &Ctl {
 	return &Ctl{ kind: kind }
 }
 
+// Format the control without following its parent, children or owning app.
+pub fn (c &Ctl) str() string {
+	return 'Ctl{kind: ${c.kind}, text: ${c.text}}'
+}
+
+// set_context attaches shared callback state by reference.
+pub fn (mut c Ctl) set_context(context ControlContext) {
+	c.callback_context = context
+}
+
+// context returns the attached state when its type matches T.
+@[inline]
+pub fn (c &Ctl) context[T]() ?&T {
+	context := c.callback_context or { return none }
+	if context is T { return context }
+	return none
+}
+
 fn (c &Ctl) can_adopt(child &Ctl) bool {
 	return !c.destroyed && !child.destroyed && child.kind != .window && !child.contains_ctl(c)
 }
 
-fn (c &Ctl) contains_ctl(child &Ctl) bool {
-	mut node := unsafe { child }
-	for !isnil(node) {
+// Controls are handles. Compare their addresses even inside optional references.
+@[inline]
+pub fn (a &Ctl) == (b &Ctl) bool {
+	return voidptr(a) == voidptr(b)
+}
+
+@[inline]
+fn same_ctl(a ?&Ctl, b ?&Ctl) bool {
+	first := a or { return b == none }
+	second := b or { return false }
+	return first == second
+}
+
+@[inline]
+fn same_app(owner ?&App, app &App) bool {
+	current := owner or { return false }
+	return current == app
+}
+
+fn (c &Ctl) contains_ctl(child ?&Ctl) bool {
+	mut next := child
+	for {
+		node := next or { return false }
 		if node == c { return true }
-		node = node.parent
+		next = node.parent
 	}
-	return false
 }
 
 // add reparents a control and rejects cycles rather than corrupting the tree.
@@ -242,50 +282,51 @@ pub fn (mut c Ctl) add(mut child Ctl) {
 
 pub fn (mut c Ctl) detach() {
 	c.invalidate()
-	mut app := c.root().app
-	if !isnil(app) {
+	owner := c.root().app
+	if mut app := owner {
 		app.sources_dirty = true
 		app.release_ctl(&c)
 	}
-	mut ancestor := c.parent
-	for !isnil(ancestor) {
-		if c.contains_ctl(ancestor.selected_node) { ancestor.selected_node = unsafe { nil } }
-		if c.contains_ctl(ancestor.default_button) { ancestor.default_button = unsafe { nil } }
-		ancestor = ancestor.parent
+	mut next := c.parent
+	for {
+		mut ancestor := next or { break }
+		if c.contains_ctl(ancestor.selected_node) { ancestor.selected_node = none }
+		if c.contains_ctl(ancestor.default_button) { ancestor.default_button = none }
+		next = ancestor.parent
 	}
-	if !isnil(c.parent) {
-		if c.parent.menu == &c { c.parent.menu = unsafe { nil } }
-		at := c.parent.kids.index(&c)
-		if at >= 0 { c.parent.kids.delete(at) }
+	if mut parent := c.parent {
+		if same_ctl(parent.menu, &c) { parent.menu = none }
+		at := parent.kids.index(&c)
+		if at >= 0 { parent.kids.delete(at) }
 	}
-	if !isnil(c.term) { c.term.standalone_window = none }
-	c.parent = unsafe { nil }
-	c.app = unsafe { nil }
-	if !isnil(app) {
+	if mut term := c.term { term.standalone_window = none }
+	c.parent = none
+	c.app = none
+	if mut app := owner {
 		if c.kind == .window {
 			at := app.windows.index(&c)
 			if at >= 0 { app.windows.delete(at) }
 			app.window_layout = WindowLayout{}
 		}
-		if isnil(app.focus) { app.focus_first(app.top_window_ptr()) }
+		if app.focus == none { app.focus_first(app.top_window()) }
 	}
 }
 
 // clear detaches children; use App.destroy_ctl when their resources must close.
 pub fn (mut c Ctl) clear() {
 	for mut child in c.kids.clone() { child.detach() }
-	c.selected_node = unsafe { nil }
+	c.selected_node = none
 	c.invalidate()
 }
 
 pub fn (mut c Ctl) replace(mut child Ctl, mut replacement Ctl) bool {
-	if child.parent != &c || c.kids.index(&child) < 0 || !c.can_adopt(&replacement) { return false }
+	if !same_ctl(child.parent, &c) || c.kids.index(&child) < 0 || !c.can_adopt(&replacement) { return false }
 	if &child == &replacement { return true }
 	replacement.detach()
 	at := c.kids.index(&child)
 	if at < 0 { return false }
 	child.detach()
-	if !c.can_adopt(&replacement) || !isnil(replacement.parent) { return false }
+	if !c.can_adopt(&replacement) || replacement.parent != none { return false }
 	replacement.parent = &c
 	c.kids.insert(clamp(at, 0, c.kids.len), &replacement)
 	c.sources_changed()
@@ -293,10 +334,12 @@ pub fn (mut c Ctl) replace(mut child Ctl, mut replacement Ctl) bool {
 	return true
 }
 
-fn (c &Ctl) owner_window_ptr() &Ctl {
-	mut p := unsafe { c }
-	for !isnil(p) && p.kind != .window { p = p.parent }
-	return p
+pub fn (c &Ctl) owner_window() ?&Ctl {
+	mut node := &Ctl(c)
+	for node.kind != .window {
+		node = node.parent or { return none }
+	}
+	return node
 }
 
 pub fn (mut c Ctl) set_text(text string) {
@@ -321,28 +364,24 @@ pub fn (mut c Ctl) set_text(text string) {
 
 // root resolves ownership dynamically so entire subtrees can be reparented.
 fn (c &Ctl) root() &Ctl {
-	mut root := unsafe { c }
-	for !isnil(root.parent) { root = root.parent }
-	return root
+	mut root := &Ctl(c)
+	for { root = root.parent or { return root } }
 }
 
 // Detached controls are accessible; roots owned by another app are not.
 fn (app &App) can_access(c &Ctl) bool {
-	if isnil(c) { return true }
-	owner := c.root().app
-	return isnil(owner) || owner == app
+	owner := c.root().app or { return true }
+	return owner == app
 }
 
 // invalidate schedules a redraw without emitting a changed callback.
 // Detached controls have no app and can be configured safely.
 pub fn (c &Ctl) invalidate() {
-	mut app := c.root().app
-	if !isnil(app) { app.dirty = true }
+	if mut app := c.root().app { app.dirty = true }
 }
 
 pub fn (mut c Ctl) fire() {
-	mut app := c.root().app
-	if isnil(app) { return }
+	mut app := c.root().app or { return }
 	if f := c.changed {
 		app.dirty = true
 		f(mut c, mut app)
@@ -354,13 +393,12 @@ pub fn (mut c Ctl) fire() {
 }
 
 pub fn (c &Ctl) visible() bool {
-	mut p := unsafe { c }
-	for !isnil(p) {
+	mut p := &Ctl(c)
+	for {
 		if p.hidden || p.closed || p.minimized || p.disabled { return false }
-		if p.kind == .window && !isnil(p.app) && !p.app.on_desktop(p) { return false }
-		p = p.parent
+		if p.kind == .window && p.app != none && !p.app.on_desktop(p) { return false }
+		p = p.parent or { return true }
 	}
-	return true
 }
 
 pub struct Notice {
@@ -375,8 +413,7 @@ mut:
 pub struct Launcher {
 pub:
 	name  string
-	start fn (mut App, voidptr) = fn (mut app App, data voidptr) {}
-	data  voidptr
+	start fn (mut App) = fn (mut _ App) {}
 }
 
 struct Hook {
@@ -416,7 +453,7 @@ pub mut:
 	resize_key       Binding = Binding{ key: int(Key.f8), alt: true }
 mut:
 	windows          []&Ctl
-	focus            &Ctl = unsafe { nil }
+	focus            ?&Ctl
 	popups           []&Ctl
 	notices          []&Notice
 	launchers        []Launcher
@@ -446,9 +483,9 @@ mut:
 	started          bool
 	quitting         bool
 	finishing        bool
-	drag             &Ctl = unsafe { nil }
+	drag             ?&Ctl
 	drag_mode        int
-	scroll_drag      &Ctl = unsafe { nil }
+	scroll_drag      ?&Ctl
 	scroll_total     int
 	scroll_view      int
 	drag_start       Rect
@@ -456,11 +493,11 @@ mut:
 	drag_y           int
 	tab_drag_last_x  int
 	tab_drag_last_y  int
-	title_click      &Ctl = unsafe { nil }
+	title_click      ?&Ctl
 	title_click_at   i64
 	title_click_x    int
 	title_click_y    int
-	placement        &Ctl = unsafe { nil }
+	placement        ?&Ctl
 	placement_resize bool
 	placement_start  Rect
 	window_layout    WindowLayout
@@ -468,11 +505,11 @@ mut:
 	settings_path    string
 	bar_offset       int
 	next_window_order int
-	app_popup        &Ctl = unsafe { nil }
+	app_popup        ?&Ctl
 	popup_at_bar     bool
 	mouse_x          int = -1
 	mouse_y          int = -1
-	hover            &Ctl = unsafe { nil }
+	hover            ?&Ctl
 	updating_hover   bool
 	terminal_focused bool = true
 }

@@ -112,14 +112,14 @@ fn (mut app App) draw_date_picker(c &Ctl) {
 		selected := day == date.day
 		is_today := day == today.day && date.month == today.month && date.year == today.year
 		bg := if selected && !c.disabled {
-			if app.focus == c { t.focus_bg } else { t.sel_bg }
+			if same_ctl(app.focus, c) { t.focus_bg } else { t.sel_bg }
 		} else {
 			t.field_bg
 		}
 		color := if c.disabled {
 			t.dim
 		} else if selected {
-			if app.focus == c { t.focus_fg } else { t.sel_fg }
+			if same_ctl(app.focus, c) { t.focus_fg } else { t.sel_fg }
 		} else if is_today {
 			t.accent
 		} else {
@@ -136,7 +136,7 @@ fn (mut app App) draw_date_picker(c &Ctl) {
 }
 
 fn date_picker_accept(mut c Ctl, mut app App) {
-	mut w := c.owner_window_ptr()
+	mut w := c.owner_window() or { return }
 	w.dialog_result = 1
 	app.close(mut w)
 }

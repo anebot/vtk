@@ -4,8 +4,8 @@ pub fn context_menu() &Ctl { return new_ctl(.menu) }
 
 // set_menu attaches a context menu so its items inherit the control's app.
 pub fn (mut c Ctl) set_menu(mut menu Ctl) {
-	if menu.kind != .menu || c.menu == &menu || !c.can_adopt(&menu) { return }
-	if !isnil(c.menu) { c.menu.detach() }
+	if menu.kind != .menu || same_ctl(c.menu, &menu) || !c.can_adopt(&menu) { return }
+	if mut old := c.menu { old.detach() }
 	menu.detach()
 	if !c.can_adopt(&menu) { return }
 	// A context menu inherits ownership without becoming a choice or tab.
@@ -32,8 +32,9 @@ pub fn (mut c Ctl) menu_separator() {
 }
 
 pub fn (mut app App) open_menu(owner &Ctl, x int, y int) {
-	w := owner.owner_window_ptr()
-	if !isnil(w) && (w.app != &app || !isnil(app.blocker(w))) { return }
+	if w := owner.owner_window() {
+		if !same_app(w.app, &app) || app.blocker(w) != none { return }
+	}
 	app.close_popups()
 	app.push_menu(owner, x, y)
 }
@@ -41,8 +42,10 @@ pub fn (mut app App) open_menu(owner &Ctl, x int, y int) {
 fn (mut app App) push_menu(owner &Ctl, x int, y int) {
 	if owner.kids.len == 0 { return }
 	mut root := owner.root()
-	if root.kind == .window && root.app != &app { return }
-	if !isnil(root.app) && root.app != &app { root.app.clear_hover_within(root) }
+	if root.kind == .window && !same_app(root.app, &app) { return }
+	if mut previous := root.app {
+		if previous != &app { previous.clear_hover_within(root) }
+	}
 	root.app = app
 	mut width := 8
 	for item in owner.kids { width = max(width, text_width(item.text) + 4) }
@@ -75,9 +78,8 @@ fn (mut app App) popup_outside_press(e Event) {
 		app.close_popups()
 		return
 	}
-	menu := app.menu_title_at(e.x, e.y)
-	if !isnil(menu) {
-		if app.popups.len > 0 && app.popups[0].popup_owner == menu {
+	if menu := app.menu_title_at(e.x, e.y) {
+		if app.popups.len > 0 && same_ctl(app.popups[0].popup_owner, menu) {
 			app.close_popups()
 		} else {
 			app.open_menu(menu, menu.x, menu.y + 1)
@@ -85,10 +87,10 @@ fn (mut app App) popup_outside_press(e Event) {
 		return
 	}
 	if app.bar_height() > 0 && e.y == app.bar_y() {
-		previous := if app.popups.len > 0 { app.popups[0].popup_owner } else { unsafe { nil } }
+		previous := if app.popups.len > 0 { app.popups[0].popup_owner } else { ?&Ctl(none) }
 		app.bar_mouse(e)
 		// Bar actions that opened a menu keep it; the rest dismiss the old one.
-		if app.popups.len > 0 && !isnil(previous) && app.popups[0].popup_owner == previous {
+		if app.popups.len > 0 && previous != none && same_ctl(app.popups[0].popup_owner, previous) {
 			app.close_popups()
 		}
 		return
@@ -96,35 +98,40 @@ fn (mut app App) popup_outside_press(e Event) {
 	app.close_popups()
 }
 
-fn (app &App) menu_title_at(x int, y int) &Ctl {
+fn (app &App) menu_title_at(x int, y int) ?&Ctl {
 	for i := app.windows.len - 1; i >= 0; i-- {
 		w := app.windows[i]
 		if !app.on_desktop(w) || w.closed || w.minimized || w.hidden || !w.rect().contains(x, y) {
 			continue
 		}
-		if !isnil(app.blocker(w)) { return unsafe { nil } }
+		if app.blocker(w) != none { return none }
 		for menu in w.kids {
 			if menu.kind == .menu && !menu.hidden && menu.rect().contains(x, y) { return menu }
 		}
-		return unsafe { nil }
+		return none
 	}
-	return unsafe { nil }
+	return none
 }
 
 pub fn (mut app App) close_popups() {
 	app.popups = []
-	app.app_popup = unsafe { nil }
+	app.app_popup = none
 	app.popup_at_bar = false
 	app.dirty = true
 }
 
+fn (app &App) can_access_popup(popup &Ctl) bool {
+	owner := popup.popup_owner or { return false }
+	return app.can_access(owner)
+}
+
 fn (mut app App) layout_popups() {
-	if app.popups.any(!app.can_access(it.popup_owner)) {
+	if app.popups.any(!app.can_access_popup(it)) {
 		app.close_popups()
 		return
 	}
 	anchored := app.popup_at_bar
-	if anchored && ((!isnil(app.app_popup) && !app.desktop) || app.bar_height() == 0 || app.height < 4 || app.width < 7) {
+	if anchored && ((app.app_popup != none && !app.desktop) || app.bar_height() == 0 || app.height < 4 || app.width < 7) {
 		app.close_popups()
 		return
 	}
@@ -135,12 +142,13 @@ fn (mut app App) layout_popups() {
 	}
 	height := area.h
 	for i, mut p in app.popups {
+		owner := p.popup_owner or { continue }
 		mut width := 8
-		for item in p.popup_owner.kids { width = max(width, text_width(item.text) + 4) }
+		for item in owner.kids { width = max(width, text_width(item.text) + 4) }
 		p.w = min(app.width, width)
-		p.h = min(height, p.popup_owner.kids.len + 2)
+		p.h = min(height, owner.kids.len + 2)
 		if i == 0 && anchored {
-			if !isnil(app.app_popup) { p.x = 0 }
+			if app.app_popup != none { p.x = 0 }
 			p.y = if app.bar_top { area.y } else { area.y + height - p.h }
 		} else if i > 0 {
 			parent := app.popups[i - 1]
@@ -154,8 +162,8 @@ fn (mut app App) layout_popups() {
 		p.x = clamp(p.x, 0, app.width - p.w)
 		p.y = clamp(p.y, area.y, area.y + height - p.h)
 		view := max(1, p.h - 2)
-		p.value = clamp(p.value, 0, p.popup_owner.kids.len - 1)
-		p.top = clamp(p.top, 0, p.popup_owner.kids.len - view)
+		p.value = clamp(p.value, 0, owner.kids.len - 1)
+		p.top = clamp(p.top, 0, owner.kids.len - view)
 		p.scroll_into_view(p.value, view)
 	}
 }
@@ -163,14 +171,14 @@ fn (mut app App) layout_popups() {
 fn (mut app App) choose_popup() {
 	if app.popups.len == 0 { return }
 	p := app.popups.last()
-	if p.value < 0 || p.value >= p.popup_owner.kids.len { return }
-	mut item := p.popup_owner.kids[p.value]
+	mut owner := p.popup_owner or { return }
+	if p.value < 0 || p.value >= owner.kids.len { return }
+	mut item := owner.kids[p.value]
 	if item.disabled || item.kind == .separator { return }
 	if item.kind == .menu {
 		app.push_menu(item, p.x + p.w - 1, p.y + p.value)
 		return
 	}
-	mut owner := p.popup_owner
 	app.close_popups()
 	if owner.kind == .combo {
 		owner.value = p.value
@@ -182,6 +190,7 @@ fn (mut app App) choose_popup() {
 
 fn (mut app App) popup_key(e Event) {
 	mut p := app.popups.last()
+	owner := p.popup_owner or { return }
 	if e.key in [int(Key.escape), int(Key.left), int(`h`)] && app.popups.len > 1 {
 		app.popups.delete_last()
 		app.dirty = true
@@ -190,8 +199,8 @@ fn (mut app App) popup_key(e Event) {
 	if e.key in [int(Key.up), int(`k`), int(Key.down), int(`j`)] {
 		step := if e.key in [int(Key.up), int(`k`)] { -1 } else { 1 }
 		mut at := p.value + step
-		for at >= 0 && at < p.popup_owner.kids.len {
-			if p.popup_owner.kids[at].kind != .separator {
+		for at >= 0 && at < owner.kids.len {
+			if owner.kids[at].kind != .separator {
 				p.value = at
 				break
 			}
@@ -200,12 +209,13 @@ fn (mut app App) popup_key(e Event) {
 		p.scroll_into_view(p.value, p.h - 2)
 	} else if e.key in [int(Key.enter), int(Key.space)] {
 		app.choose_popup()
-	} else if e.key in [int(Key.right), int(`l`)] && p.value < p.popup_owner.kids.len && p.popup_owner.kids[p.value].kind == .menu {
+	} else if e.key in [int(Key.right), int(`l`)] && p.value < owner.kids.len && owner.kids[p.value].kind == .menu {
 		app.choose_popup()
-	} else if e.key in [int(Key.left), int(Key.right), int(`h`), int(`l`)] && !isnil(p.popup_owner.parent) && p.popup_owner.parent.kind == .window {
-		menus := p.popup_owner.parent.kids.filter(it.kind == .menu)
+	} else if e.key in [int(Key.left), int(Key.right), int(`h`), int(`l`)]
+		&& owner.parent != none && owner.parent.kind == .window {
+		menus := owner.parent.kids.filter(it.kind == .menu)
 		for i, menu in menus {
-			if menu == p.popup_owner {
+			if owner == menu {
 				next := menus[(i + (if e.key in [int(Key.left), int(`h`)] {
 					menus.len - 1
 				} else {
@@ -225,11 +235,12 @@ fn (mut app App) draw_popups() {
 	t := app.theme
 	for p in app.popups {
 		if !app.screen.paints(p.rect()) { continue }
+		owner := p.popup_owner or { continue }
 		app.screen.fill(p.rect(), ` `, t.fg, t.bg)
 		app.screen.frame(p.rect(), false, t.frame, t.bg)
 		old := app.screen.set_clip(Rect{p.x + 1, p.y + 1, p.w - 2, p.h - 2})
-		for i := p.top; i < p.popup_owner.kids.len && i < p.top + p.h - 2; i++ {
-			item := p.popup_owner.kids[i]
+		for i := p.top; i < owner.kids.len && i < p.top + p.h - 2; i++ {
+			item := owner.kids[i]
 			y := p.y + 1 + i - p.top
 			fg := if item.disabled {
 				t.dim
@@ -245,8 +256,8 @@ fn (mut app App) draw_popups() {
 				` `
 			}, fg, bg)
 			if item.kind != .separator {
-				if p.popup_owner.kind == .combo {
-					app.screen.aligned_text(p.x + 2, y, p.w - 4, item.text, p.popup_owner.text_align, fg, bg, 0)
+				if owner.kind == .combo {
+					app.screen.aligned_text(p.x + 2, y, p.w - 4, item.text, owner.text_align, fg, bg, 0)
 				} else {
 					app.screen.text(p.x + 2, y, item.text, fg, bg, 0)
 				}
@@ -282,7 +293,7 @@ fn window_menu_action(mut item Ctl, mut app App) {
 }
 
 pub fn (mut app App) window_menu(mut w Ctl, x int, y int) {
-	if !app.can_manage(&w) || !app.on_desktop(&w) || w.hidden || w.closed || w.disabled || !isnil(app.blocker(&w)) { return }
+	if !app.can_manage(&w) || !app.on_desktop(&w) || w.hidden || w.closed || w.disabled || app.blocker(&w) != none { return }
 	mut menu := context_menu()
 	names := ['Minimize', if w.maximized { 'Restore' } else { 'Maximize' }, 'Move', 'Resize',
 		(if w.always_on_top { '[x] ' } else { '[ ] ' }) + 'Always on top', 'Close']

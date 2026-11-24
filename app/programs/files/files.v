@@ -73,7 +73,7 @@ mut:
 // any window can read the drag state without module globals.
 struct Shared {
 mut:
-	app   &vtk.App = unsafe { nil }
+	app   &vtk.App @[required]
 	panes []&Pane
 	next  int
 	drag  Drag
@@ -89,12 +89,12 @@ struct Column {
 struct Pane {
 mut:
 	id          int
-	shared      &Shared  = unsafe { nil }
-	win         &vtk.Ctl = unsafe { nil }
-	canvas      &vtk.Ctl = unsafe { nil }
-	status      &vtk.Ctl = unsafe { nil }
-	path_field  &vtk.Ctl = unsafe { nil }
-	hidden_btn  &vtk.Ctl = unsafe { nil }
+	shared      &Shared @[required]
+	win         &vtk.Ctl @[required]
+	canvas      &vtk.Ctl @[required]
+	status      &vtk.Ctl @[required]
+	path_field  &vtk.Ctl @[required]
+	hidden_btn  &vtk.Ctl @[required]
 	path        string
 	issue       string
 	entries     []Entry
@@ -161,23 +161,19 @@ fn cmp_nums(a i64, b i64) int {
 
 // pane_from resolves the window or control that owns a Pane.
 fn pane_from(c &vtk.Ctl) ?&Pane {
-	if isnil(c.user) { return none }
-	return unsafe { &Pane(c.user) }
+	return c.context[Pane]()
 }
 
-// files_window identifies the windows Files created; they are the only ones
-// whose Ctl.user holds a Pane.
+// files_window identifies the windows Files created.
 fn files_window(w &vtk.Ctl) bool {
-	return w.kind == .window && w.text.starts_with(title_prefix)
+	return w.kind == .window && pane_from(w) != none
 }
 
 fn theme_of(p &Pane) vtk.Theme {
-	if isnil(p.shared) || isnil(p.shared.app) { return vtk.theme_default() }
 	return p.shared.app.theme
 }
 
 fn focused(c &vtk.Ctl, p &Pane) bool {
-	if isnil(p.shared) || isnil(p.shared.app) { return false }
 	if f := p.shared.app.focused_ctl() { return f == c }
 	return false
 }
@@ -473,15 +469,13 @@ fn (mut p Pane) refresh() {
 	}
 	if p.cursor < 0 { p.cursor_path = '' }
 	if p.view == .columns { p.build_columns() }
-	if !isnil(p.hidden_btn) { p.hidden_btn.value = int(p.show_hidden) }
-	if !isnil(p.path_field) {
-		p.path_field.set_text(p.path)
-		p.path_field.cursor = 0
-	}
-	if !isnil(p.win) { p.win.set_text(title_prefix + os.base(p.path)) }
+	p.hidden_btn.value = int(p.show_hidden)
+	p.path_field.set_text(p.path)
+	p.path_field.cursor = 0
+	p.win.set_text(title_prefix + os.base(p.path))
 	p.ensure_visible()
 	p.update_status()
-	if !isnil(p.canvas) { p.canvas.invalidate() }
+	p.canvas.invalidate()
 }
 
 fn (mut p Pane) navigate(path string, remember bool) {
@@ -585,7 +579,6 @@ fn (mut p Pane) scroll(delta int) {
 }
 
 fn (mut p Pane) update_status() {
-	if isnil(p.status) { return }
 	mut parts := []string{}
 	if p.issue != '' {
 		parts << p.issue
@@ -1012,8 +1005,7 @@ fn draw_overlay(mut app vtk.App, mut s vtk.Screen) {
 // Drag and drop
 // ---------------------------------------------------------------------------
 
-// files_owned reports whether a control lives in a Files window. Other programs
-// store their own state in Ctl.user, so that pointer alone cannot identify a Pane.
+// files_owned reports whether a control lives in a Files window.
 fn files_owned(c &vtk.Ctl) bool {
 	if c.kind == .window { return files_window(c) }
 	parent := c.parent_ctl() or { return false }
@@ -1715,7 +1707,7 @@ fn toolbar_sort(mut c vtk.Ctl, mut app vtk.App) {
 
 fn choose_sort(mut c vtk.Ctl, mut _ vtk.App) {
 	mut p := pane_from(c) or { return }
-	by := unsafe { SortBy(int(c.data)) }
+	by := SortBy.from(c.data) or { return }
 	if p.sort == by {
 		p.descending = !p.descending
 	} else {
@@ -1782,20 +1774,11 @@ fn next_id(sh &Shared) int {
 fn new_files_window(mut app vtk.App, shared &Shared, path string) &Pane {
 	// The drag ghost spans every window, so Files owns the app overlay.
 	app.overlay = draw_overlay
-	mut p := &Pane{
-		id:       next_id(shared)
-		shared:   shared
-		path:     os.real_path(path)
-		selected: map[string]bool{}
-		sort:     .name
-		view:     .list
-	}
-	if !os.is_dir(p.path) { p.path = os.home_dir() }
+	resolved := os.real_path(path)
+	start := if os.is_dir(resolved) { resolved } else { os.home_dir() }
 	mut win := app.window('Files', 84, 24)
-	win.user = voidptr(p)
 	win.destroy = window_destroyed
 	win.set_size_limits(40, 8, 0, 0)
-	p.win = win
 
 	mut tools := vtk.toolbar()
 	mut back := vtk.toolbutton('←')
@@ -1810,14 +1793,30 @@ fn new_files_window(mut app vtk.App, shared &Shared, path string) &Pane {
 	mut icons := vtk.toolbutton('Icons')
 	mut columns := vtk.toolbutton('Cols')
 	mut sort_btn := vtk.toolbutton('Sort')
-	mut field := vtk.entry(p.path, 0)
+	mut field := vtk.entry(start, 0)
+	mut status := vtk.statusbar('')
+	mut canvas := vtk.canvas(20, 10, paint_pane)
+	mut p := &Pane{
+		id:         next_id(shared)
+		shared:     shared
+		win:        win
+		canvas:     canvas
+		status:     status
+		path_field: field
+		hidden_btn: hidden
+		path:       start
+		selected:   map[string]bool{}
+		sort:       .name
+		view:       .list
+	}
+	win.set_context(p)
 	field.expand = true
 	field.submit = path_submitted
 
 	mut buttons := [back, fwd, up, home, refresh, folder, hidden, newwin, list, icons, columns,
 		sort_btn]
 	for mut button in buttons {
-		button.user = voidptr(p)
+		button.set_context(p)
 	}
 	back.changed = toolbar_back
 	fwd.changed = toolbar_forward
@@ -1836,23 +1835,16 @@ fn new_files_window(mut app vtk.App, shared &Shared, path string) &Pane {
 	for entry in sort_entries {
 		mut item := sort_menu.menu_item(entry.label, choose_sort)
 		item.data = i64(int(entry.by))
-		item.user = voidptr(p)
+		item.set_context(p)
 	}
 	sort_btn.set_menu(mut sort_menu)
 
-	mut canvas := vtk.canvas(20, 10, paint_pane)
 	canvas.expand = true
 	canvas.focusable = true
 	canvas.mouse_capture = true
-	canvas.user = voidptr(p)
+	canvas.set_context(p)
 	canvas.mousefn = pane_mouse
 	canvas.keyfn = pane_key
-	p.canvas = canvas
-	p.hidden_btn = hidden
-
-	mut status := vtk.statusbar('')
-	p.status = status
-	p.path_field = field
 
 	tools.add(mut back)
 	tools.add(mut fwd)
@@ -1889,7 +1881,7 @@ fn shared_for(mut app vtk.App) &Shared {
 	return &Shared{ app: app }
 }
 
-pub fn launch(mut app vtk.App, _ voidptr) {
+pub fn launch(mut app vtk.App) {
 	new_files_window(mut app, shared_for(mut app), os.home_dir())
 }
 

@@ -19,37 +19,34 @@ pub fn (mut app App) window(title string, width int, height int) &Ctl {
 	return w
 }
 
-fn (app &App) top_window_ptr() &Ctl {
+pub fn (app &App) top_window() ?&Ctl {
 	for i := app.windows.len - 1; i >= 0; i-- {
 		w := app.windows[i]
 		if app.on_desktop(w) && !w.closed && !w.minimized && !w.hidden { return w }
 	}
-	return unsafe { nil }
+	return none
 }
 
-fn (app &App) blocker(w &Ctl) &Ctl {
-	desktop_id := if isnil(w) { app.active_desktop } else { w.desktop_id }
+fn (app &App) blocker(w ?&Ctl) ?&Ctl {
+	desktop_id := if w == none { app.active_desktop } else { w.desktop_id }
 	for i := app.windows.len - 1; i >= 0; i-- {
 		d := app.windows[i]
-		if d == w {
-			if d.modal { return unsafe { nil } }
-			continue
-		}
-		if d.closed || d.minimized || !d.modal || d.desktop_id != desktop_id { continue }
+		if !d.modal { continue }
+		if same_ctl(w, d) { return none }
+		if d.closed || d.minimized || d.desktop_id != desktop_id { continue }
 		// A nested dialog is allowed above the modal which owns it.
-		if !isnil(w) && w.has_modal_ancestor(d) { continue }
-		if isnil(d.modal_owner) || d.modal_owner == w { return d }
+		if w != none && w.has_modal_ancestor(d) { continue }
+		if d.modal_owner == none || same_ctl(d.modal_owner, w) { return d }
 	}
-	return unsafe { nil }
+	return none
 }
 
 fn (w &Ctl) has_modal_ancestor(ancestor &Ctl) bool {
-	mut node := unsafe { w }
-	for !isnil(node) {
+	mut node := &Ctl(w)
+	for {
 		if node == ancestor { return true }
-		node = if !isnil(node.modal_parent) { node.modal_parent } else { node.modal_owner }
+		node = node.modal_parent or { node.modal_owner or { return false } }
 	}
-	return false
 }
 
 fn (app &App) can_manage(w &Ctl) bool {
@@ -58,11 +55,9 @@ fn (app &App) can_manage(w &Ctl) bool {
 
 pub fn (mut app App) raise(mut w Ctl) {
 	if !app.can_manage(&w) { return }
-	if isnil(w.app) { w.app = app; w.desktop_id = app.active_desktop }
+	if w.app == none { w.app = app; w.desktop_id = app.active_desktop }
 	if !app.on_desktop(&w) && !app.switch_desktop(w.desktop_id) { return }
-	mut blocked := app.blocker(&w)
-	if !isnil(blocked) {
-		mut dialog := blocked
+	if mut dialog := app.blocker(&w) {
 		app.raise(mut dialog)
 		return
 	}
@@ -85,14 +80,17 @@ pub fn (mut app App) raise(mut w Ctl) {
 	app.windows.insert(at, &w)
 	if previous < 0 { app.sources_dirty = true }
 	w.fit_window(app.work_area())
-	if isnil(app.focus) || app.focus.owner_window_ptr() != &w || !app.focus.visible() {
+	focused_here := if focus := app.focus {
+		same_ctl(focus.owner_window(), &w) && focus.visible()
+	} else { false }
+	if !focused_here {
 		app.focus_first(&w)
 	}
 	app.dirty = true
 }
 
 pub fn (mut app App) close(mut w Ctl) bool {
-	if w.kind != .window || w.app != &app { return false }
+	if w.kind != .window || !same_app(w.app, &app) { return false }
 	return app.close_windows([&w], false)
 }
 
@@ -104,7 +102,7 @@ fn (mut app App) close_windows(windows []&Ctl, all_windows bool) bool {
 	defer { for mut w in approved { w.closing_now = false } }
 	for i := 0; i < pending.len; i++ {
 		mut w := pending[i]
-		if w.app != &app { return false }
+		if !same_app(w.app, &app) { return false }
 		if w.closed { continue }
 		if w.closing_now { return false }
 		w.closing_now = true
@@ -113,20 +111,20 @@ fn (mut app App) close_windows(windows []&Ctl, all_windows bool) bool {
 			if !f(mut w, mut app) { return false }
 		}
 		for dialog in app.windows {
-			if (all_windows || dialog.modal_owner == w || dialog.modal_parent == w)
+			if (all_windows || same_ctl(dialog.modal_owner, w) || same_ctl(dialog.modal_parent, w))
 				&& pending.index(dialog) < 0 { pending << dialog }
 		}
 	}
-	if approved.any(it.app != &app) { return false }
+	if approved.any(!same_app(it.app, &app)) { return false }
 	for mut w in approved { w.closed = true }
 	for mut w in approved {
-		if w.app != &app { continue }
+		if !same_app(w.app, &app) { continue }
 		app.release_ctl(w)
-		if w.app == &app { app.close_terminals(mut w) }
+		if same_app(w.app, &app) { app.close_terminals(mut w) }
 	}
 	if approved.len > 0 {
 		app.close_popups()
-		if isnil(app.focus) { app.focus_first(app.top_window_ptr()) }
+		if app.focus == none { app.focus_first(app.top_window()) }
 		app.dirty = true
 	}
 	return true
@@ -134,7 +132,7 @@ fn (mut app App) close_windows(windows []&Ctl, all_windows bool) bool {
 
 pub fn (mut app App) destroy_ctl(mut c Ctl) {
 	if c.destroyed || !app.can_access(&c) { return }
-	if c.kind == .window && !isnil(c.app) && !app.close(mut c) { return }
+	if c.kind == .window && c.app != none && !app.close(mut c) { return }
 	app.dispose_ctl(mut c)
 }
 
@@ -145,20 +143,19 @@ fn (mut app App) dispose_ctl(mut c Ctl) {
 	c.closed = true
 	app.release_ctl(&c)
 	for mut child in c.kids.clone() {
-		if child.parent == &c { app.dispose_ctl(mut child) }
+		if same_ctl(child.parent, &c) { app.dispose_ctl(mut child) }
 	}
-	if !isnil(c.menu) {
-		mut menu := c.menu
+	if mut menu := c.menu {
 		app.dispose_ctl(mut menu)
 	}
-	if !isnil(c.term) { c.term.close() }
+	if c.term != none { c.term.close() }
 	if f := c.destroy { f(mut c, mut app) }
 	c.detach()
 	c.kids = []
 	c.link = none
-	c.user = voidptr(0)
-	c.selected_node, c.default_button = unsafe { nil }, unsafe { nil }
-	c.modal_owner, c.modal_parent, c.popup_owner = unsafe { nil }, unsafe { nil }, unsafe { nil }
+	c.callback_context = none
+	c.selected_node, c.default_button = none, none
+	c.modal_owner, c.modal_parent, c.popup_owner = none, none, none
 	c.changed, c.submit, c.destroy = none, none, none
 	c.keyfn, c.mousefn = none, none
 	c.mouse_enter, c.mouse_leave = none, none
@@ -175,10 +172,9 @@ fn (mut app App) dispose_ctl(mut c Ctl) {
 }
 
 pub fn (mut app App) set_default_button(mut w Ctl, button ?&Ctl) bool {
-	if w.kind != .window || w.app != &app { return false }
-	value := button or { unsafe { nil } }
-	if !isnil(value) && !w.contains_ctl(value) { return false }
-	w.default_button = value
+	if w.kind != .window || !same_app(w.app, &app) { return false }
+	if button != none && !w.contains_ctl(button) { return false }
+	w.default_button = button
 	app.dirty = true
 	return true
 }
@@ -199,11 +195,11 @@ pub fn (mut app App) quit() {
 }
 
 pub fn (mut app App) minimize(mut w Ctl) {
-	if !app.can_manage(&w) || w.modal || !isnil(app.blocker(&w)) { return }
+	if !app.can_manage(&w) || w.modal || app.blocker(&w) != none { return }
 	w.minimized = true
 	app.clear_hover_within(&w)
-	if !isnil(app.focus) && app.focus.owner_window_ptr() == &w { app.focus = unsafe { nil } }
-	if isnil(app.focus) { app.focus_first(app.top_window_ptr()) }
+	if app.focus != none && same_ctl(app.focus.owner_window(), &w) { app.focus = none }
+	if app.focus == none { app.focus_first(app.top_window()) }
 	app.dirty = true
 }
 
@@ -393,7 +389,7 @@ fn (app &App) window_title_layout(w &Ctl) WindowTitleLayout {
 
 fn (mut app App) draw_window(mut w Ctl) {
 	t := app.theme
-	active := app.top_window_ptr() == &w
+	active := same_ctl(app.top_window(), &w)
 	frame := if active || !app.dim_inactive { t.frame } else { t.dim }
 	title_fg := if active || !app.dim_inactive { t.title } else { t.inactive_title }
 	title_bg := if active || !app.dim_inactive { t.title_bg } else { t.inactive_title_bg }
@@ -437,13 +433,13 @@ fn (mut app App) draw_window(mut w Ctl) {
 }
 
 pub fn (mut app App) set_focus(c &Ctl) {
-	if isnil(c) || c.root().app != &app || !c.focusable || !c.visible() || !isnil(app.blocker(c.owner_window_ptr())) { return }
-	if app.focus == c { return }
+	if isnil(c) || !same_app(c.root().app, &app) || !c.focusable || !c.visible() || app.blocker(c.owner_window()) != none { return }
+	if same_ctl(app.focus, c) { return }
 	old := app.focus
 	app.focus = c
 	app.screen.cursor_x = -1
 	app.cursor_dirty = true
-	if !isnil(old) { old.invalidate_paint() }
+	if previous := old { previous.invalidate_paint() }
 	c.invalidate_paint()
 }
 
@@ -453,40 +449,45 @@ fn focusable(c &Ctl, mut found []&Ctl) {
 	for child in c.kids { if child.kind != .menu { focusable(child, mut found) } }
 }
 
-fn (mut app App) focus_first(w &Ctl) {
-	if isnil(w) || !app.can_access(w) || !w.visible() || !isnil(app.blocker(w)) { return }
+fn (mut app App) focus_first(window ?&Ctl) {
+	w := window or { return }
+	if !app.can_access(w) || !w.visible() || app.blocker(w) != none { return }
 	mut found := []&Ctl{}
 	focusable(w, mut found)
 	if found.len > 0 { app.focus = found[0] }
 }
 
 fn (mut app App) enforce_modal_input() {
-	if app.popups.any(!app.can_access(it.popup_owner)) { app.close_popups() }
-	if !isnil(app.drag) && (!app.can_access(app.drag) || !app.drag.visible() || !isnil(app.blocker(app.drag.owner_window_ptr()))) {
-		app.drag = unsafe { nil }
+	if app.popups.any(!app.can_access_popup(it)) { app.close_popups() }
+	if app.drag != none && (!app.can_access(app.drag) || !app.drag.visible() || app.blocker(app.drag.owner_window()) != none) {
+		app.drag = none
 	}
-	if !isnil(app.scroll_drag) && (!app.can_access(app.scroll_drag) || !app.scroll_drag.visible() || !isnil(app.blocker(app.scroll_drag.owner_window_ptr()))) {
-		app.scroll_drag = unsafe { nil }
+	if app.scroll_drag != none && (!app.can_access(app.scroll_drag) || !app.scroll_drag.visible() || app.blocker(app.scroll_drag.owner_window()) != none) {
+		app.scroll_drag = none
 	}
-	if !app.can_access(app.placement) { app.placement = unsafe { nil } }
-	if !isnil(app.placement) && !isnil(app.blocker(app.placement)) {
-		app.placement_key(Event{ key: int(Key.escape) })
+	if placing := app.placement {
+		if !app.can_access(placing) {
+			app.placement = none
+		} else if app.blocker(placing) != none {
+			app.placement_key(Event{ key: int(Key.escape) })
+		}
 	}
-	if !isnil(app.focus) && (!app.can_access(app.focus) || !app.focus.visible()) { app.focus = unsafe { nil } }
-	mut blocked := app.blocker(if isnil(app.focus) { app.top_window_ptr() } else { app.focus.owner_window_ptr() })
-	if !isnil(blocked) { app.raise(mut blocked) }
-	if isnil(app.focus) { app.focus_first(app.top_window_ptr()) }
+	if app.focus != none && (!app.can_access(app.focus) || !app.focus.visible()) { app.focus = none }
+	if mut blocked := app.blocker(if app.focus == none { app.top_window() } else { app.focus.owner_window() }) {
+		app.raise(mut blocked)
+	}
+	if app.focus == none { app.focus_first(app.top_window()) }
 }
 
 fn (mut app App) focus_next(back bool) {
 	mut found := []&Ctl{}
-	w := if !isnil(app.focus) { app.focus.owner_window_ptr() } else { app.top_window_ptr() }
-	if isnil(w) { return }
+	target := if app.focus != none { app.focus.owner_window() } else { app.top_window() }
+	w := target or { return }
 	focusable(w, mut found)
 	if found.len == 0 { return }
 	mut at := if back { 0 } else { -1 }
 	for i, c in found {
-		if app.focus == c {
+		if same_ctl(app.focus, c) {
 			at = i
 			break
 		}

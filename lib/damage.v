@@ -53,27 +53,27 @@ pub fn (mut app App) invalidate_area(rect Rect) {
 
 // invalidate_paint redraws a control whose preferred size and layout are unchanged.
 pub fn (c &Ctl) invalidate_paint() {
-	mut app := c.root().app
-	if isnil(app) || !c.is_drawable() { return }
+	mut app := c.root().app or { return }
+	if !c.is_drawable() { return }
 	if app.screen.cells.len == 0 {
 		app.dirty = true
 		return
 	}
 	r := app.visible_paint_rect(c)
 	if r.w == 0 || r.h == 0 { return }
-	w := c.owner_window_ptr()
-	if !isnil(w) && app.covered_by_window(app.windows.index(w) + 1, r) { return }
+	if w := c.owner_window() {
+		if app.covered_by_window(app.windows.index(w) + 1, r) { return }
+	}
 	app.invalidate_area(r)
 }
 
 fn (c &Ctl) is_drawable() bool {
-	mut p := unsafe { c }
-	for !isnil(p) {
+	mut p := &Ctl(c)
+	for {
 		if p.hidden || p.closed || p.minimized { return false }
-		if p.kind == .window && !isnil(p.app) && !p.app.on_desktop(p) { return false }
-		p = p.parent
+		if p.kind == .window && p.app != none && !p.app.on_desktop(p) { return false }
+		p = p.parent or { return true }
 	}
-	return true
 }
 
 fn (app &App) paints_window(w &Ctl) bool {
@@ -112,9 +112,9 @@ fn (app &App) covered_by_window(first int, visible Rect) bool {
 fn (app &App) spinner_rect(spinner &Ctl) Rect {
 	if !spinner.is_drawable() { return Rect{} }
 	r := spinner.content_rect()
-	w := spinner.owner_window_ptr()
+	w := spinner.owner_window() or { return Rect{} }
 	cell := Rect{r.x, r.y, 1, 1}
-	if r.w <= 0 || r.h <= 0 || isnil(w) || !app.visible_paint_rect(spinner).contains(r.x, r.y)
+	if r.w <= 0 || r.h <= 0 || !app.visible_paint_rect(spinner).contains(r.x, r.y)
 		|| app.covered_by_window(app.windows.index(w) + 1, cell) {
 		return Rect{}
 	}
@@ -123,13 +123,14 @@ fn (app &App) spinner_rect(spinner &Ctl) Rect {
 
 fn (app &App) visible_paint_rect(c &Ctl) Rect {
 	mut rect := c.rect().intersection(app.work_area())
-	mut p := c.parent
-	for !isnil(p) && rect.w > 0 && rect.h > 0 {
+	mut next := c.parent
+	for rect.w > 0 && rect.h > 0 {
+		p := next or { break }
 		rect = rect.intersection(p.content_rect())
 		if p.kind == .scroll && p.scrollbar {
 			rect = rect.intersection(Rect{p.x, p.y, max(0, p.w - 1), p.h})
 		}
-		p = p.parent
+		next = p.parent
 	}
 	return rect
 }

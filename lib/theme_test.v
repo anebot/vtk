@@ -53,7 +53,7 @@ fn theme_test_luminance(color int) f64 {
 
 fn test_presets_keep_text_readable_on_each_assigned_background() {
 	for i in 0 .. theme_names.len {
-		preset := unsafe { Preset(i) }
+		preset := Preset.from(i) or { continue }
 		t := theme_preset(preset)
 		for pair in [[t.fg, t.bg], [t.btn_fg, t.btn_bg], [t.focus_fg, t.focus_bg],
 			[t.field_fg, t.field_bg], [t.sel_fg, t.sel_bg], [t.bar_fg, t.bar_bg],
@@ -71,7 +71,7 @@ fn theme_test_cell(_ &Ctl, _ int, _ int) string { return 'Project' }
 
 fn test_controls_use_matching_foreground_and_background_roles() {
 	for i in 0 .. theme_names.len {
-		preset := unsafe { Preset(i) }
+		preset := Preset.from(i) or { continue }
 		mut app := new_app()
 		app.theme = theme_preset(preset)
 		app.screen.resize(80, 24)
@@ -111,7 +111,7 @@ fn test_controls_use_matching_foreground_and_background_roles() {
 			app.draw_ctl(mut c)
 			assert app.screen.cells[at].fg == t.focus_fg && app.screen.cells[at].bg == t.focus_bg,
 				'${preset} ${c.kind}: ${app.screen.cells[at]}'
-			app.focus = unsafe { nil }
+			app.focus = none
 			app.draw_ctl(mut c)
 			assert app.screen.cells[at].fg == t.sel_fg && app.screen.cells[at].bg == t.sel_bg
 		}

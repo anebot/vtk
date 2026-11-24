@@ -147,11 +147,12 @@ fn (mut d Driver) read(timeout int, terminals []&Ctl) string {
 	mut wait := if d.wake[0] < 0 { limit_wait(timeout, 100) } else { timeout }
 	mut has_terminals := false
 	for c in terminals {
-		if c.closed || c.term.pty.fd < 0 { continue }
+		term := c.term or { continue }
+		if c.closed || term.pty.fd < 0 { continue }
 		has_terminals = true
-		if c.term.pty.drained { continue }
-		flags := C.POLLIN | if c.term.pending != '' { C.POLLOUT } else { 0 }
-		d.polls << C.pollfd{fd: c.term.pty.fd, events: i16(flags)}
+		if term.pty.drained { continue }
+		flags := C.POLLIN | if term.pending != '' { C.POLLOUT } else { 0 }
+		d.polls << C.pollfd{fd: term.pty.fd, events: i16(flags)}
 	}
 	// The shell can exit without a hangup if another process holds the slave open.
 	if has_terminals { wait = limit_wait(wait, d.terminal_check_at - time.ticks()) }
@@ -244,8 +245,8 @@ fn (mut d Driver) output(sequence string, options TtyWriteOptions) {
 fn (mut d Driver) flush_output() {
 	for d.output_head < d.output_queue.len {
 		chunk := d.output_queue[d.output_head].text
-		remaining := chunk.len - d.output_at
-		count := unsafe { int(C.write(d.write_fd, chunk.str + d.output_at, uint(remaining))) }
+		remaining := &chunk[d.output_at..]
+		count := int(C.write(d.write_fd, remaining.str, uint(remaining.len)))
 		if count < 0 && C.errno == C.EINTR { continue }
 		if count < 0 && (C.errno == C.EAGAIN || C.errno == C.EWOULDBLOCK) { return }
 		if count <= 0 {

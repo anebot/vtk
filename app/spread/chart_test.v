@@ -53,7 +53,7 @@ fn test_chart_dialog_changes_styles_titles_bounds_and_restores_sheet_focus() {
 	current.grid.table_select(0, 0, 3, 3)
 	app.after(0, fn (mut app vtk.App) {
 		mut selector := app.focused_ctl() or { panic('missing selector') }
-		mut settings := unsafe { &ChartView(selector.user) }
+		mut settings := selector.context[ChartView]() or { panic('missing callback context') }
 		settings.title.set_text('Budget overview')
 		settings.minimum.set_text('-5')
 		settings.maximum.set_text('20')

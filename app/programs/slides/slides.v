@@ -85,16 +85,14 @@ struct SlideTemplate {
 
 struct TemplatePicker {
 mut:
-	deck   &Deck    = unsafe { nil }
-	window &vtk.Ctl = unsafe { nil }
 	picked int      = -1
 }
 
 struct SettingsDialog {
 mut:
-	deck   &Deck    = unsafe { nil }
-	window &vtk.Ctl = unsafe { nil }
-	radio  &vtk.Ctl = unsafe { nil }
+	deck   &Deck @[required]
+	window &vtk.Ctl @[required]
+	radio  &vtk.Ctl @[required]
 }
 
 struct Run {
@@ -141,7 +139,7 @@ mut:
 	presentation bool
 	selected     bool
 	drag_target  bool
-	cache        &ImageCache = unsafe { nil }
+	cache        &ImageCache @[required]
 	base_dir     string
 	page         int
 	pages        int
@@ -170,17 +168,14 @@ fn (mut r BytesReader) read(mut buf []u8) !int {
 @[heap]
 struct Deck {
 mut:
-	window              &vtk.Ctl = unsafe { nil }
-	split               &vtk.Ctl = unsafe { nil }
-	sidebar_pane        &vtk.Ctl = unsafe { nil }
-	sidebar             &vtk.Ctl = unsafe { nil }
-	sidebar_list        &vtk.Ctl = unsafe { nil }
-	editor              &vtk.Ctl = unsafe { nil }
-	editor_pane         &vtk.Ctl = unsafe { nil }
-	notes               &vtk.Ctl = unsafe { nil }
-	notes_sep           &vtk.Ctl = unsafe { nil }
-	status              &vtk.Ctl = unsafe { nil }
-	toolbar             &vtk.Ctl = unsafe { nil }
+	window              &vtk.Ctl @[required]
+	sidebar_pane        &vtk.Ctl @[required]
+	sidebar             &vtk.Ctl @[required]
+	sidebar_list        &vtk.Ctl @[required]
+	editor              &vtk.Ctl @[required]
+	notes               &vtk.Ctl @[required]
+	notes_sep           &vtk.Ctl @[required]
+	status              &vtk.Ctl @[required]
 	slides              []Slide
 	thumbnails          []&vtk.Ctl
 	path                string
@@ -200,8 +195,7 @@ mut:
 	drag_from           int = -1
 	drag_to             int = -1
 	images              ImageCache
-	presentation        &vtk.Ctl = unsafe { nil }
-	presentation_canvas &vtk.Ctl = unsafe { nil }
+	presentation        ?&vtk.Ctl
 	presentation_index  int
 }
 
@@ -932,9 +926,7 @@ fn absi(value int) int {
 }
 
 fn (mut cache ImageCache) get(path string) &SlideImage {
-	if path in cache.entries {
-		return unsafe { cache.entries[path] }
-	}
+	if image := cache.entries[path] { return image }
 	loaded := load_slide_image(path) or {
 		failed := &SlideImage{}
 		cache.entries[path] = failed
@@ -1511,7 +1503,7 @@ fn (mut deck Deck) rebuild_thumbnails(mut app vtk.App) {
 	deck.sidebar_list.clear()
 	for slide in deck.slides {
 		mut thumb := vtk.canvas(20, thumbnail_height, paint_thumbnail)
-		thumb.user = &deck
+		thumb.set_context(&deck)
 		thumb.data = i64(slide.id)
 		thumb.min_w = 12
 		thumb.min_h = thumbnail_height
@@ -1525,7 +1517,7 @@ fn (mut deck Deck) rebuild_thumbnails(mut app vtk.App) {
 }
 
 fn paint_thumbnail(mut c vtk.Ctl, mut screen vtk.Screen) {
-	deck := unsafe { &Deck(c.user) }
+	deck := c.context[Deck]() or { return }
 	index := find_slide(deck, int(c.data))
 	if index < 0 {
 		return
@@ -1546,7 +1538,7 @@ fn paint_thumbnail(mut c vtk.Ctl, mut screen vtk.Screen) {
 }
 
 fn thumbnail_mouse(mut c vtk.Ctl, e vtk.Event, mut app vtk.App) bool {
-	mut deck := unsafe { &Deck(c.user) }
+	mut deck := c.context[Deck]() or { return false }
 	if e.button != .left {
 		return false
 	}
@@ -1593,7 +1585,7 @@ fn thumbnail_mouse(mut c vtk.Ctl, e vtk.Event, mut app vtk.App) bool {
 }
 
 fn notes_changed(mut c vtk.Ctl, mut app vtk.App) {
-	mut deck := unsafe { &Deck(c.user) }
+	mut deck := c.context[Deck]() or { return }
 	if deck.current >= 0 && deck.current < deck.slides.len {
 		deck.slides[deck.current].notes = c.text
 		deck.dirty = true
@@ -1603,7 +1595,7 @@ fn notes_changed(mut c vtk.Ctl, mut app vtk.App) {
 }
 
 fn editor_changed(mut c vtk.Ctl, mut app vtk.App) {
-	mut deck := unsafe { &Deck(c.user) }
+	mut deck := c.context[Deck]() or { return }
 	if deck.current >= 0 && deck.current < deck.slides.len {
 		deck.slides[deck.current].body = c.text
 		deck.dirty = true
@@ -1616,7 +1608,7 @@ fn editor_changed(mut c vtk.Ctl, mut app vtk.App) {
 }
 
 fn closing(mut w vtk.Ctl, mut app vtk.App) bool {
-	mut deck := unsafe { &Deck(w.user) }
+	mut deck := w.context[Deck]() or { return true }
 	if !deck.dirty {
 		return true
 	}
@@ -1851,9 +1843,7 @@ fn insert_shape(mut deck Deck, kind string, mut app vtk.App) {
 }
 
 fn new_slide_dialog(mut deck Deck, mut app vtk.App) {
-	mut picker := &TemplatePicker{
-		deck: &deck
-	}
+	picker := &TemplatePicker{}
 	mut body := vtk.box(true)
 	mut heading := vtk.label('Choose a template for the new slide:')
 	body.add(mut heading)
@@ -1861,7 +1851,7 @@ fn new_slide_dialog(mut deck Deck, mut app vtk.App) {
 	items := templates()
 	for i, item in items {
 		mut button := vtk.button(item.name)
-		button.user = picker
+		button.set_context(picker)
 		button.data = i64(i)
 		button.changed = template_pick
 		button.col = i % 2
@@ -1871,12 +1861,10 @@ fn new_slide_dialog(mut deck Deck, mut app vtk.App) {
 	body.add(mut grid)
 	mut row := vtk.button_bar()
 	mut cancel := vtk.button('Cancel')
-	cancel.user = picker
 	cancel.changed = template_cancel
 	row.add(mut cancel)
 	body.add(mut row)
 	mut window := app.dialog('New slide', mut body)
-	picker.window = window
 	app.modal_for(mut window, deck.window)
 	picked := picker.picked
 	app.destroy_ctl(mut window)
@@ -1886,18 +1874,19 @@ fn new_slide_dialog(mut deck Deck, mut app vtk.App) {
 }
 
 fn template_pick(mut c vtk.Ctl, mut app vtk.App) {
-	mut picker := unsafe { &TemplatePicker(c.user) }
+	mut picker := c.context[TemplatePicker]() or { return }
 	picker.picked = int(c.data)
-	app.close(mut picker.window)
+	mut window := c.owner_window() or { return }
+	app.close(mut window)
 }
 
 fn template_cancel(mut c vtk.Ctl, mut app vtk.App) {
-	mut picker := unsafe { &TemplatePicker(c.user) }
-	app.close(mut picker.window)
+	mut window := c.owner_window() or { return }
+	app.close(mut window)
 }
 
 fn settings_ok(mut c vtk.Ctl, mut app vtk.App) {
-	mut dialog := unsafe { &SettingsDialog(c.user) }
+	mut dialog := c.context[SettingsDialog]() or { return }
 	dialog.deck.transition = transition_from_int(dialog.radio.value)
 	save_prefs(dialog.deck)
 	dialog.deck.refresh()
@@ -1905,7 +1894,7 @@ fn settings_ok(mut c vtk.Ctl, mut app vtk.App) {
 }
 
 fn settings_cancel(mut c vtk.Ctl, mut app vtk.App) {
-	mut dialog := unsafe { &SettingsDialog(c.user) }
+	mut dialog := c.context[SettingsDialog]() or { return }
 	app.close(mut dialog.window)
 }
 
@@ -1933,8 +1922,10 @@ fn settings_dialog(mut deck Deck, mut app vtk.App) {
 		window: window
 		radio:  radio
 	}
-	ok.user, ok.changed = dialog, settings_ok
-	cancel.user, cancel.changed = dialog, settings_cancel
+	ok.set_context(dialog)
+	ok.changed = settings_ok
+	cancel.set_context(dialog)
+	cancel.changed = settings_cancel
 	app.set_default_button(mut window, ok)
 	app.set_focus(radio)
 	app.modal_for(mut window, deck.window)
@@ -1980,28 +1971,31 @@ fn present_slide(mut deck Deck, start int, mut app vtk.App) {
 	mut window := app.window('VTK Slides - presentation', width, height - 1)
 	window.controls = vtk.window_close
 	window.dismissable = true
-	window.user = &deck
+	window.set_context(&deck)
 	window.keyfn = presentation_key
 	window.closing = presentation_closing
 	mut canvas := vtk.canvas(width, height, paint_presentation)
 	canvas.expand = true
 	canvas.focusable = true
-	canvas.user = &deck
+	canvas.set_context(&deck)
 	canvas.keyfn = presentation_key
 	window.add(mut canvas)
 	deck.presentation = window
-	deck.presentation_canvas = canvas
 	app.maximize(mut window)
 	app.set_focus(canvas)
 	app.invalidate()
 }
 
 fn presentation_closing(mut w vtk.Ctl, mut app vtk.App) bool {
-	mut deck := unsafe { &Deck(w.user) }
+	mut deck := w.context[Deck]() or { return true }
 	deck.clear_transition(mut app)
-	if deck.presentation == &w {
-		deck.presentation = unsafe { nil }
-		deck.presentation_canvas = unsafe { nil }
+	window := deck.presentation or {
+		app.set_focus(deck.editor)
+		return true
+	}
+	if window == &w {
+		deck.presentation = none
+
 	}
 	app.set_focus(deck.editor)
 	return true
@@ -2018,7 +2012,7 @@ fn (deck &Deck) presentation_paint(index int) SlidePaint {
 }
 
 fn paint_presentation(mut c vtk.Ctl, mut screen vtk.Screen) {
-	deck := unsafe { &Deck(c.user) }
+	deck := c.context[Deck]() or { return }
 	if deck.transition_active {
 		deck.draw_transition(mut screen, c.rect())
 		return
@@ -2113,7 +2107,7 @@ fn (mut deck Deck) start_transition(target int, mut app vtk.App) {
 }
 
 fn (mut deck Deck) tick_transition(mut app vtk.App) {
-	if !deck.transition_active || deck.presentation == unsafe { nil } {
+	if !deck.transition_active || deck.presentation == none {
 		deck.clear_transition(mut app)
 		return
 	}
@@ -2154,7 +2148,7 @@ fn (mut deck Deck) go_to(index int, mut app vtk.App) {
 }
 
 fn presentation_key(mut c vtk.Ctl, e vtk.Event, mut app vtk.App) bool {
-	mut deck := unsafe { &Deck(c.user) }
+	mut deck := c.context[Deck]() or { return false }
 	if e.key == int(vtk.Key.escape) || (e.key == `q` && !e.ctrl) {
 		deck.stop_presentation(mut app)
 		return true
@@ -2188,19 +2182,16 @@ fn presentation_key(mut c vtk.Ctl, e vtk.Event, mut app vtk.App) bool {
 }
 
 fn (mut deck Deck) stop_presentation(mut app vtk.App) {
-	if deck.presentation == unsafe { nil } {
-		return
-	}
+	mut window := deck.presentation or { return }
 	deck.clear_transition(mut app)
-	mut window := deck.presentation
-	deck.presentation = unsafe { nil }
-	deck.presentation_canvas = unsafe { nil }
+	deck.presentation = none
+
 	app.destroy_ctl(mut window)
 	app.set_focus(deck.editor)
 }
 
 fn window_key(mut w vtk.Ctl, e vtk.Event, mut app vtk.App) bool {
-	mut deck := unsafe { &Deck(w.user) }
+	mut deck := w.context[Deck]() or { return false }
 	if e.key == int(vtk.Key.f5) {
 		deck.action(if e.shift { .present_start } else { .present }, mut app)
 		return true
@@ -2233,7 +2224,7 @@ fn window_key(mut w vtk.Ctl, e vtk.Event, mut app vtk.App) bool {
 }
 
 fn editor_key(mut c vtk.Ctl, e vtk.Event, mut app vtk.App) bool {
-	mut deck := unsafe { &Deck(c.user) }
+	mut deck := c.context[Deck]() or { return false }
 	if e.key == int(vtk.Key.f5) {
 		deck.action(if e.shift { .present_start } else { .present }, mut app)
 		return true
@@ -2272,21 +2263,22 @@ fn editor_key(mut c vtk.Ctl, e vtk.Event, mut app vtk.App) bool {
 
 fn menu_item(mut menu vtk.Ctl, deck &Deck, title string, action Action) {
 	mut item := menu.menu_item(title, deck_action)
-	item.user = deck
+	item.set_context(deck)
 	item.data = i64(action)
 }
 
 fn add_action_button(mut parent vtk.Ctl, deck &Deck, title string, action Action) {
 	mut button := vtk.toolbutton(title)
-	button.user = deck
+	button.set_context(deck)
 	button.data = i64(action)
 	button.changed = deck_action
 	parent.add(mut button)
 }
 
 fn deck_action(mut c vtk.Ctl, mut app vtk.App) {
-	mut deck := unsafe { &Deck(c.user) }
-	deck.action(unsafe { Action(c.data) }, mut app)
+	mut deck := c.context[Deck]() or { return }
+	cmd := Action.from(c.data) or { return }
+	deck.action(cmd, mut app)
 }
 
 fn (mut deck Deck) action(action Action, mut app vtk.App) {
@@ -2345,46 +2337,56 @@ fn (mut deck Deck) action(action Action, mut app vtk.App) {
 	app.invalidate()
 }
 
-fn new_deck(mut app vtk.App, path string) &Deck {
-	mut deck := &Deck{
-		sidebar_visible: true
-		transition:      load_prefs()
+fn new_deck_state(window &vtk.Ctl) &Deck {
+	return &Deck{
+		window: window
+		sidebar_pane: vtk.box(true)
+		sidebar: vtk.scroll()
+		sidebar_list: vtk.box(true)
+		editor: vtk.markdown('')
+		notes_sep: vtk.separator()
+		notes: vtk.multiline('')
+		status: vtk.statusbar('')
 	}
-	deck.slides = if path == '' {
+}
+
+fn new_deck(mut app vtk.App, path string) {
+	transition := load_prefs()
+	slides := if path == '' {
 		demo_deck()
 	} else {
 		text := os.read_file(path) or {
 			app.notify(err.msg(), 3000)
-			return deck
+			return
 		}
 		parse_deck(text)
 	}
+	width, height := app.size()
+	mut deck := new_deck_state(app.window('VTK Slides', if width > 20 { width } else { 100 },
+		if height > 10 { height - 1 } else { 30 }))
+	deck.slides = slides
 	deck.path = path
-	deck.current = 0
-	for slide in deck.slides {
+	deck.transition = transition
+	for slide in slides {
 		deck.next_id = max(deck.next_id, slide.id + 1)
 	}
-	width, height := app.size()
-	deck.window = app.window('VTK Slides', if width > 20 { width } else { 100 },
-		if height > 10 { height - 1 } else { 30 })
-	deck.window.user = deck
+	deck.window.set_context(deck)
 	deck.window.closing = closing
 	deck.window.keyfn = window_key
 	mut body := vtk.box(true)
-	deck.toolbar = vtk.toolbar()
-	add_action_button(mut deck.toolbar, deck, '+ Slide', .new_slide)
-	add_action_button(mut deck.toolbar, deck, 'Clone', .clone_slide)
-	add_action_button(mut deck.toolbar, deck, 'Delete', .delete_slide)
-	add_action_button(mut deck.toolbar, deck, '↑', .move_up)
-	add_action_button(mut deck.toolbar, deck, '↓', .move_down)
-	add_action_button(mut deck.toolbar, deck, 'Present', .present)
-	add_action_button(mut deck.toolbar, deck, 'Sidebar', .toggle_sidebar)
-	add_action_button(mut deck.toolbar, deck, 'Notes', .toggle_notes)
-	add_action_button(mut deck.toolbar, deck, 'Source', .source)
-	body.add(mut deck.toolbar)
-	deck.split = vtk.split(false, default_sidebar_share)
-	deck.split.resizable = true
-	deck.sidebar_pane = vtk.box(true)
+	mut toolbar := vtk.toolbar()
+	add_action_button(mut toolbar, deck, '+ Slide', .new_slide)
+	add_action_button(mut toolbar, deck, 'Clone', .clone_slide)
+	add_action_button(mut toolbar, deck, 'Delete', .delete_slide)
+	add_action_button(mut toolbar, deck, '↑', .move_up)
+	add_action_button(mut toolbar, deck, '↓', .move_down)
+	add_action_button(mut toolbar, deck, 'Present', .present)
+	add_action_button(mut toolbar, deck, 'Sidebar', .toggle_sidebar)
+	add_action_button(mut toolbar, deck, 'Notes', .toggle_notes)
+	add_action_button(mut toolbar, deck, 'Source', .source)
+	body.add(mut toolbar)
+	mut split := vtk.split(false, default_sidebar_share)
+	split.resizable = true
 	deck.sidebar_pane.min_w = 14
 	mut sidebar_tools := vtk.flow()
 	add_action_button(mut sidebar_tools, deck, '+', .new_slide)
@@ -2393,14 +2395,11 @@ fn new_deck(mut app vtk.App, path string) &Deck {
 	add_action_button(mut sidebar_tools, deck, '↑', .move_up)
 	add_action_button(mut sidebar_tools, deck, '↓', .move_down)
 	deck.sidebar_pane.add(mut sidebar_tools)
-	deck.sidebar = vtk.scroll()
 	deck.sidebar.scrollbar = true
-	deck.sidebar_list = vtk.box(true)
 	deck.sidebar.add(mut deck.sidebar_list)
 	deck.sidebar_pane.add(mut deck.sidebar)
-	deck.split.add(mut deck.sidebar_pane)
-	deck.editor = vtk.markdown('')
-	deck.editor.user = deck
+	split.add(mut deck.sidebar_pane)
+	deck.editor.set_context(deck)
 	deck.editor.changed = editor_changed
 	deck.editor.keyfn = editor_key
 	deck.editor.scrollbar = true
@@ -2408,22 +2407,19 @@ fn new_deck(mut app vtk.App, path string) &Deck {
 	deck.editor.md.hide_status = true
 	deck.editor.set_wrap_mode(.word)
 	deck.editor.markdown_mode(.edit)
-	deck.editor_pane = vtk.box(true)
-	deck.editor_pane.add(mut deck.editor)
-	deck.notes_sep = vtk.separator()
-	deck.editor_pane.add(mut deck.notes_sep)
-	deck.notes = vtk.multiline('')
-	deck.notes.user = deck
+	mut editor_pane := vtk.box(true)
+	editor_pane.add(mut deck.editor)
+	editor_pane.add(mut deck.notes_sep)
+	deck.notes.set_context(deck)
 	deck.notes.changed = notes_changed
 	deck.notes.expand = false
 	deck.notes.min_h = 4
 	deck.notes.scrollbar = true
 	deck.notes.set_wrap_mode(.word)
 	deck.notes.padding = vtk.Insets{ left: 1, right: 1 }
-	deck.editor_pane.add(mut deck.notes)
-	deck.split.add(mut deck.editor_pane)
-	body.add(mut deck.split)
-	deck.status = vtk.statusbar('')
+	editor_pane.add(mut deck.notes)
+	split.add(mut editor_pane)
+	body.add(mut split)
 	body.add(mut deck.status)
 	deck.window.add(mut body)
 	mut file := deck.window.add_menu('File')
@@ -2490,11 +2486,10 @@ fn new_deck(mut app vtk.App, path string) &Deck {
 	app.maximize(mut deck.window)
 	deck.refresh()
 	app.set_focus(deck.editor)
-	return deck
 }
 
-pub fn launch(mut app vtk.App, _ voidptr) {
-	_ := new_deck(mut app, '')
+pub fn launch(mut app vtk.App) {
+	new_deck(mut app, '')
 }
 
 pub fn run() {
@@ -2520,7 +2515,7 @@ pub fn run() {
 		path = arg
 		break
 	}
-	_ := new_deck(mut app, path)
+	new_deck(mut app, path)
 	if snapshot {
 		app.redraw()
 		println(app.snapshot())

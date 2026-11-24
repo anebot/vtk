@@ -60,11 +60,11 @@ fn test_mouse_capture_delivers_motion_and_release_outside() {
 	app.redraw()
 	app.dispatch(Event{ kind: .mouse, x: log.x + 1, y: log.y, button: .left, pressed: true })
 	assert log.data == 1
-	assert app.drag == log
+	assert same_ctl(app.drag, log)
 	// Motion and the release continue to reach the captured canvas far outside it.
 	app.dispatch(Event{ kind: .mouse, x: 0, y: 0, button: .left, pressed: true, motion: true })
 	assert log.data == 11
 	app.dispatch(Event{ kind: .mouse, x: 0, y: 0, button: .left })
 	assert log.data == 111
-	assert isnil(app.drag)
+	assert app.drag == none
 }

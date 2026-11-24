@@ -201,7 +201,7 @@ fn (c &Ctl) grid_dims() ([]int, []int) {
 
 fn (mut c Ctl) layout(r Rect) {
 	c.layout_bounds(r)
-	if !isnil(c.term) { c.term.resize(c.w, c.h) }
+	if c.term != none { c.term.resize(c.w, c.h) }
 	mut kids := c.content_kids()
 	if kids.len == 0 { return }
 	match c.kind {
@@ -382,28 +382,37 @@ pub fn (mut c Ctl) tree_add(parent ?&Ctl, text string) &Ctl {
 	mut node := &Ctl{ kind: .treenode, text: text, expanded: true }
 	mut p := parent or { &c }
 	p.add(mut node)
-	if isnil(c.selected_node) { c.selected_node = node }
+	if c.selected_node == none { c.selected_node = node }
 	return node
 }
 
 pub fn (mut c Ctl) tree_select(node ?&Ctl) bool {
 	if c.kind != .tree { return false }
-	value := node or { unsafe { nil } }
-	if !isnil(value) && (value.kind != .treenode || !c.contains_ctl(value)) { return false }
-	c.selected_node = value
+	if value := node {
+		if value.kind != .treenode || !c.contains_ctl(value) { return false }
+	}
+	c.selected_node = node
 	c.invalidate()
 	return true
 }
 
-fn (c &Ctl) hit_ptr(x int, y int) &Ctl {
-	if c.hidden || c.closed || c.minimized || !c.rect().contains(x, y) { return unsafe { nil } }
-	if c.kind != .window && !c.content_rect().contains(x, y) { return unsafe { c } }
-	if c.kind == .scroll && c.scrollbar && x == c.x + c.w - 1 { return unsafe { c } }
+pub fn (c &Ctl) hit(x int, y int) ?&Ctl {
+	if !c.hits(x, y) { return none }
+	return c.hit_inside(x, y)
+}
+
+@[inline]
+fn (c &Ctl) hits(x int, y int) bool {
+	return !c.hidden && !c.closed && !c.minimized && c.rect().contains(x, y)
+}
+
+fn (c &Ctl) hit_inside(x int, y int) &Ctl {
+	if c.kind != .window && !c.content_rect().contains(x, y) { return c }
+	if c.kind == .scroll && c.scrollbar && x == c.x + c.w - 1 { return c }
 	for i := c.kids.len - 1; i >= 0; i-- {
 		child := c.kids[i]
 		if child.kind in [.menu, .item, .treenode, .menuitem] { continue }
-		hit := child.hit_ptr(x, y)
-		if !isnil(hit) { return hit }
+		if child.hits(x, y) { return child.hit_inside(x, y) }
 	}
-	return unsafe { c }
+	return c
 }

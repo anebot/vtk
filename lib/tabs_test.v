@@ -46,7 +46,7 @@ fn test_tabs_join_the_selected_header_to_its_page_in_unicode_and_ascii() {
 fn test_tabs_keep_the_page_background_when_focused_and_preserve_the_frame_when_narrow() {
 	for i in 0 .. theme_names.len {
 		mut app := new_app()
-		app.theme = theme_preset(unsafe { Preset(i) })
+		app.theme = theme_preset(Preset.from(i) or { continue })
 		app.screen.resize(20, 6)
 		app.screen.ascii = app.theme.ascii
 		mut pages := tabs()
@@ -60,7 +60,7 @@ fn test_tabs_keep_the_page_background_when_focused_and_preserve_the_frame_when_n
 			page := pages.kids[selected]
 			assert page.tab_x >= 1 && page.tab_x + page.tab_w <= 19
 			for focused in [false, true] {
-				app.focus = if focused { pages } else { unsafe { nil } }
+				app.focus = if focused { pages } else { none }
 				app.draw_ctl(mut pages)
 				cell := app.screen.cells[page.tab_x + 2]
 				assert cell.fg == app.theme.accent && cell.bg == app.theme.bg
@@ -89,7 +89,7 @@ fn test_tab_mouse_targets_include_both_header_rows_and_exclude_the_page_frame() 
 	for row in 0 .. 2 {
 		tabs_mouse_click(mut app, pages.kids[1].tab_x + 2, pages.y + row)
 		app.redraw()
-		assert pages.value == 1 && pages.kids[1].visible() && app.focus == pages
+		assert pages.value == 1 && pages.kids[1].visible() && same_ctl(app.focus, pages)
 		tabs_mouse_click(mut app, pages.kids[2].tab_x + 2, pages.y + row)
 		app.redraw()
 		assert pages.value == 2 && pages.kids[2].visible()
@@ -110,12 +110,12 @@ mut:
 }
 
 fn tabs_changed(mut c Ctl, mut _ App) {
-	mut probe := unsafe { &TabReorderProbe(c.user) }
+	mut probe := c.context[TabReorderProbe]() or { panic('missing callback context') }
 	probe.changes++
 }
 
 fn tabs_reordered(mut c Ctl, from int, to int, mut _ App) {
-	mut probe := unsafe { &TabReorderProbe(c.user) }
+	mut probe := c.context[TabReorderProbe]() or { panic('missing callback context') }
 	probe.moves << [from, to]
 	assert c.value == to
 	assert c.kids[to].visible()
@@ -141,7 +141,7 @@ fn test_tabs_only_reorder_when_enabled_and_preserve_the_page_and_callback_contra
 			assert !pages.reorderable
 			pages.reorderable = enabled
 			probe := &TabReorderProbe{}
-			pages.user = probe
+			pages.set_context(probe)
 			pages.changed = tabs_changed
 			pages.reordered = tabs_reordered
 			mut draft := entry('unsaved draft', 0)
@@ -157,7 +157,7 @@ fn test_tabs_only_reorder_when_enabled_and_preserve_the_page_and_callback_contra
 			assert pages.kids.map(it.text) == if enabled { ['A much longer second tab', 'Last', 'First'] } else { ['First', 'A much longer second tab', 'Last'] }
 			assert pages.kids[pages.value] == first && first.visible()
 			assert first.kids[0] == draft && draft.text == 'unsaved draft' && draft.cursor == 4
-			assert app.focus == pages && isnil(app.drag)
+			assert same_ctl(app.focus, pages) && app.drag == none
 			assert probe.changes == 1
 			assert probe.moves == if enabled { [[0, 2]] } else { [][]int{} }
 			if enabled {
@@ -186,7 +186,7 @@ fn test_tab_drag_captures_the_mouse_and_ignores_wheels_other_buttons_and_outside
 	app.redraw()
 	x, y := pages.kids[0].tab_x + 2, pages.y
 	app.dispatch(Event{ kind: .mouse, x: x, y: y, button: .left, pressed: true })
-	assert app.drag == pages.kids[0]
+	assert same_ctl(app.drag, pages.kids[0])
 	for event in [
 		Event{ kind: .mouse, x: pages.kids[2].tab_x + 3, y: y, button: .right, pressed: true },
 		Event{ kind: .mouse, x: pages.kids[2].tab_x + 3, y: y, button: .wheel_down, pressed: true },
@@ -196,12 +196,12 @@ fn test_tab_drag_captures_the_mouse_and_ignores_wheels_other_buttons_and_outside
 	] {
 		app.dispatch(event)
 		assert pages.kids.map(it.text) == ['One', 'A much longer second tab', 'Three']
-		assert app.drag == pages.kids[0]
+		assert same_ctl(app.drag, pages.kids[0])
 	}
 	// Releasing over a target works even if the terminal omitted its last motion.
 	target := pages.kids[1].tab_x + pages.kids[1].tab_w - 2
 	app.dispatch(Event{ kind: .mouse, x: target, y: y, button: .left })
-	assert isnil(app.drag)
+	assert app.drag == none
 	assert pages.kids.map(it.text) == ['A much longer second tab', 'One', 'Three']
 	app.redraw()
 	// A stationary pointer must not move the tab back after the headers reflow.
@@ -212,7 +212,7 @@ fn test_tab_drag_captures_the_mouse_and_ignores_wheels_other_buttons_and_outside
 		assert pages.kids[0].text == 'One'
 	}
 	app.dispatch(Event{ kind: .mouse, x: target_left, y: y + 3, button: .left })
-	assert isnil(app.drag)
+	assert app.drag == none
 }
 
 fn test_tab_drag_is_cancelled_when_disabled_or_its_page_is_no_longer_available() {
@@ -231,7 +231,7 @@ fn test_tab_drag_is_cancelled_when_disabled_or_its_page_is_no_longer_available()
 		mut page := pages.kids[0]
 		x, y := pages.kids[2].tab_x + 4, pages.y
 		app.dispatch(Event{ kind: .mouse, x: page.tab_x + 2, y: y, button: .left, pressed: true })
-		assert app.drag == page
+		assert same_ctl(app.drag, page)
 		match action {
 			'disable' { pages.reorderable = false }
 			'close' { app.close(mut w) }
@@ -245,7 +245,7 @@ fn test_tab_drag_is_cancelled_when_disabled_or_its_page_is_no_longer_available()
 		before := pages.kids.clone()
 		app.dispatch(Event{ kind: .mouse, x: x, y: y, button: .left, pressed: true, motion: true })
 		app.dispatch(Event{ kind: .mouse, x: x, y: y, button: .left })
-		assert isnil(app.drag), action
+		assert app.drag == none, action
 		assert pages.kids == before, action
 	}
 }
@@ -280,17 +280,17 @@ fn test_dragged_header_follows_each_mouse_move_and_tabs_reflow_before_release() 
 		app.dispatch(Event{ kind: .mouse, x: target, y: y, button: .left, pressed: true, motion: true })
 		app.redraw()
 		assert pages.value == 1 && pages.kids[1] == page
-		assert app.drag == page && page.visible()
+		assert same_ctl(app.drag, page) && page.visible()
 		assert app.screen.cells[y * app.width + target - 3].glyph == if ascii { '+' } else { '╭' }
 		app.dispatch(Event{ kind: .mouse, x: target, y: y, button: .left })
 		app.redraw()
-		assert isnil(app.drag)
+		assert app.drag == none
 		assert app.screen.cells[y * app.width + page.tab_x].glyph == if ascii { '+' } else { '╭' }
 		// A release without a button identity also ends the capture.
 		app.dispatch(Event{ kind: .mouse, x: page.tab_x + 2, y: y, button: .left, pressed: true })
-		assert app.drag == page
+		assert same_ctl(app.drag, page)
 		app.dispatch(Event{ kind: .mouse, x: page.tab_x + 2, y: y })
-		assert isnil(app.drag)
+		assert app.drag == none
 	}
 }
 
@@ -326,7 +326,7 @@ fn test_tab_drag_at_clipped_edges_reaches_tabs_beyond_a_narrow_strip() {
 		assert pages.value == expected && pages.kids[expected] == first
 	}
 	app.dispatch(Event{ kind: .mouse, x: x, y: y, button: .left })
-	assert pages.value == 0 && isnil(app.drag)
+	assert pages.value == 0 && app.drag == none
 }
 
 fn test_reorder_callback_can_destroy_the_tab_control_during_a_drag() {
@@ -343,5 +343,5 @@ fn test_reorder_callback_can_destroy_the_tab_control_during_a_drag() {
 	w.add(mut pages)
 	app.redraw()
 	tabs_drag(mut app, pages, 0, 1, 0)
-	assert pages.destroyed && isnil(app.drag)
+	assert pages.destroyed && app.drag == none
 }

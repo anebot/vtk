@@ -64,11 +64,11 @@ struct MenuEntry {
 @[heap]
 struct Document {
 mut:
-	window      &vtk.Ctl = unsafe { nil }
-	view        &vtk.Ctl = unsafe { nil }
-	outline     &vtk.Ctl = unsafe { nil }
-	status      &vtk.Ctl = unsafe { nil }
-	toolbar     &vtk.Ctl = unsafe { nil }
+	window      &vtk.Ctl @[required]
+	view        &vtk.Ctl @[required]
+	outline     &vtk.Ctl @[required]
+	status      &vtk.Ctl @[required]
+	toolbar     &vtk.Ctl @[required]
 	path        string
 	standalone  bool
 	saved       string
@@ -117,14 +117,14 @@ fn schedule_status(mut app vtk.App, mut doc Document) {
 
 fn mouse_status(mut c vtk.Ctl, e vtk.Event, mut app vtk.App) bool {
 	if e.button == .left {
-		mut doc := unsafe { &Document(c.user) }
+		mut doc := c.context[Document]() or { return false }
 		schedule_status(mut app, mut doc)
 	}
 	return false
 }
 
 fn changed(mut c vtk.Ctl, mut app vtk.App) {
-	mut doc := unsafe { &Document(c.user) }
+	mut doc := c.context[Document]() or { return }
 	update(mut doc)
 	app.invalidate()
 }
@@ -259,7 +259,7 @@ fn sync_align_menu(mut doc Document) {
 }
 
 fn outline_hit(mut c vtk.Ctl, mut app vtk.App) {
-	mut doc := unsafe { &Document(c.user) }
+	mut doc := c.context[Document]() or { return }
 	if node := c.tree_selection() {
 		doc.view.scroll_to_offset(int(node.data))
 		app.set_focus(doc.view)
@@ -290,7 +290,7 @@ fn save(mut doc Document, save_as bool, mut app vtk.App) bool {
 }
 
 fn closing(mut w vtk.Ctl, mut app vtk.App) bool {
-	mut doc := unsafe { &Document(w.user) }
+	mut doc := w.context[Document]() or { return true }
 	if doc.view.text == doc.saved { return true }
 	choice := app.choice_for(w, 'Unsaved changes', ['Save', 'Discard', 'Cancel'], 3)
 	if choice == 0 { return save(mut doc, false, mut app) }
@@ -322,30 +322,30 @@ fn table_markdown(columns int, rows int) string {
 @[heap]
 struct TablePrompt {
 mut:
-	window  &vtk.Ctl = unsafe { nil }
-	columns &vtk.Ctl = unsafe { nil }
-	rows    &vtk.Ctl = unsafe { nil }
+	window  &vtk.Ctl @[required]
+	columns &vtk.Ctl @[required]
+	rows    &vtk.Ctl @[required]
 	result  string
 }
 
 fn table_prompt_accept(mut c vtk.Ctl, mut app vtk.App) {
-	mut prompt := unsafe { &TablePrompt(c.user) }
+	mut prompt := c.context[TablePrompt]() or { return }
 	prompt.result = table_markdown(prompt.columns.value, prompt.rows.value)
 	app.close(mut prompt.window)
 }
 
 fn table_prompt_cancel(mut c vtk.Ctl, mut app vtk.App) {
-	mut prompt := unsafe { &TablePrompt(c.user) }
+	mut prompt := c.context[TablePrompt]() or { return }
 	app.close(mut prompt.window)
 }
 
 @[heap]
 struct FindState {
 mut:
-	doc     &Document = unsafe { nil }
-	window  &vtk.Ctl  = unsafe { nil }
-	query   &vtk.Ctl  = unsafe { nil }
-	replace &vtk.Ctl  = unsafe { nil }
+	doc     &Document @[required]
+	window  &vtk.Ctl @[required]
+	query   &vtk.Ctl @[required]
+	replace &vtk.Ctl @[required]
 }
 
 fn find_hit(text string, query string, from int, forward bool) int {
@@ -459,18 +459,19 @@ fn find_replace_all(mut state FindState, mut app vtk.App) {
 }
 
 fn find_submit(mut c vtk.Ctl, mut app vtk.App) {
-	mut state := unsafe { &FindState(c.user) }
+	mut state := c.context[FindState]() or { return }
 	find_step(mut state, true, false, mut app)
 }
 
 fn find_replace_submit(mut c vtk.Ctl, mut app vtk.App) {
-	mut state := unsafe { &FindState(c.user) }
+	mut state := c.context[FindState]() or { return }
 	find_replace(mut state, mut app)
 }
 
 fn find_action(mut c vtk.Ctl, mut app vtk.App) {
-	mut state := unsafe { &FindState(c.user) }
-	match unsafe { FindCmd(int(c.data)) } {
+	mut state := c.context[FindState]() or { return }
+	cmd := FindCmd.from(c.data) or { return }
+	match cmd {
 		.prev { find_step(mut state, false, false, mut app) }
 		.next { find_step(mut state, true, false, mut app) }
 		.replace { find_replace(mut state, mut app) }
@@ -482,19 +483,14 @@ fn find_action(mut c vtk.Ctl, mut app vtk.App) {
 fn find_dialog(mut doc Document, mut app vtk.App, focus_replace bool) {
 	a, b := doc.view.selection()
 	initial := if b > a && !doc.view.text[a..b].contains('\n') { doc.view.text[a..b] } else { '' }
-	mut state := &FindState{ doc: doc }
 	mut query := vtk.entry(initial, 0)
 	query.min_w = 30
 	query.expand = false
-	query.user = state
 	query.submit = find_submit
 	mut replace := vtk.entry('', 0)
 	replace.min_w = 30
 	replace.expand = false
-	replace.user = state
 	replace.submit = find_replace_submit
-	state.query = query
-	state.replace = replace
 	mut query_label := vtk.label('Find:')
 	query_label.col, query_label.row = 0, 0
 	query.col, query.row = 1, 0
@@ -512,7 +508,6 @@ fn find_dialog(mut doc Document, mut app vtk.App, focus_replace bool) {
 		vtk.button(' Replace all '), vtk.button(' Close ')]
 	find_cmds := [FindCmd.prev, .next, .replace, .replace_all, .close]
 	for i, mut button in buttons {
-		button.user = state
 		button.data = i64(int(find_cmds[i]))
 		button.changed = find_action
 		if i < 2 { nav.add(mut button) } else { actions.add(mut button) }
@@ -522,7 +517,10 @@ fn find_dialog(mut doc Document, mut app vtk.App, focus_replace bool) {
 	body.add(mut nav)
 	body.add(mut actions)
 	mut w := app.dialog('Find / Replace', mut body)
-	state.window = w
+	state := &FindState{ doc: doc, window: w, query: query, replace: replace }
+	query.set_context(state)
+	replace.set_context(state)
+	for mut button in buttons { button.set_context(state) }
 	if initial != '' {
 		query.anchor = 0
 		query.cursor = initial.len
@@ -596,8 +594,8 @@ fn insert_table(mut doc Document, mut app vtk.App) {
 		columns: columns
 		rows:    rows
 	}
-	insert.user = prompt
-	cancel.user = prompt
+	insert.set_context(prompt)
+	cancel.set_context(prompt)
 	app.set_default_button(mut w, insert)
 	app.set_focus(columns)
 	app.modal_for(mut w, doc.window)
@@ -611,8 +609,13 @@ fn insert_table(mut doc Document, mut app vtk.App) {
 }
 
 fn action(mut c vtk.Ctl, mut app vtk.App) {
-	mut doc := unsafe { &Document(c.user) }
-	match unsafe { Cmd(int(c.data)) } {
+	mut doc := c.context[Document]() or { return }
+	cmd := Cmd.from(c.data) or { return }
+	document_action(mut doc, cmd, mut app)
+}
+
+fn document_action(mut doc Document, cmd Cmd, mut app vtk.App) {
+	match cmd {
 		.new_document { new_document(mut app, '', doc.standalone) }
 		.open_file {
 			if path := app.file_pick_for(doc.window, if doc.path == '' {
@@ -709,7 +712,7 @@ fn action(mut c vtk.Ctl, mut app vtk.App) {
 	sync_wrap_menu(mut doc)
 	sync_page_menu(mut doc)
 	sync_align_menu(mut doc)
-	if unsafe { Cmd(int(c.data)) } in [.toggle_outline, .toggle_source, .toggle_read_only, .toggle_vim,
+	if cmd in [.toggle_outline, .toggle_source, .toggle_read_only, .toggle_vim,
 		.line_numbers, .ruler_top, .ruler_left, .wrap_none, .wrap_character, .wrap_word, .page_width,
 		.toggle_toolbar] {
 		save_prefs(doc)
@@ -720,7 +723,7 @@ fn action(mut c vtk.Ctl, mut app vtk.App) {
 }
 
 fn key(mut c vtk.Ctl, e vtk.Event, mut app vtk.App) bool {
-	mut doc := unsafe { &Document(c.user) }
+	mut doc := c.context[Document]() or { return false }
 	if !e.ctrl {
 		schedule_status(mut app, mut doc)
 		return false
@@ -729,8 +732,7 @@ fn key(mut c vtk.Ctl, e vtk.Event, mut app vtk.App) bool {
 		schedule_status(mut app, mut doc)
 		return false
 	}
-	mut trigger := vtk.Ctl{ user: c.user, data: i64(int(cmd)) }
-	action(mut trigger, mut app)
+	document_action(mut doc, cmd, mut app)
 	return true
 }
 
@@ -761,7 +763,7 @@ fn shortcut_cmd(e vtk.Event) ?Cmd {
 
 fn menu_item(mut menu vtk.Ctl, doc &Document, text string, cmd Cmd) {
 	mut item := menu.menu_item(text, action)
-	item.user = doc
+	item.set_context(doc)
 	item.data = i64(int(cmd))
 }
 
@@ -781,12 +783,19 @@ fn new_document(mut app vtk.App, path string, standalone bool) {
 		'# Welcome to VTK Word\n\nA Markdown document, rendered in terminal cells.\n\n- [ ] Try the task checkbox\n- [x] Open File, Edit, View and Format with F10\n\nSelect text, then use the toolbar to format it.\n'
 	}
 	prefs := load_prefs()
-	mut doc := &Document{ path: path, saved: text, standalone: standalone }
-	doc.window = app.window('VTK Word', 78, 24)
-	doc.window.user = doc
+	mut doc := &Document{
+		path: path
+		saved: text
+		standalone: standalone
+		window: app.window('VTK Word', 78, 24)
+		view: vtk.markdown(text)
+		outline: vtk.tree()
+		status: vtk.statusbar('')
+		toolbar: vtk.toolbar()
+	}
+	doc.window.set_context(doc)
 	doc.window.closing = closing
-	doc.view = vtk.markdown(text)
-	doc.view.user = doc
+	doc.view.set_context(doc)
 	doc.view.changed = changed
 	doc.view.keyfn = key
 	doc.view.mousefn = mouse_status
@@ -799,18 +808,15 @@ fn new_document(mut app vtk.App, path string, standalone bool) {
 	doc.view.md.ruler_top = prefs.ruler_top
 	doc.view.md.ruler_left = prefs.ruler_left
 	doc.view.md.column_width = prefs.page_width
-	doc.outline = vtk.tree()
 	doc.outline.hidden = prefs.outline_hidden
-	doc.outline.user = doc
+	doc.outline.set_context(doc)
 	doc.outline.changed = outline_hit
-	doc.status = vtk.statusbar('')
 	mut body := vtk.box(true)
-	doc.toolbar = vtk.toolbar()
 	doc.toolbar.hidden = prefs.toolbar_hidden
 	toolbar_cmds := [Cmd.bold, .italic, .code, .emoji, .link, .find]
 	for i, name in ['B', 'I', 'Code', 'Emoji', 'Link', 'Find'] {
 		mut b := vtk.toolbutton(name)
-		b.user = doc
+		b.set_context(doc)
 		b.data = i64(int(toolbar_cmds[i]))
 		b.changed = action
 		doc.toolbar.add(mut b)
@@ -849,7 +855,7 @@ fn new_document(mut app vtk.App, path string, standalone bool) {
 	mut view := doc.window.add_menu('View')
 	for entry in view_entries {
 		mut item := view.menu_item(entry.label, action)
-		item.user = doc
+		item.set_context(doc)
 		item.data = i64(int(entry.cmd))
 		doc.view_items << item
 	}
@@ -857,14 +863,14 @@ fn new_document(mut app vtk.App, path string, standalone bool) {
 	mut wrap_menu := view.add_menu('Wrap')
 	for entry in wrap_entries {
 		mut item := wrap_menu.menu_item(entry.label, action)
-		item.user = doc
+		item.set_context(doc)
 		item.data = i64(int(entry.cmd))
 		doc.wrap_items << item
 	}
 	mut page := view.add_menu('Page')
 	for entry in page_entries {
 		mut item := page.menu_item(entry.label, action)
-		item.user = doc
+		item.set_context(doc)
 		item.data = i64(int(entry.cmd))
 		doc.page_items << item
 	}
@@ -892,7 +898,7 @@ fn new_document(mut app vtk.App, path string, standalone bool) {
 	mut align_menu := format.add_menu('Align')
 	for entry in align_entries {
 		mut item := align_menu.menu_item(entry.label, action)
-		item.user = doc
+		item.set_context(doc)
 		item.data = i64(int(entry.cmd))
 		doc.align_items << item
 	}
@@ -908,9 +914,9 @@ fn new_document(mut app vtk.App, path string, standalone bool) {
 	app.set_focus(doc.view)
 }
 
-pub fn launch(mut app vtk.App, _ voidptr) { new_document(mut app, '', false) }
+pub fn launch(mut app vtk.App) { new_document(mut app, '', false) }
 
-fn standalone_launch(mut app vtk.App, _ voidptr) { new_document(mut app, '', true) }
+fn standalone_launch(mut app vtk.App) { new_document(mut app, '', true) }
 
 pub fn run() {
 	mut app := vtk.new_app()
@@ -921,7 +927,7 @@ pub fn run() {
 		return
 	}
 	defer { app.fini() }
-	app.register('Word', standalone_launch, unsafe { nil })
+	app.register('Word', standalone_launch)
 	new_document(mut app, if os.args.len > 1 { os.args[1] } else { '' }, true)
 	app.run() or { eprintln(err) }
 }

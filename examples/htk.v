@@ -30,7 +30,7 @@ fn open_notes(mut button vtk.Ctl, mut app vtk.App) {
 	}
 }
 
-fn demo_start(mut app vtk.App, _ voidptr) {
+fn demo_start(mut app vtk.App) {
 	mut window := app.window('V TermKit', 46, 16)
 	mut body := vtk.box(true)
 	mut tabs := vtk.tabs()
@@ -68,8 +68,8 @@ fn main() {
 	if !app.settings_saved() { app.theme = vtk.theme_preset(.teal) }
 	app.ctrl_c = .callback
 	app.ctrl_c_handler = confirm_quit
-	app.register('V TermKit', demo_start, unsafe { nil })
-	demo_start(mut app, unsafe { nil })
+	app.register('V TermKit', demo_start)
+	demo_start(mut app)
 	app.run() or { eprintln(err) }
 	println('bye')
 }

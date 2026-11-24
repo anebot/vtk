@@ -39,7 +39,7 @@ pub fn (mut app App) fini() {
 	}
 	app.windows = []
 	app.clear_desktop_input()
-	app.focus = unsafe { nil }
+	app.focus = none
 	app.desktop_focus = [4]?&Ctl{}
 	app.hooks = []
 	app.terminals, app.spinners = [], []
@@ -126,8 +126,11 @@ fn (mut app App) advance(timeout_ms int) bool {
 	app.update_sources()
 	if !app.driver.active || app.driver.terminals_ready {
 		// Retain the list if an exit callback rebuilds app.terminals in a nested step.
-		mut terminals := unsafe { app.terminals }
-		for mut terminal in terminals { app.pump_terminal(mut terminal) }
+		terminals := app.terminals
+		for i in 0 .. terminals.len {
+			mut control := terminals[i]
+			app.pump_terminal(mut control)
+		}
 	}
 	if app.windows.any(it.closed) {
 		for mut w in app.windows.filter(it.closed) { app.dispose_ctl(mut w) }
@@ -209,13 +212,13 @@ fn (mut app App) paint_band(band Rect) {
 	if band.contains(0, app.bar_y()) { app.draw_bar() }
 	app.draw_popups()
 	if paint := app.overlay { paint(mut app, mut app.screen) }
-	if !isnil(app.placement) && band.contains(0, app.bar_y()) {
+	if app.placement != none && band.contains(0, app.bar_y()) {
 		app.screen.fill(Rect{0, app.bar_y(), app.width, 1}, ` `, app.theme.bar_fg, app.theme.bar_bg)
 		app.screen.text(0, app.bar_y(), (if app.placement_resize { 'Resize' } else { 'Move' }) + ': arrows / Shift+arrows, Enter accepts, Esc cancels', app.theme.bar_fg, app.theme.bar_bg, 0)
 	}
 	// A cursor is valid only if its cell remains visible in the top window.
 	if !area.contains(app.screen.cursor_x, app.screen.cursor_y) || app.popups.len > 0
-		|| (!isnil(app.focus) && app.focus.owner_window_ptr() != app.top_window_ptr()) {
+		|| (app.focus != none && !same_ctl(app.focus.owner_window(), app.top_window())) {
 		app.screen.cursor_x = -1
 	}
 	app.draw_mouse_cursor()
@@ -227,24 +230,24 @@ pub fn (mut app App) dispatch(e Event) {
 		app.sync_mouse_pointer()
 		return
 	}
-	if e.kind != .mouse { app.title_click = unsafe { nil } }
+	if e.kind != .mouse { app.title_click = none }
 	if e.kind in [.focus_in, .focus_out] {
 		app.terminal_focused = e.kind == .focus_in
 		if e.kind == .focus_out {
 			app.clear_mouse()
-			app.drag = unsafe { nil }
-			app.scroll_drag = unsafe { nil }
+			app.drag = none
+			app.scroll_drag = none
 		}
 		app.sync_mouse_pointer()
 		return
 	}
 	if e.kind == .resize {
-		if !isnil(app.placement) { app.placement_key(Event{ key: int(Key.escape) }) }
+		if app.placement != none { app.placement_key(Event{ key: int(Key.escape) }) }
 		old_area := app.work_area()
 		app.width = max(1, e.width)
 		app.height = max(1, e.height)
-		app.drag = unsafe { nil }
-		app.scroll_drag = unsafe { nil }
+		app.drag = none
+		app.scroll_drag = none
 		app.resize_windows(old_area)
 		app.screen.resize(app.width, app.height)
 		app.layout_popups()
@@ -267,8 +270,7 @@ pub fn (mut app App) dispatch(e Event) {
 		return
 	}
 	if e.kind == .paste {
-		if !isnil(app.focus) {
-			mut c := app.focus
+		if mut c := app.focus {
 			if f := c.keyfn {
 				if f(mut c, e, mut app) {
 					app.dirty = true
@@ -276,7 +278,7 @@ pub fn (mut app App) dispatch(e Event) {
 				}
 			}
 			if c.kind == .terminal {
-				c.term.write(e.text)
+				if mut term := c.term { term.write(e.text) }
 			} else if c.kind == .table && c.table.pasteable {
 				c.table_paste(e.text) or { app.notify(err.msg(), 3000) }
 			} else if c.kind in [.entry, .multiline, .markdown] {
@@ -285,7 +287,7 @@ pub fn (mut app App) dispatch(e Event) {
 		}
 		return
 	}
-	if !isnil(app.placement) {
+	if app.placement != none {
 		app.placement_key(e)
 		return
 	}
@@ -294,8 +296,8 @@ pub fn (mut app App) dispatch(e Event) {
 		return
 	}
 	if e.ctrl && lower_key(e.key) == `c` {
-		if !isnil(app.focus) && app.focus.kind == .terminal {
-			app.focus.term.key(e)
+		if app.focus != none && app.focus.kind == .terminal {
+			if mut term := app.focus.term { term.key(e) }
 			return
 		}
 		match app.ctrl_c {
@@ -312,8 +314,8 @@ pub fn (mut app App) dispatch(e Event) {
 		}
 		return
 	}
-	mut w := app.top_window_ptr()
-	if !isnil(w) {
+	window := app.top_window()
+	if mut w := window {
 		if app.move_key.matches(e) {
 			app.begin_placement(mut w, false)
 			return
@@ -327,25 +329,29 @@ pub fn (mut app App) dispatch(e Event) {
 		app.cycle_window(e.shift)
 		return
 	}
-	if (e.ctrl && e.key == `g`) && !isnil(w) {
-		app.window_menu(mut w, w.x + 1, w.y + 1)
-		return
+	if e.ctrl && e.key == `g` {
+		if mut w := window {
+			app.window_menu(mut w, w.x + 1, w.y + 1)
+			return
+		}
 	}
-	if (e.alt && e.key in [int(`a`), int(`s`), int(Key.f10)]) || (e.ctrl && e.key == `o` && (isnil(app.focus) || app.focus.kind == .terminal)) {
+	terminal_has_focus := app.focus != none && app.focus.kind == .terminal
+	if (e.alt && e.key in [int(`a`), int(`s`), int(Key.f10)]) || (e.ctrl && e.key == `o` && (app.focus == none || terminal_has_focus)) {
 		app.app_menu(0, app.bar_y())
 		return
 	}
-	if e.key == int(Key.tab) && (isnil(app.focus) || app.focus.kind != .terminal || e.shift) {
-		if !isnil(app.focus) {
-			if f := app.focus.keyfn {
-				if f(mut app.focus, e, mut app) { return }
+	if e.key == int(Key.tab) && (!terminal_has_focus || e.shift) {
+		if mut focus := app.focus {
+			if f := focus.keyfn {
+				if f(mut focus, e, mut app) { return }
 			}
 		}
-		if !isnil(app.focus) && app.focus.kind == .table && app.focus.table_key(e, mut app) { return }
+		if app.focus != none && app.focus.kind == .table && app.focus.table_key(e, mut app) { return }
 		app.focus_next(e.shift)
 		return
 	}
-	if (e.key == int(Key.f10) || (e.alt && e.key == `m`)) && !isnil(w) {
+	if (e.key == int(Key.f10) || (e.alt && e.key == `m`)) && window != none {
+		w := window
 		for menu in w.kids {
 			if menu.kind == .menu {
 				app.open_menu(menu, menu.x, menu.y + 1)
@@ -353,31 +359,32 @@ pub fn (mut app App) dispatch(e Event) {
 			}
 		}
 	}
-	if !isnil(app.focus) && app.focus.visible() {
-		mut c := app.focus
-		if f := c.keyfn {
-			if f(mut c, e, mut app) { return }
-		}
-		if app.widget_key(mut c, e) {
-			if c.kind in [.entry, .multiline, .markdown, .table, .terminal] {
-				c.invalidate_paint()
-			} else {
-				app.dirty = true
+	if mut c := app.focus {
+		if c.visible() {
+			if f := c.keyfn {
+				if f(mut c, e, mut app) { return }
 			}
-			return
+			if app.widget_key(mut c, e) {
+				if c.kind in [.entry, .multiline, .markdown, .table, .terminal] {
+					c.invalidate_paint()
+				} else {
+					app.dirty = true
+				}
+				return
+			}
 		}
 	}
 	if e.ctrl && e.key == `o` {
 		app.app_menu(0, app.bar_y())
 		return
 	}
-	if !isnil(w) {
+	if mut w := window {
 		if f := w.keyfn {
 			if f(mut w, e, mut app) { return }
 		}
 		if e.key == int(Key.escape) && w.dismissable {
 			app.close(mut w)
-		} else if e.key == int(Key.enter) && !isnil(w.default_button) {
+		} else if e.key == int(Key.enter) && w.default_button != none {
 			w.default_button.fire()
 		}
 	}
@@ -392,7 +399,7 @@ fn (mut app App) widget_key(mut c Ctl, event Event) bool {
 	}
 	match c.kind {
 		.terminal {
-			c.term.key(e)
+			if mut term := c.term { term.key(e) }
 			return true
 		}
 		.date_picker { return c.date_picker_key(e, mut app) }
@@ -461,7 +468,7 @@ fn (mut app App) widget_key(mut c Ctl, event Event) bool {
 				}, 0, count - 1))
 				if c.kind == .tabs {
 					c.layout(c.rect())
-					if !isnil(app.focus) && !app.focus.visible() { app.focus = &c }
+					if app.focus != none && !app.focus.visible() { app.focus = &c }
 				}
 				return true
 			}
@@ -477,7 +484,7 @@ fn (mut app App) widget_key(mut c Ctl, event Event) bool {
 			if rows.len == 0 { return false }
 			mut at := 0
 			for i, row in rows {
-				if row.node == c.selected_node {
+				if same_ctl(c.selected_node, row.node) {
 					at = i
 					break
 				}
@@ -497,7 +504,7 @@ fn (mut app App) widget_key(mut c Ctl, event Event) bool {
 				c.fire()
 				return true
 			}
-			if e.key in [int(Key.left), int(Key.right), int(Key.enter)] && !isnil(c.selected_node) {
+			if e.key in [int(Key.left), int(Key.right), int(Key.enter)] && c.selected_node != none {
 				if e.key == int(Key.enter) {
 					if f := c.submit {
 						f(mut c, mut app)
@@ -532,17 +539,16 @@ pub fn (mut app App) scroll_ctl(mut c Ctl, rows int) bool {
 }
 
 fn (mut app App) mouse(e Event) {
-	passive := e.motion && !e.pressed && e.button == .none && isnil(app.drag)
-		&& isnil(app.scroll_drag)
+	passive := e.motion && !e.pressed && e.button == .none && app.drag == none
+		&& app.scroll_drag == none
 	if e.button.is_wheel() {
 		if !e.pressed { return }
 		// Wheel reports are not left-button drag/motion events. Retain capture
 		// and selection while scrolling text; leave a dragged thumb stationary.
-		if !isnil(app.scroll_drag) { return }
-		if !isnil(app.drag) {
-			mut target := app.drag
+		if app.scroll_drag != none { return }
+		if mut target := app.drag {
 			if target.kind == .terminal {
-				target.term.mouse(e, e.x - target.x, e.y - target.y)
+				if mut term := target.term { term.mouse(e, e.x - target.x, e.y - target.y) }
 				return
 			}
 			if target.kind in [.entry, .multiline, .markdown] && e.button in [.wheel_up, .wheel_down] {
@@ -553,18 +559,17 @@ fn (mut app App) mouse(e Event) {
 	}
 	now := app.now()
 	last_title := app.title_click
-	double_title_click := e.pressed && !e.motion && e.button == .left && !isnil(last_title)
+	double_title_click := e.pressed && !e.motion && e.button == .left && last_title != none
 		&& e.x == app.title_click_x && e.y == app.title_click_y && now - app.title_click_at < 400
 	if (e.pressed && !e.motion) || (e.button == .left && (e.x != app.title_click_x || e.y != app.title_click_y)) {
-		app.title_click = unsafe { nil }
+		app.title_click = none
 	}
-	if double_title_click && app.placement == last_title && !app.placement_resize
+	if double_title_click && last_title != none && same_ctl(app.placement, last_title) && !app.placement_resize
 		&& last_title.controls & window_maximize != 0 {
-		app.placement = unsafe { nil }
+		app.placement = none
 	}
-	if !isnil(app.placement) {
+	if mut w := app.placement {
 		if e.pressed && e.button == .left && !e.motion {
-			mut w := app.placement
 			if app.placement_resize {
 				w.resize_window(e.x - w.x + 1, e.y - w.y + 1, app.work_area(), false, false)
 			} else {
@@ -572,17 +577,16 @@ fn (mut app App) mouse(e Event) {
 				w.y = e.y
 				w.fit_window(app.work_area())
 			}
-			app.placement = unsafe { nil }
+			app.placement = none
 			app.dirty = true
 		}
 		return
 	}
-	if !isnil(app.scroll_drag) {
+	if mut c := app.scroll_drag {
 		if !e.pressed {
-			app.scroll_drag = unsafe { nil }
+			app.scroll_drag = none
 			return
 		}
-		mut c := app.scroll_drag
 		inset := if c.kind == .table {
 			1
 		} else if c.kind == .markdown {
@@ -594,13 +598,13 @@ fn (mut app App) mouse(e Event) {
 		c.scroll_rows(top - c.top, app.scroll_total, app.scroll_view)
 		return
 	}
-	if !isnil(app.drag) {
-		mut c := app.drag
+	if mut c := app.drag {
 		if c.kind == .terminal {
-			if e.button != c.term.mouse_button && e.button != .none { return }
-			event := if e.button == .none && !e.motion { Event{ ...e, button: c.term.mouse_button } } else { e }
-			c.term.mouse(event, e.x - c.x, e.y - c.y)
-			if !e.pressed && !e.motion { app.drag = unsafe { nil } }
+			mut term := c.term or { return }
+			if e.button != term.mouse_button && e.button != .none { return }
+			event := if e.button == .none && !e.motion { Event{ ...e, button: term.mouse_button } } else { e }
+			term.mouse(event, e.x - c.x, e.y - c.y)
+			if !e.pressed && !e.motion { app.drag = none }
 			return
 		}
 		if c.kind == .table {
@@ -609,24 +613,27 @@ fn (mut app App) mouse(e Event) {
 			return
 		}
 		if c.kind == .split {
-			if e.button == .none && !e.pressed { app.drag = unsafe { nil }; return }
+			if e.button == .none && !e.pressed { app.drag = none; return }
 			if e.button != .left { return }
-			if !e.pressed { app.drag = unsafe { nil } }
+			if !e.pressed { app.drag = none }
 			if !c.resizable || app.popups.len > 0 || c.split_divider().w == 0 {
-				app.drag = unsafe { nil }
+				app.drag = none
 				return
 			}
 			c.resize_split(e)
 			return
 		}
 		if c.kind == .tabpage {
-			if e.button == .none && !e.pressed { app.drag = unsafe { nil }; return }
+			if e.button == .none && !e.pressed { app.drag = none; return }
 			if e.button != .left { return }
-			if !e.pressed { app.drag = unsafe { nil } }
-			mut strip := c.parent
-			if isnil(strip) || !strip.reorderable || strip.kind != .tabs
+			if !e.pressed { app.drag = none }
+			mut strip := c.parent or {
+				app.drag = none
+				return
+			}
+			if !strip.reorderable || strip.kind != .tabs
 				|| strip.kids.index(c) != strip.value || app.popups.len > 0 {
-				app.drag = unsafe { nil }
+				app.drag = none
 				return
 			}
 			if e.x != app.tab_drag_last_x || e.y != app.tab_drag_last_y {
@@ -637,12 +644,12 @@ fn (mut app App) mouse(e Event) {
 		}
 		if c.mouse_capture {
 			if f := c.mousefn { f(mut c, e, mut app) }
-			if !e.pressed { app.drag = unsafe { nil } }
+			if !e.pressed { app.drag = none }
 			c.invalidate_paint()
 			return
 		}
 		if !e.pressed {
-			app.drag = unsafe { nil }
+			app.drag = none
 			return
 		}
 		if c.kind in [.entry, .multiline, .markdown] {
@@ -700,8 +707,9 @@ fn (mut app App) mouse(e Event) {
 		}
 		if at + 1 < app.popups.len { app.popups = app.popups[..at + 1] }
 		mut p := app.popups[at]
+		owner := p.popup_owner or { return }
 		row := p.top + e.y - p.y - 1
-		if row >= 0 && row < p.popup_owner.kids.len {
+		if row >= 0 && row < owner.kids.len {
 			if p.value != row {
 				p.value = row
 				app.invalidate_area(p.rect())
@@ -718,24 +726,23 @@ fn (mut app App) mouse(e Event) {
 			return
 		}
 	}
-	mut w := &Ctl(unsafe { nil })
+	mut target := ?&Ctl(none)
 	for i := app.windows.len - 1; i >= 0; i-- {
 		candidate := app.windows[i]
 		if app.on_desktop(candidate) && !candidate.closed && !candidate.minimized && !candidate.hidden && candidate.rect().contains(e.x, e.y) {
-			w = candidate
+			target = candidate
 			break
 		}
 	}
-	if isnil(w) {
+	mut w := target or {
 		if e.pressed && e.button == .right && app.desktop { app.app_menu(e.x, e.y) }
 		return
 	}
-	mut blocked := app.blocker(w)
-	if !isnil(blocked) {
+	if mut blocked := app.blocker(w) {
 		if e.pressed && !e.motion { app.raise(mut blocked) }
 		return
 	}
-	if e.pressed && !e.motion && app.top_window_ptr() != w { app.raise(mut w) }
+	if e.pressed && !e.motion && !same_ctl(app.top_window(), w) { app.raise(mut w) }
 	if e.y == w.y || e.x == w.x || e.x == w.x + w.w - 1 || e.y == w.y + w.h - 1 {
 		if e.button == .right && e.pressed && w.controls & window_menu != 0 {
 			app.window_menu(mut w, e.x, e.y)
@@ -761,7 +768,7 @@ fn (mut app App) mouse(e Event) {
 				return
 			}
 			if w.controls & window_maximize != 0 {
-				if double_title_click && last_title == w {
+				if double_title_click && same_ctl(last_title, w) {
 					if w.maximized { app.restore(mut w) } else { app.maximize(mut w) }
 					return
 				}
@@ -801,25 +808,26 @@ fn (mut app App) mouse(e Event) {
 			return
 		}
 	}
-	mut c := w.hit_ptr(e.x, e.y)
-	if isnil(c) || !c.visible() { return }
-	if c.kind == .terminal && !isnil(c.term) && c.term.mouse_mode != 0 && c.content_rect().contains(e.x, e.y) {
+	mut c := w.hit(e.x, e.y) or { return }
+	if !c.visible() { return }
+	if c.kind == .terminal && c.term != none && c.term.mouse_mode != 0 && c.content_rect().contains(e.x, e.y) {
+		mut term := c.term or { return }
 		if e.pressed && !e.motion && e.button == .left { app.set_focus(c) }
-		c.term.mouse(e, e.x - c.x, e.y - c.y)
-		if e.pressed && !e.motion && !e.button.is_wheel() && e.button != .none && c.term.mouse_mode != 9 {
-			c.term.mouse_button = e.button
+		term.mouse(e, e.x - c.x, e.y - c.y)
+		if e.pressed && !e.motion && !e.button.is_wheel() && e.button != .none && term.mouse_mode != 9 {
+			term.mouse_button = e.button
 			app.drag = c
 		}
 		return
 	}
 	if e.button == .right && e.pressed {
 		mut p := c
-		for !isnil(p) {
-			if !isnil(p.menu) {
+		for {
+			if p.menu != none {
 				app.open_menu(p.menu, e.x, e.y)
 				return
 			}
-			p = p.parent
+			p = p.parent or { break }
 		}
 	}
 	if f := c.mousefn {
@@ -841,9 +849,9 @@ fn (mut app App) mouse(e Event) {
 		// Horizontal trackpad noise must never reverse a vertical scroll.
 		if e.button in [.wheel_left, .wheel_right] { return }
 		mut p := c
-		for !isnil(p) {
+		for {
 			if app.scroll_ctl(mut p, if e.button == .wheel_up { -1 } else { 1 }) { return }
-			p = p.parent
+			p = p.parent or { break }
 		}
 		return
 	}
@@ -903,8 +911,9 @@ fn (mut app App) mouse(e Event) {
 			rows := c.tree_rows()
 			at := c.top + e.y - c.y
 			if at >= 0 && at < rows.len {
-				c.selected_node = rows[at].node
-				c.selected_node.expanded = !c.selected_node.expanded
+				mut node := rows[at].node
+				c.selected_node = node
+				node.expanded = !node.expanded
 				c.scroll_hold = false
 				c.fire()
 			}
@@ -914,16 +923,16 @@ fn (mut app App) mouse(e Event) {
 }
 
 fn (mut app App) placement_key(e Event) {
-	mut w := app.placement
+	mut w := app.placement or { return }
 	if e.key == int(Key.escape) {
 		w.x = app.placement_start.x
 		w.y = app.placement_start.y
 		w.w = app.placement_start.w
 		w.h = app.placement_start.h
-		app.placement = unsafe { nil }
+		app.placement = none
 		w.fit_window(app.work_area())
 	} else if e.key == int(Key.enter) {
-		app.placement = unsafe { nil }
+		app.placement = none
 	} else {
 		step := if e.shift { 5 } else { 1 }
 		dx := if e.key == int(Key.left) {
@@ -952,7 +961,7 @@ fn (mut app App) placement_key(e Event) {
 }
 
 fn (mut app App) cycle_window(back bool) {
-	windows := app.windows.filter(it.desktop_id == app.active_desktop && !it.closed && !it.minimized && !it.hidden && isnil(app.blocker(it)))
+	windows := app.windows.filter(it.desktop_id == app.active_desktop && !it.closed && !it.minimized && !it.hidden && app.blocker(it) == none)
 	if windows.len < 2 { return }
 	mut next := if back { windows[windows.len - 2] } else { windows[0] }
 	app.raise(mut next)

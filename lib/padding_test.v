@@ -80,18 +80,18 @@ fn test_padded_textareas_wrap_draw_and_hit_test_in_the_same_content_box() {
 		text.anchor = -1
 		// Padding focuses the textarea but does not move its caret or start a drag.
 		app.dispatch(Event{kind: .mouse, button: .left, pressed: true, x: outer.x, y: inner.y})
-		assert app.focus == text && text.cursor == 5 && text.anchor == -1 && isnil(app.drag)
+		assert same_ctl(app.focus, text) && text.cursor == 5 && text.anchor == -1 && app.drag == none
 		app.dispatch(Event{kind: .mouse, button: .left, pressed: true, x: inner.x + 2, y: inner.y})
 		app.dispatch(Event{kind: .mouse, button: .left, x: inner.x + 2, y: inner.y})
 		assert text.cursor == 2
 		text.anchor, text.cursor = 0, source.len
 		assert app.copy_focus() && app.clipboard_text() == source
 		app.dispatch(Event{kind: .mouse, button: .left, pressed: true, x: outer.x + outer.w - 1, y: inner.y + 2})
-		assert isnil(app.scroll_drag)
+		assert app.scroll_drag == none
 		app.dispatch(Event{kind: .mouse, button: .left, pressed: true, x: inner.x + inner.w - 1, y: inner.y + 2})
-		assert app.scroll_drag == text
+		assert same_ctl(app.scroll_drag, text)
 		app.dispatch(Event{kind: .mouse, button: .left, x: inner.x + inner.w - 1, y: inner.y + 2})
-		assert isnil(app.scroll_drag) && text.text == source
+		assert app.scroll_drag == none && text.text == source
 	}
 }
 
@@ -168,7 +168,7 @@ fn test_padding_does_not_move_button_click_targets_and_entries_fill_their_paddin
 	app.redraw()
 	outer := button.rect()
 	app.dispatch(Event{kind: .mouse, button: .left, pressed: true, x: outer.x, y: outer.y})
-	assert button.data == 1 && app.focus == button
+	assert button.data == 1 && same_ctl(app.focus, button)
 	mut input := entry('Entry', 0)
 	input.padding = Insets{left: 1, right: 1}
 	window.clear()
@@ -194,11 +194,11 @@ fn test_padded_split_panes_drag_at_outer_edges_and_keep_a_content_cell() {
 		divider := panes.split_divider()
 		assert (if vertical { divider.y } else { divider.x }) == if vertical { first.rect().y + first.rect().h } else { first.rect().x + first.rect().w }
 		app.dispatch(Event{kind: .mouse, button: .left, pressed: true, x: divider.x, y: divider.y})
-		assert app.drag == panes
+		assert same_ctl(app.drag, panes)
 		app.dispatch(Event{kind: .mouse, button: .left, pressed: true, motion: true, x: -100, y: -100})
 		assert (if vertical { first.content_rect().h } else { first.content_rect().w }) >= 1
 		app.dispatch(Event{kind: .mouse, button: .left, x: 1000, y: 1000})
-		assert isnil(app.drag)
+		assert app.drag == none
 		assert (if vertical { second.content_rect().h } else { second.content_rect().w }) >= 1
 		app.redraw()
 		assert panes.rect() == window.content_rect()
@@ -226,7 +226,7 @@ fn test_padding_clips_descendant_carets_and_scroll_content() {
 	window.clear()
 	window.add(mut scroll)
 	app.redraw()
-	assert scroll.hit_ptr(scroll.rect().x, scroll.rect().y) == scroll
+	assert same_ctl(scroll.hit(scroll.rect().x, scroll.rect().y), scroll)
 	assert app.screen.cells[(scroll.rect().y + scroll.rect().h - 1) * app.width + scroll.rect().x + 1].glyph == ' '
 }
 
@@ -260,13 +260,14 @@ fn test_padded_flows_grids_tabs_and_terminals_use_content_bounds() {
 	assert content.rect().x == tabs.content_rect().x + 3
 	mut terminal := &Ctl{kind: .terminal, term: new_terminal(10, 3), pw: 10, ph: 3,
 		intrinsic_w: 10, intrinsic_h: 3, focusable: true, padding: Insets{left: 1, right: 1, top: 1, bottom: 1}}
-	terminal.term.feed('X')
+	mut term := terminal.term or { panic('expected a terminal') }
+	term.feed('X')
 	window.clear()
 	window.add(mut terminal)
 	app.set_focus(terminal)
 	app.redraw()
 	inner := terminal.content_rect()
-	assert terminal.term.cols == inner.w && terminal.term.rows == inner.h
+	assert term.cols == inner.w && term.rows == inner.h
 	assert app.screen.cells[inner.y * app.width + inner.x].glyph == 'X'
 	assert app.screen.cursor_x == inner.x + 1 && app.screen.cursor_y == inner.y
 }

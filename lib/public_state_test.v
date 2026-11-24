@@ -36,6 +36,13 @@ fn test_public_lookups_return_none_and_present_controls() {
 	assert button.context_menu() == none && menu.owner_window() == none
 }
 
+fn test_optional_control_references_compare_identity() {
+	first := ?&Ctl(button('Same text'))
+	second := ?&Ctl(button('Same text'))
+	assert first != second
+	assert first == first
+}
+
 fn test_control_replacement_preserves_order_and_repairs_references() {
 	mut app := new_app()
 	mut w := app.window('Replace', 40, 12)

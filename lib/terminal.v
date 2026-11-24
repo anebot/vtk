@@ -66,10 +66,11 @@ pub fn terminal(cols int, rows int, options TerminalOptions) !&Ctl {
 
 pub fn (mut app App) terminal_window(options TerminalOptions) !&Ctl {
 	mut control := terminal(72, 18, options)!
+	mut term := control.term or { return error('missing terminal state') }
 	mut w := app.window(options.title, 74, 20)
 	w.add(mut control)
-	control.term.standalone_window = w
-	control.term.keep_open = options.keep_open
+	term.standalone_window = w
+	term.keep_open = options.keep_open
 	app.set_focus(control)
 	return w
 }
@@ -533,22 +534,23 @@ pub fn (mut t Terminal) close() {
 }
 
 fn (mut app App) terminal_exited(mut c Ctl) {
-	mut t := c.term
+	mut t := c.term or { return }
 	callback, window := t.on_exit, t.standalone_window
 	t.close()
 	app.sources_dirty = true
 	app.dirty = true
-	if app.drag == &c { app.drag = unsafe { nil } }
+	if same_ctl(app.drag, &c) { app.drag = none }
 	if mut w := window { w.set_text('[exited] ${w.text}') }
 	if f := callback { f(mut c, mut app) }
 	if mut w := window {
-		if !t.keep_open && !w.closed && w.app == &app && c.parent == w { app.close(mut w) }
+		if !t.keep_open && !w.closed && same_app(w.app, &app) && same_ctl(c.parent, w) { app.close(mut w) }
 	}
 }
 
 fn (mut app App) pump_terminal(mut c Ctl) {
-	if c.closed || c.root().app != &app || isnil(c.term) || c.term.exited { return }
-	mut t := c.term
+	if c.closed || !same_app(c.root().app, &app) { return }
+	mut t := c.term or { return }
+	if t.exited { return }
 	// Check first so all available output is read after the child has exited.
 	alive := t.pty.alive()
 	if alive { t.flush_input() }
@@ -568,34 +570,35 @@ fn (mut app App) pump_terminal(mut c Ctl) {
 	if !c.is_drawable() { return }
 	r := app.visible_paint_rect(c)
 	if r.w <= 0 || r.h <= 0 { return }
-	w := c.owner_window_ptr()
-	if !isnil(w) && app.covered_by_window(app.windows.index(w) + 1, r) { return }
+	if w := c.owner_window() {
+		if app.covered_by_window(app.windows.index(w) + 1, r) { return }
+	}
 	if t.damage_end > 0 {
 		affected := Rect{c.x, c.y + t.damage_top, c.w, t.damage_end - t.damage_top}
 		app.invalidate_area(affected.intersection(r))
 	}
-	if app.focus == &c && (x != t.cx || y != t.cy || hidden != t.cursor_hidden) {
+	if same_ctl(app.focus, &c) && (x != t.cx || y != t.cy || hidden != t.cursor_hidden) {
 		app.update_terminal_cursor(c)
 		app.cursor_dirty = true
 	}
 }
 
 fn (mut app App) close_terminals(mut c Ctl) {
-	if !isnil(c.term) { c.term.close() }
+	if c.term != none { c.term.close() }
 	for mut child in c.kids { app.close_terminals(mut child) }
-	if !isnil(c.menu) { app.close_terminals(mut c.menu) }
+	if mut menu := c.menu { app.close_terminals(mut menu) }
 }
 
 fn (mut app App) draw_terminal(mut c Ctl) {
-	if isnil(c.term) { return }
-	c.term.resize(c.w, c.h)
+	mut term := c.term or { return }
+	term.resize(c.w, c.h)
 	first := max(0, max(app.screen.clip.y, app.screen.paint_y) - c.y)
-	end := min(min(c.h, c.term.rows), min(app.screen.clip.y + app.screen.clip.h, app.screen.paint_end) - c.y)
+	end := min(min(c.h, term.rows), min(app.screen.clip.y + app.screen.clip.h, app.screen.paint_end) - c.y)
 	for y in first .. end {
-		for x in 0 .. min(c.w, c.term.cols) {
-			cell := c.term.cells[y * c.term.cols + x]
+		for x in 0 .. min(c.w, term.cols) {
+			cell := term.cells[y * term.cols + x]
 			if !cell.continuation {
-				wide := x + 1 < c.term.cols && c.term.cells[y * c.term.cols + x + 1].continuation
+				wide := x + 1 < term.cols && term.cells[y * term.cols + x + 1].continuation
 				app.screen.put_grapheme(c.x + x, c.y + y, cell.glyph, 1 + int(wide), cell.fg, cell.bg, cell.attr)
 				if wide && app.screen.ascii && x + 1 < c.w {
 					app.screen.put(c.x + x + 1, c.y + y, ` `, cell.fg, cell.bg, 0)
@@ -603,14 +606,15 @@ fn (mut app App) draw_terminal(mut c Ctl) {
 			}
 		}
 	}
-	if app.focus == &c { app.update_terminal_cursor(c) }
+	if same_ctl(app.focus, &c) { app.update_terminal_cursor(c) }
 }
 
 fn (mut app App) update_terminal_cursor(c &Ctl) {
-	x, y := c.x + min(c.w - 1, c.term.cx), c.y + c.term.cy
+	term := c.term or { return }
+	x, y := c.x + min(c.w - 1, term.cx), c.y + term.cy
 	app.screen.cursor_x = -1
-	if c.disabled || c.term.exited || c.term.cursor_hidden || app.popups.len > 0
-		|| c.owner_window_ptr() != app.top_window_ptr() || !app.visible_paint_rect(c).contains(x, y) { return }
+	if c.disabled || term.exited || term.cursor_hidden || app.popups.len > 0
+		|| !same_ctl(c.owner_window(), app.top_window()) || !app.visible_paint_rect(c).contains(x, y) { return }
 	app.screen.cursor_x, app.screen.cursor_y = x, y
 	app.screen.cursor_shape = .block
 }

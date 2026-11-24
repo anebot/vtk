@@ -87,19 +87,20 @@ fn test_terminal_mouse_reports_reach_the_pty_child() ! {
 	app.desktop = false
 	mut window := app.window('Terminal', 24, 10)
 	mut c := terminal(10, 3)!
-	defer { c.term.close() }
+	mut term := c.term or { panic('expected a terminal') }
+	defer { term.close() }
 	window.add(mut c)
 	app.redraw()
 	deadline := time.ticks() + 3000
-	for c.term.mouse_mode == 0 && time.ticks() < deadline {
+	for term.mouse_mode == 0 && time.ticks() < deadline {
 		app.pump_terminal(mut c)
 		time.sleep(5 * time.millisecond)
 	}
-	assert c.term.mouse_mode == 1000 && c.term.mouse_sgr
+	assert term.mouse_mode == 1000 && term.mouse_sgr
 	app.dispatch(Event{kind: .mouse, x: c.x, y: c.y, button: .left, pressed: true})
 	app.dispatch(Event{kind: .mouse, x: c.x, y: c.y, button: .left})
 	app.dispatch(Event{kind: .mouse, x: c.x, y: c.y, button: .wheel_down, pressed: true})
-	assert terminal_test_output(mut c.term.pty) == '1b5b3c303b313b314d1b5b3c303b313b316d1b5b3c36353b313b314d'
+	assert terminal_test_output(mut term.pty) == '1b5b3c303b313b314d1b5b3c303b313b316d1b5b3c36353b313b314d'
 }
 
 fn test_pty_reads_reuse_storage_and_return_independent_strings() {
@@ -156,17 +157,21 @@ fn test_terminal_options_start_shells_in_independent_directories() ! {
 	defer { app.close(mut second) }
 	assert first.text == 'Shell: topic' && second.text == 'Shell: main'
 	assert os.getwd() == cwd
-	assert terminal_test_output(mut first.kids[0].term.pty).trim_space() == 'VTK-CWD:${os.real_path(worktree)}'
-	assert terminal_test_output(mut second.kids[0].term.pty).trim_space() == 'VTK-CWD:${os.real_path(directory)}'
+	mut first_term := first.kids[0].term or { panic('expected a terminal') }
+	assert terminal_test_output(mut first_term.pty).trim_space() == 'VTK-CWD:${os.real_path(worktree)}'
+	mut second_term := second.kids[0].term or { panic('expected a terminal') }
+	assert terminal_test_output(mut second_term.pty).trim_space() == 'VTK-CWD:${os.real_path(directory)}'
 	mut inherited := app.terminal_window()!
 	defer { app.close(mut inherited) }
 	assert inherited.text == 'Terminal'
-	assert terminal_test_output(mut inherited.kids[0].term.pty).trim_space() == 'VTK-CWD:${os.real_path(cwd)}'
+	mut inherited_term := inherited.kids[0].term or { panic('expected a terminal') }
+	assert terminal_test_output(mut inherited_term.pty).trim_space() == 'VTK-CWD:${os.real_path(cwd)}'
 	mut embedded := terminal(40, 8, directory: '.')!
-	defer { embedded.term.close() }
-	assert terminal_test_output(mut embedded.term.pty).trim_space() == 'VTK-CWD:${os.real_path(cwd)}'
+	mut embedded_term := embedded.term or { panic('expected a terminal') }
+	defer { embedded_term.close() }
+	assert terminal_test_output(mut embedded_term.pty).trim_space() == 'VTK-CWD:${os.real_path(cwd)}'
 	assert app.close(mut first)
-	assert first.kids[0].term.pty.fd == -1
+	assert first_term.pty.fd == -1
 	assert os.getwd() == cwd
 }
 
@@ -181,7 +186,7 @@ fn test_terminal_startup_errors_leave_no_window_or_changed_directory() ! {
 		if _ := app.terminal_window(directory: invalid) {
 			assert false, 'invalid directory was accepted: ${invalid}'
 		}
-		assert app.windows.len == 0 && isnil(app.focus)
+		assert app.windows.len == 0 && app.focus == none
 		assert os.getwd() == cwd
 	}
 	previous_shell := os.getenv_opt('SHELL')
@@ -190,7 +195,7 @@ fn test_terminal_startup_errors_leave_no_window_or_changed_directory() ! {
 		if value := previous_shell { os.setenv('SHELL', value, true) } else { os.unsetenv('SHELL') }
 	}
 	if _ := app.terminal_window(directory: directory) { assert false, 'missing shell was accepted' }
-	assert app.windows.len == 0 && isnil(app.focus)
+	assert app.windows.len == 0 && app.focus == none
 	assert os.getwd() == cwd
 }
 
@@ -211,9 +216,10 @@ fn test_terminal_window_handles_ctrl_d_and_preserves_final_output() ! {
 		mut w := app.terminal_window(
 			keep_open: mode == 'keep'
 			on_exit: fn (mut control Ctl, mut owner App) {
-				assert control.root().app == &owner
-				assert control.term.has_exited() && control.term.pty.fd == -1
-				assert control.term.cells[..12].map(it.glyph).join('') == 'final output'
+				assert same_app(control.root().app, &owner)
+				term := control.term or { panic('expected a terminal') }
+				assert term.has_exited() && term.pty.fd == -1
+				assert term.cells[..12].map(it.glyph).join('') == 'final output'
 				control.data++
 			}
 		)!
@@ -247,7 +253,7 @@ fn test_reparented_terminal_notifies_its_current_app_and_keeps_its_window() ! {
 	mut first := new_app()
 	defer { first.fini() }
 	mut original := first.terminal_window(on_exit: fn (mut control Ctl, mut owner App) {
-		assert control.root().app == &owner && control.term.has_exited()
+		assert same_app(control.root().app, &owner) && (control.term or { panic('expected term') }).has_exited()
 		control.data++
 	})!
 	mut control := original.kids[0]
@@ -266,9 +272,10 @@ fn test_reparented_terminal_notifies_its_current_app_and_keeps_its_window() ! {
 }
 
 fn wait_for_terminal_exit(mut app App, control &Ctl) {
+	term := control.term or { panic('expected a terminal') }
 	deadline := time.ticks() + 3000
-	for !control.term.has_exited() && time.ticks() < deadline { app.step(5) }
-	assert control.term.has_exited()
+	for !term.has_exited() && time.ticks() < deadline { app.step(5) }
+	assert term.has_exited()
 }
 
 fn test_window_lifecycle_paths_close_live_terminal_processes() {
@@ -289,13 +296,14 @@ fn test_window_lifecycle_paths_close_live_terminal_processes() {
 		mut control := terminal(10, 2, on_exit: fn (mut _ Ctl, mut _ App) {
 			assert false, 'toolkit teardown must not notify child exit'
 		}) or { panic(err) }
-		defer { control.term.close() }
+		mut term := control.term or { panic('expected a terminal') }
+		defer { term.close() }
 		w.add(mut control)
-		assert control.term.pty.alive()
+		assert term.pty.alive()
 		action(mut app, mut w)
-		assert control.term.has_exited() && control.term.pty.fd == -1 && !control.term.pty.alive()
+		assert term.has_exited() && term.pty.fd == -1 && !term.pty.alive()
 		app.step(0)
-		assert control.term.on_exit == none
+		assert term.on_exit == none
 		app.fini()
 	}
 }

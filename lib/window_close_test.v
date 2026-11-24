@@ -18,10 +18,10 @@ fn test_close_checks_ownership_and_preserves_veto_and_focus() {
 	assert !other.close(mut w)
 	assert w.data == 0 && app.clipboard_text() == ''
 	assert !app.close(mut w)
-	assert !w.closed && app.focus == field && !app.dirty
+	assert !w.closed && same_ctl(app.focus, field) && !app.dirty
 	assert app.clipboard_text() == 'Owner' && other.clipboard_text() == ''
 	assert app.close(mut w)
-	assert w.closed && isnil(app.focus) && app.dirty
+	assert w.closed && app.focus == none && app.dirty
 	assert app.close(mut w) && w.data == 2
 	assert !other.close(mut w) && w.data == 2
 	assert !untouched.closed && !other.dirty
@@ -77,15 +77,15 @@ fn test_quit_checks_all_vetoes_before_closing_and_releasing_input() {
 	app.open_menu(menu, 0, 0)
 	app.quit()
 	assert app.is_running() && !owner.is_closed() && !dialog.is_closed()
-	assert owner.data == 1 && dialog.data == 1 && !terminal.term.has_exited()
+	assert owner.data == 1 && dialog.data == 1 && !(terminal.term or { panic('expected term') }).has_exited()
 	assert app.focused_ctl() == ?&Ctl(terminal) && app.popups.len == 1
-	assert app.drag == terminal && app.placement == owner
+	assert same_ctl(app.drag, terminal) && same_ctl(app.placement, owner)
 	app.quit()
 	assert !app.is_running() && owner.is_closed() && dialog.is_closed()
-	assert owner.data == 2 && dialog.data == 2 && terminal.term.has_exited()
+	assert owner.data == 2 && dialog.data == 2 && (terminal.term or { panic('expected term') }).has_exited()
 	assert owner.children() == [terminal] && app.window_list().len == 2
 	assert app.focused_ctl() == none && app.popups.len == 0
-	assert isnil(app.drag) && isnil(app.scroll_drag) && isnil(app.placement) && isnil(app.title_click)
+	assert app.drag == none && app.scroll_drag == none && app.placement == none && app.title_click == none
 }
 
 fn test_fini_disposes_closed_and_vetoing_windows_once() {
@@ -158,15 +158,15 @@ fn test_close_callback_can_transfer_a_window_without_foreign_cleanup() {
 	mut app := new_app()
 	mut other := new_app()
 	mut w := app.window('Transfer', 30, 8)
-	w.user = other
+	w.set_context(other)
 	w.closing = fn (mut c Ctl, mut _ App) bool {
-		mut other := unsafe { &App(c.user) }
+		mut other := c.context[App]() or { panic('missing callback context') }
 		c.detach()
 		other.raise(mut c)
 		return true
 	}
 	assert !app.close(mut w)
-	assert !w.is_closed() && w.app == other && app.window_list().len == 0
+	assert !w.is_closed() && same_app(w.app, other) && app.window_list().len == 0
 	assert other.window_list() == [w]
 	other.fini()
 }
@@ -178,7 +178,7 @@ fn test_quit_allows_a_closing_callback_to_run_a_confirmation_dialog() {
 	w.closing = fn (mut c Ctl, mut app App) bool {
 		c.data++
 		app.after(0, fn (mut app App) {
-			mut dialog := app.top_window_ptr()
+			mut dialog := app.top_window() or { panic('expected a window') }
 			dialog.dialog_result = 1
 			assert app.close(mut dialog)
 		})
@@ -207,7 +207,7 @@ fn test_destroy_callback_can_rescue_a_sibling_into_another_app() {
 	w.add(mut first)
 	w.add(mut moved)
 	app.fini()
-	assert moved.owner_window() == ?&Ctl(target) && moved.data == 0 && !moved.term.has_exited()
+	assert moved.owner_window() == ?&Ctl(target) && moved.data == 0 && !(moved.term or { panic('expected term') }).has_exited()
 	assert target.children() == [moved] && w.children().len == 0
 }
 
@@ -223,7 +223,7 @@ fn test_destroy_disposes_detached_windows_without_requesting_close() {
 	w.add(mut control)
 	app.destroy_ctl(mut w)
 	assert w.is_closed() && w.data == 1 && w.children().len == 0
-	assert control.term.has_exited() && control.parent_ctl() == none && app.window_list().len == 0
+	assert (control.term or { panic('expected term') }).has_exited() && control.parent_ctl() == none && app.window_list().len == 0
 	app.destroy_ctl(mut w)
 	assert w.data == 1
 }

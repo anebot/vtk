@@ -87,13 +87,13 @@ fn (mut view ChartView) apply() ! {
 }
 
 fn chart_apply(mut c vtk.Ctl, mut _ vtk.App) {
-	mut view := unsafe { &ChartView(c.user) }
+	mut view := c.context[ChartView]() or { return }
 	view.apply() or { view.message.set_text(err.msg()); return }
 	view.message.set_text('Blank bounds use an automatic scale. Escape closes the chart.')
 }
 
 fn chart_kind_changed(mut c vtk.Ctl, mut app vtk.App) {
-	mut view := unsafe { &ChartView(c.user) }
+	mut view := c.context[ChartView]() or { return }
 	if view.horizontal_values != (view.kind.value == 1) {
 		text := view.x_title.text
 		view.x_title.set_text(view.y_title.text)
@@ -104,7 +104,7 @@ fn chart_kind_changed(mut c vtk.Ctl, mut app vtk.App) {
 }
 
 fn chart_pick_color(mut c vtk.Ctl, mut app vtk.App) {
-	mut view := unsafe { &ChartView(c.user) }
+	mut view := c.context[ChartView]() or { return }
 	index := view.series.value
 	if index < 0 || index >= view.plot.chart.series.len { return }
 	color := view.plot.chart.series[index].color
@@ -150,10 +150,16 @@ fn (mut current SheetView) show_chart(mut app vtk.App) {
 	mut message := vtk.label('Blank bounds use an automatic scale. Escape closes the chart.')
 	mut view := &ChartView{plot: plot, kind: kind, title: title, x_title: x_title, y_title: y_title, minimum: minimum, maximum: maximum, series: series, message: message}
 	mut fields := [title, x_title, y_title, minimum, maximum]
-	for mut field in fields { field.user, field.submit = view, chart_apply }
-	kind.user, kind.changed = view, chart_kind_changed
-	apply.user, apply.changed = view, chart_apply
-	color.user, color.changed = view, chart_pick_color
+	for mut field in fields {
+		field.set_context(view)
+		field.submit = chart_apply
+	}
+	kind.set_context(view)
+	kind.changed = chart_kind_changed
+	apply.set_context(view)
+	apply.changed = chart_apply
+	color.set_context(view)
+	color.changed = chart_pick_color
 	body.add(mut heading); body.add(mut axes); body.add(mut scale); body.add(mut colors)
 	body.add(mut plot); body.add(mut message)
 	mut window := app.dialog('Chart · selected cells', mut body)

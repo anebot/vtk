@@ -21,16 +21,16 @@ fn test_disposal_releases_callback_context_without_destroying_associations() {
 	defer { app.fini() }
 	mut w := app.window('Window', 30, 8)
 	mut child := button('Child')
-	child.user = w
+	child.set_context(w)
 	child.link = w
 	child.changed = fn [w] (mut _ Ctl, mut app App) { app.clipboard_set(w.text) }
 	child.destroy = fn (mut c Ctl, mut _ App) {
-		assert c.link != none && c.user != voidptr(0)
+		assert c.link != none && c.context[Ctl]() != none
 		c.data++
 	}
 	w.add(mut child)
 	app.destroy_ctl(mut child)
-	assert child.data == 1 && child.link == none && child.user == voidptr(0)
+	assert child.data == 1 && child.link == none && child.context[Ctl]() == none
 	assert child.changed == none && child.destroy == none && !w.is_closed()
 	app.clock_clicked = fn [w] (_ Event, mut app App) { app.clipboard_set(w.text) }
 	app.ctrl_c_handler = fn [w] (mut app App) { app.clipboard_set(w.text) }
@@ -54,7 +54,7 @@ fn test_edit_reset_releases_old_group_and_history_storage() {
 fn test_event_loop_disposes_closed_windows_without_a_second_cleanup_call() {
 	mut app := new_app()
 	app.bar_clock = false
-	app.register('Keep desktop running', fn (mut _ App, _ voidptr) {}, voidptr(0))
+	app.register('Keep desktop running', fn (mut _ App) {})
 	mut w := app.window('Window', 30, 8)
 	mut child := button('Child')
 	child.destroy = fn (mut c Ctl, mut _ App) { c.data++ }

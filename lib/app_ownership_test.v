@@ -47,7 +47,7 @@ fn test_window_actions_reject_foreign_apps_before_mutation() {
 			assert !w.closed && w.desktop_id == 1 && w.data == 0
 			assert first.windows == [w] && second.windows == [local]
 			assert second.popups.len == 1 && second.popups[0] == popup
-			assert isnil(second.focus) && isnil(second.placement)
+			assert second.focus == none && second.placement == none
 			assert !first.dirty && !second.dirty
 			assert first.clipboard_text() == '' && second.clipboard_text() == ''
 			if !maximized {
@@ -84,17 +84,17 @@ fn test_control_actions_resolve_ownership_after_reparenting() {
 	second.history_for(none, mut editor)
 	second.history_for(w1, mut local_editor)
 	second.destroy_ctl(mut editor)
-	assert !editor.closed && editor.parent == w1 && editor.data == 0
-	assert editor.edit.undo.len == 0 && isnil(second.focus)
+	assert !editor.closed && same_ctl(editor.parent, w1) && editor.data == 0
+	assert editor.edit.undo.len == 0 && second.focus == none
 	assert !first.dirty && !second.dirty
 	w2.add(mut editor)
 	first.dirty, second.dirty = false, false
 	first.set_focus(editor)
 	assert !first.scroll_ctl(mut editor, 1)
 	first.destroy_ctl(mut editor)
-	assert !editor.closed && editor.parent == w2 && isnil(first.focus)
+	assert !editor.closed && same_ctl(editor.parent, w2) && first.focus == none
 	second.set_focus(editor)
-	assert second.focus == editor && second.scroll_ctl(mut editor, 1)
+	assert same_ctl(second.focus, editor) && second.scroll_ctl(mut editor, 1)
 	second.destroy_ctl(mut editor)
 	assert editor.closed && editor.data == 2
 	assert !first.dirty && first.clipboard_text() == ''
@@ -108,12 +108,12 @@ fn test_reparenting_clears_hover_and_stale_input_ownership() {
 	mut w2 := second.window('Second', 30, 8)
 	mut editor := multiline('initial')
 	editor.mouse_leave = fn (mut c Ctl, mut app App) {
-		assert c.root().app == &app
+		assert same_app(c.root().app, &app)
 		c.data++
 		app.clipboard_set('leave')
 	}
 	editor.keyfn = fn (mut c Ctl, _ Event, mut app App) bool {
-		assert c.root().app == &app
+		assert same_app(c.root().app, &app)
 		c.data++
 		app.clipboard_set('key')
 		return false
@@ -121,7 +121,7 @@ fn test_reparenting_clears_hover_and_stale_input_ownership() {
 	w1.add(mut editor)
 	first.redraw()
 	first.dispatch(Event{ kind: .mouse, x: editor.x, y: editor.y, button: .left, pressed: true })
-	assert first.focus == editor && first.drag == editor && editor.hovered
+	assert same_ctl(first.focus, editor) && same_ctl(first.drag, editor) && editor.hovered
 	first.scroll_drag = editor
 	w2.add(mut editor)
 	assert editor.data == 1 && !editor.hovered && (first.hovered_ctl() == none)
@@ -129,7 +129,7 @@ fn test_reparenting_clears_hover_and_stale_input_ownership() {
 	assert !first.copy_focus() && first.clipboard_text() == 'leave'
 	first.dispatch(Event{ key: int(`x`) })
 	assert editor.text == 'initial' && editor.data == 1
-	assert isnil(first.focus) && isnil(first.drag) && isnil(first.scroll_drag)
+	assert first.focus == none && first.drag == none && first.scroll_drag == none
 	second.set_focus(editor)
 	second.dispatch(Event{ key: int(`x`) })
 	assert editor.text != 'initial' && editor.data == 2
@@ -152,7 +152,7 @@ fn test_foreign_menu_requests_preserve_existing_popups_and_ownership() {
 	first.dirty, second.dirty = false, false
 	second.open_menu(attached, 0, 0)
 	assert second.popups.len == 1 && second.popups[0] == popup
-	assert item.root().app == first && !first.dirty && !second.dirty
+	assert same_app(item.root().app, first) && !first.dirty && !second.dirty
 }
 
 fn test_modal_dialogs_reject_foreign_controls_without_entering_the_loop() {
@@ -192,12 +192,12 @@ fn test_standalone_menu_transfer_clears_old_hover_and_input() {
 	mut second := new_app()
 	mut menu := context_menu()
 	mut item := menu.menu_item('Action', fn (mut c Ctl, mut app App) {
-		assert c.root().app == &app
+		assert same_app(c.root().app, &app)
 		c.data++
 		app.clipboard_set('selected')
 	})
 	item.mouse_leave = fn (mut c Ctl, mut app App) {
-		assert c.root().app == &app
+		assert same_app(c.root().app, &app)
 		c.data++
 	}
 	first.open_menu(menu, 0, 0)
@@ -216,11 +216,11 @@ fn test_detached_adoption_explicit_transfer_and_notice_ownership() {
 	mut second := new_app()
 	mut w := new_ctl(.window)
 	first.raise(mut w)
-	assert w.app == first && first.windows == [w]
+	assert same_app(w.app, first) && first.windows == [w]
 	mut body := box(true)
 	w.add(mut body)
 	mut dialog := second.dialog('Transfer body', mut body)
-	assert body.parent == dialog && body.root().app == second
+	assert same_ctl(body.parent, dialog) && same_app(body.root().app, second)
 	mut detached := label('Detached')
 	first.destroy_ctl(mut detached)
 	assert detached.closed

@@ -8,12 +8,12 @@ mut:
 }
 
 fn grid_get(c &Ctl, row int, col int) string {
-	data := unsafe { &GridData(c.user) }
+	data := c.context[GridData]() or { panic('missing callback context') }
 	return data.cells[row][col]
 }
 
 fn grid_edit(mut c Ctl, edits []TableCellEdit) ! {
-	mut data := unsafe { &GridData(c.user) }
+	mut data := c.context[GridData]() or { panic('missing callback context') }
 	for edit in edits { if edit.value == 'reject' { return error('Rejected batch') } }
 	for edit in edits { data.cells[edit.row][edit.column] = edit.value }
 	data.batches++
@@ -24,7 +24,7 @@ fn grid_setup(mut app App) (&Ctl, &GridData) {
 	mut window := app.window('Grid', 58, 12)
 	data := &GridData{}
 	mut grid := table(grid_get, data.cells.len)
-	grid.user = data
+	grid.set_context(data)
 	grid.table_column('Fruit', width: 14)
 	grid.table_column('Count', width: 12, numeric: true, align: .right, min_width: 4, max_width: 30)
 	grid.table_column('Note', width: 16)
@@ -77,9 +77,9 @@ fn test_table_header_sort_and_column_drag_and_resize_are_opt_in() {
 	grid.table.resizable_columns = true
 	app.dispatch(Event{kind: .mouse, button: .left, pressed: true, x: header.x + header.w - 1, y: header.y})
 	app.dispatch(Event{kind: .mouse, button: .left, pressed: true, motion: true, x: header.x + 100, y: header.y})
-	assert grid.table_column_width(1) == 30 && app.drag == grid
+	assert grid.table_column_width(1) == 30 && same_ctl(app.drag, grid)
 	app.dispatch(Event{kind: .mouse})
-	assert isnil(app.drag)
+	assert app.drag == none
 	grid.table.reorderable_columns = true
 	first := grid.table_column_rect(0)
 	last := grid.table_column_rect(2)
@@ -88,7 +88,7 @@ fn test_table_header_sort_and_column_drag_and_resize_are_opt_in() {
 	assert grid.table.column_order == [1, 2, 0]
 	assert grid.table_cell(0, 0) == 'pear'
 	app.dispatch(Event{kind: .mouse, button: .left, x: last.x + last.w - 2, y: last.y})
-	assert isnil(app.drag)
+	assert app.drag == none
 }
 
 fn test_table_row_column_and_rectangular_selections_use_view_coordinates() {
@@ -249,15 +249,15 @@ fn test_table_editor_rejects_without_losing_the_draft_then_cancel_restores_focus
 	grid.table.edit = grid_edit
 	grid.table_select(0, 0, 0, 0)
 	app.after(0, fn (mut app App) {
-		mut input := app.focus
+		mut input := app.focus or { panic('expected an editor') }
 		assert input.kind == .entry
 		input.set_text('reject')
 		app.dispatch(Event{key: int(Key.enter)})
-		assert input.text == 'reject' && !app.top_window_ptr().closed
+		assert input.text == 'reject' && !(app.top_window() or { panic('expected a window') }).closed
 		app.dispatch(Event{key: int(Key.escape)})
 	})
 	grid.table_begin_edit()
-	assert data.cells[0][0] == 'pear' && data.batches == 0 && app.focus == grid
+	assert data.cells[0][0] == 'pear' && data.batches == 0 && same_ctl(app.focus, grid)
 }
 
 fn destroy_table_on_sort(mut c Ctl, mut app App) { app.destroy_ctl(mut c) }
@@ -269,17 +269,17 @@ fn test_table_callbacks_can_destroy_controls_and_capture_cancels_on_lifecycle_ch
 		grid.table.resizable_columns = true
 		r := grid.table_column_rect(0)
 		app.dispatch(Event{kind: .mouse, button: .left, pressed: true, x: r.x + r.w - 1, y: r.y})
-		assert app.drag == grid
+		assert same_ctl(app.drag, grid)
 		match action {
 			'disable' { grid.table.resizable_columns = false }
-			'close' { mut window := grid.owner_window_ptr(); app.close(mut window) }
+			'close' { mut window := grid.owner_window() or { panic('expected a window') }; app.close(mut window) }
 			'focus_out' { app.dispatch(Event{kind: .focus_out}) }
 			'resize' { app.dispatch(Event{kind: .resize, width: 90, height: 30}) }
 			'destroy' { app.destroy_ctl(mut grid) }
 			else {}
 		}
 		app.dispatch(Event{kind: .mouse, button: .left, pressed: true, motion: true, x: r.x + 20, y: r.y})
-		assert isnil(app.drag), action
+		assert app.drag == none, action
 	}
 	mut app := new_app()
 	mut grid, _ := grid_setup(mut app)

@@ -16,7 +16,7 @@ fn test_about_box_reports_name_version_and_author() {
 		assert text.contains('About VtkDemo')
 		assert text.contains('VtkDemo version 1.2.3')
 		assert text.contains('Author: pancake')
-		mut dialog := app.top_window_ptr()
+		mut dialog := app.top_window() or { panic('expected a window') }
 		app.close(mut dialog)
 	})
 	app.about_for(window, 'VtkDemo', '1.2.3')
@@ -39,9 +39,9 @@ fn test_file_picker_opens_row_that_is_already_selected() {
 		field:  entry(directory, 0)
 		list:   tree()
 	}
-	pick.field.user = pick
+	pick.field.set_context(pick)
 	pick.field.submit = file_accept
-	pick.list.user = pick
+	pick.list.set_context(pick)
 	pick.list.changed = file_select
 	pick.list.submit = file_accept
 	pick.list.mousefn = file_list_click
@@ -54,7 +54,7 @@ fn test_file_picker_opens_row_that_is_already_selected() {
 	assert rows.len == 3 && rows[1].node.text == 'file.txt' && rows[2].node.text == 'sub'
 	// The first click selects, the second one enters the folder.
 	file_pick_click(mut app, pick.list, 2)
-	assert pick.list.selected_node.text == 'sub'
+	assert (pick.list.selected_node or { panic('expected selected node') }).text == 'sub'
 	assert pick.directory == os.abs_path(directory)
 	file_pick_click(mut app, pick.list, 2)
 	assert pick.directory == os.join_path(os.abs_path(directory), 'sub')
@@ -62,7 +62,7 @@ fn test_file_picker_opens_row_that_is_already_selected() {
 	file_pick_click(mut app, pick.list, 0)
 	assert pick.directory == os.abs_path(directory)
 	file_pick_click(mut app, pick.list, 1)
-	assert pick.list.selected_node.text == 'file.txt'
+	assert (pick.list.selected_node or { panic('expected selected node') }).text == 'file.txt'
 	assert pick.result == '' && !pick.window.closed
 	file_pick_click(mut app, pick.list, 1)
 	assert pick.result == os.join_path(os.abs_path(directory), 'file.txt')

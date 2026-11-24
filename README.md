@@ -471,8 +471,11 @@ Alt-F7 and Alt-F8 enter keyboard Move and Resize; arrows move one cell,
 Shift-arrows five, Enter accepts and Escape restores the original rectangle.
 `parse_binding` and `app.set_keys` configure these shortcuts atomically.
 
-`app.register(name, callback, data)` adds a desktop launcher and keeps the
-desktop alive after its windows close. `app.notify(text, timeout_ms)` posts
+`app.register(name, callback)` adds a desktop launcher and keeps the
+desktop alive after its windows close. The callback receives `mut App`.
+The callback can capture launcher state. Attach a reference to shared control
+state with `ctl.set_context(&state)` and retrieve it with `ctl.context[State]()`.
+`app.notify(text, timeout_ms)` posts
 a dismissable notification; zero leaves it visible until closed.
 
 `msgbox_for`, `confirm_for`, `prompt_for`, `choice_for`, `list_choice_for`,

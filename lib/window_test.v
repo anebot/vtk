@@ -18,13 +18,13 @@ fn test_title_double_click_maximizes_and_restores_for_mouse_and_touch_titles() {
 			assert !w.maximized && w.rect() == original
 			window_mouse_click(mut app, x, y)
 			assert w.maximized && w.rect() == app.work_area() && w.saved == original
-			assert isnil(app.drag) && isnil(app.placement)
+			assert app.drag == none && app.placement == none
 			max_x, max_y := w.x + 8, w.y
 			window_mouse_click(mut app, max_x, max_y)
 			assert w.maximized
 			window_mouse_click(mut app, max_x, max_y)
 			assert !w.maximized && w.rect() == original
-			assert isnil(app.drag) && isnil(app.placement)
+			assert app.drag == none && app.placement == none
 		}
 	}
 }
@@ -146,7 +146,7 @@ fn test_window_button_layouts_draw_and_click_each_enabled_control() {
 							assert !w.maximized && w.rect() == original
 						}
 					}
-					assert isnil(app.drag) && isnil(app.placement)
+					assert app.drag == none && app.placement == none
 				}
 			}
 		}
@@ -338,11 +338,11 @@ fn test_terminal_resize_keeps_windows_inside_the_workspace() {
 				assert w.x >= area.x && w.x + w.w <= area.x + area.w
 				assert w.y >= area.y && w.y + w.h <= area.y + area.h
 			}
-			assert app.windows == order && app.focus == field && field.text == 'Keep this text'
+			assert app.windows == order && same_ctl(app.focus, field) && field.text == 'Keep this text'
 			app.raise(mut displaced)
 			app.redraw()
 			app.dispatch(Event{ kind: .mouse, x: displaced.x + 2, y: displaced.y, button: .left, pressed: true })
-			assert app.popups.len == 1 && app.popups[0].popup_owner.kids[0].link == ?&Ctl(displaced)
+			assert app.popups.len == 1 && (app.popups[0].popup_owner or { panic('expected popup owner') }).kids[0].link == ?&Ctl(displaced)
 			app.close_popups()
 			app.dispatch(Event{ kind: .resize, width: 100, height: 40 })
 			assert displaced.rect() == original_displaced && inside.rect() == original
@@ -386,7 +386,7 @@ fn test_terminal_resize_preserves_minimum_sizes_and_cancels_stale_placement() {
 	app.dispatch(Event{ key: int(Key.right), shift: true })
 	app.drag = w
 	app.dispatch(Event{ kind: .resize, width: 12, height: 3 })
-	assert isnil(app.placement) && isnil(app.drag) && isnil(app.scroll_drag)
+	assert app.placement == none && app.drag == none && app.scroll_drag == none
 	assert w.rect() == Rect{0, 1, 24, 6}
 	app.redraw()
 	assert app.screen.cells[app.width..app.width + 4].map(it.glyph).join('') == ' [=]'
@@ -464,7 +464,7 @@ fn test_maximized_corner_drag_resizes_from_current_bounds_and_preserves_the_oppo
 				y := if from_top { w.y } else { w.y + w.h - 1 }
 				app.dispatch(Event{ kind: .mouse, x: x, y: y, button: .left, pressed: true })
 				app.dispatch(Event{ kind: .mouse, x: x, y: y, button: .left, pressed: true, motion: true })
-				assert w.maximized && w.rect() == area && app.drag == w
+				assert w.maximized && w.rect() == area && same_ctl(app.drag, w)
 				new_x := x + if from_left { 7 } else { -7 }
 				new_y := y + if from_top { 3 } else { -3 }
 				app.dispatch(Event{ kind: .mouse, x: new_x, y: new_y, button: .left, pressed: true, motion: true })
@@ -474,7 +474,7 @@ fn test_maximized_corner_drag_resizes_from_current_bounds_and_preserves_the_oppo
 				app.redraw()
 				assert w.rect() == resized
 				app.dispatch(Event{ kind: .mouse, x: new_x, y: new_y, button: .left })
-				assert isnil(app.drag)
+				assert app.drag == none
 				app.maximize(mut w)
 				app.restore(mut w)
 				assert w.rect() == resized
@@ -502,7 +502,7 @@ fn test_maximized_frame_resize_respects_size_limits_and_only_unmaximizes_when_si
 	app.dispatch(Event{ kind: .mouse, x: 200, y: 200, button: .left, pressed: true, motion: true })
 	assert w.maximized && w.rect() == area
 	app.dispatch(Event{ kind: .mouse, x: 200, y: 200, button: .left })
-	assert w.maximized && isnil(app.drag)
+	assert w.maximized && app.drag == none
 	// Side borders resize only their horizontal axis.
 	app.dispatch(Event{ kind: .mouse, x: w.x, y: w.y + 3, button: .left, pressed: true })
 	app.dispatch(Event{ kind: .mouse, x: 10, y: w.y + 6, button: .left, pressed: true, motion: true })

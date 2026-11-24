@@ -6,18 +6,19 @@ fn (mut app App) draw_tabs(mut c Ctl, fg int, bg int) {
 	app.screen.fill(Rect{c.x, c.y, c.w, 1}, ` `, fg, bg)
 	app.screen.frame(Rect{c.x, c.y + 1, c.w, c.h - 1}, false, app.theme.dim, bg)
 	clip := app.screen.set_clip(Rect{c.x + 1, c.y, max(0, c.w - 2), 2})
-	dragging := c.reorderable && !isnil(app.drag) && app.drag.kind == .tabpage
-		&& app.drag.parent == c && c.kids.index(app.drag) == c.value
+	dragging := c.reorderable && app.drag != none && app.drag.kind == .tabpage
+		&& same_ctl(app.drag.parent, &c) && c.kids.index(app.drag) == c.value
 	for i, page in c.kids {
-		if dragging && page == app.drag { continue }
+		if dragging && same_ctl(app.drag, page) { continue }
 		app.draw_tab_header(c, page, page.tab_x, i == c.value, fg, bg)
 	}
 	// Paint the grabbed header last, following the pointer at its grab offset.
 	// Its logical slot stays in the layout so neighbouring tabs can reflow live.
 	if dragging {
-		page := app.drag
-		x := clamp(app.drag_start.x + app.mouse_x - app.drag_x, c.x + 1, c.x + c.w - page.tab_w - 1)
-		app.draw_tab_header(c, page, x, true, fg, bg)
+		if page := app.drag {
+			x := clamp(app.drag_start.x + app.mouse_x - app.drag_x, c.x + 1, c.x + c.w - page.tab_w - 1)
+			app.draw_tab_header(c, page, x, true, fg, bg)
+		}
 	}
 	app.screen.restore_clip(clip)
 	for mut page in c.kids {
@@ -73,8 +74,7 @@ fn (mut c Ctl) drag_tab(page &Ctl, e Event) {
 	c.value = to
 	c.layout(c.rect())
 	c.invalidate()
-	mut app := c.root().app
-	if !isnil(app) {
+	if mut app := c.root().app {
 		if f := c.reordered { f(mut c, from, to, mut app) }
 	}
 }

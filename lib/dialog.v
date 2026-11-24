@@ -8,7 +8,7 @@ fn (app &App) can_own_dialog(owner ?&Ctl) bool {
 }
 
 fn dialog_accept(mut c Ctl, mut app App) {
-	mut w := c.owner_window_ptr()
+	mut w := c.owner_window() or { return }
 	w.dialog_result = int(c.data)
 	app.close(mut w)
 }
@@ -37,15 +37,14 @@ pub fn (mut app App) modal_for(mut dialog Ctl, owner ?&Ctl) int {
 	if !app.can_manage(&dialog) || dialog.modal || !app.can_own_dialog(owner) { return -1 }
 	if window_owner := owner {
 		if window_owner.has_modal_ancestor(&dialog) { return -1 }
+		dialog.desktop_id = window_owner.desktop_id
 	}
-	owner_ptr := owner or { unsafe { nil } }
-	if !isnil(owner_ptr) { dialog.desktop_id = owner_ptr.desktop_id }
 	app.close_popups()
-	app.drag = unsafe { nil }
-	app.scroll_drag = unsafe { nil }
-	if !isnil(app.placement) { app.placement_key(Event{ key: int(Key.escape) }) }
-	dialog.modal_parent = app.blocker(owner_ptr)
-	dialog.modal_owner = owner_ptr
+	app.drag = none
+	app.scroll_drag = none
+	if app.placement != none { app.placement_key(Event{ key: int(Key.escape) }) }
+	dialog.modal_parent = app.blocker(owner)
+	dialog.modal_owner = owner
 	dialog.modal = true
 	dialog.dismissable = true
 	top := dialog.always_on_top
@@ -54,10 +53,12 @@ pub fn (mut app App) modal_for(mut dialog Ctl, owner ?&Ctl) int {
 	app.raise(mut dialog)
 	for app.running && !dialog.closed { app.advance(if app.driver.active { -1 } else { 20 }) }
 	dialog.modal = false
-	dialog.modal_owner = unsafe { nil }
-	dialog.modal_parent = unsafe { nil }
+	dialog.modal_owner = none
+	dialog.modal_parent = none
 	dialog.always_on_top = top
-	if !isnil(old_focus) && old_focus.visible() { app.set_focus(old_focus) }
+	if old := old_focus {
+		if old.visible() { app.set_focus(old) }
+	}
 	app.dirty = true
 	return dialog.dialog_result
 }
@@ -162,8 +163,8 @@ pub fn (mut app App) choice_for(owner ?&Ctl, title string, items []string, colum
 
 fn list_accept(mut c Ctl, mut app App) {
 	mut list := if c.kind == .tree { &c } else { c.link or { return } }
-	if isnil(list.selected_node) { return }
-	mut w := c.owner_window_ptr()
+	if list.selected_node == none { return }
+	mut w := c.owner_window() or { return }
 	w.dialog_result = int(list.selected_node.data)
 	app.close(mut w)
 }
@@ -261,8 +262,8 @@ fn (mut pick FilePicker) fill(path string) ! {
 }
 
 fn file_select(mut list Ctl, mut app App) {
-	mut pick := unsafe { &FilePicker(list.user) }
-	if !isnil(list.selected_node) { pick.field.set_text(os.join_path(pick.directory, list.selected_node.text)) }
+	mut pick := list.context[FilePicker]() or { return }
+	if list.selected_node != none { pick.field.set_text(os.join_path(pick.directory, list.selected_node.text)) }
 	app.dirty = true
 }
 
@@ -272,13 +273,13 @@ fn file_list_click(mut list Ctl, e Event, mut app App) bool {
 	if list.scrollbar && e.x == list.x + list.w - 1 { return false }
 	rows := list.tree_rows()
 	at := list.top + e.y - list.y
-	if at < 0 || at >= rows.len || rows[at].node != list.selected_node { return false }
+	if at < 0 || at >= rows.len || !same_ctl(list.selected_node, rows[at].node) { return false }
 	file_accept(mut list, mut app)
 	return true
 }
 
 fn file_accept(mut c Ctl, mut app App) {
-	mut pick := unsafe { &FilePicker(c.user) }
+	mut pick := c.context[FilePicker]() or { return }
 	if c.kind == .tree { file_select(mut c, mut app) }
 	path := pick.field.text
 	if os.is_dir(path) {
@@ -298,14 +299,14 @@ pub fn (mut app App) file_pick_for(owner ?&Ctl, directory string) ?string {
 	}
 	mut body := box(true)
 	pick.field.expand = false
-	pick.field.user = pick
+	pick.field.set_context(pick)
 	pick.field.submit = file_accept
-	pick.list.user = pick
+	pick.list.set_context(pick)
 	pick.list.changed = file_select
 	pick.list.submit = file_accept
 	pick.list.mousefn = file_list_click
 	mut open := button('Open file / enter folder')
-	open.user = pick
+	open.set_context(pick)
 	open.changed = file_accept
 	body.add(mut pick.field)
 	body.add(mut pick.list)
@@ -334,7 +335,7 @@ fn draw_color_preview(mut c Ctl, mut screen Screen) {
 }
 
 fn color_picker_changed(mut c Ctl, mut app App) {
-	mut picker := unsafe { &ColorPicker(c.user) }
+	mut picker := c.context[ColorPicker]() or { return }
 	picker.preview.value = color_rgb(picker.sliders[0].value, picker.sliders[1].value, picker.sliders[2].value)
 	app.dirty = true
 }
@@ -354,7 +355,7 @@ pub fn (mut app App) color_pick(owner ?&Ctl, title string, rgb int) ?int {
 	preview.value = 0x1000000 | rgb
 	picker := &ColorPicker{ sliders: sliders, preview: preview }
 	for i, mut ctl in sliders {
-		ctl.user = picker
+		ctl.set_context(picker)
 		ctl.changed = color_picker_changed
 		mut name := label(['Red', 'Green', 'Blue'][i])
 		body.add(mut name)

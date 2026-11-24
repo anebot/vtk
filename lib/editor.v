@@ -639,8 +639,8 @@ fn (mut app App) draw_editor(mut c Ctl) {
 		}
 	}
 	app.draw_scrollbar(&c, rows.len, height, inset)
-	if app.focus == &c { app.screen.cursor_x = -1 }
-	if app.focus == &c && !c.disabled && caret >= c.top && caret < c.top + height {
+	if same_ctl(app.focus, &c) { app.screen.cursor_x = -1 }
+	if same_ctl(app.focus, &c) && !c.disabled && caret >= c.top && caret < c.top + height {
 		visible_col := if c.wrap_mode() != .none && !rows[caret].no_wrap { min(caret_col, view_w - 1) } else { caret_col - c.left }
 		app.screen.cursor_x = c.x + margin + visible_col
 		app.screen.cursor_y = c.y + inset + caret - c.top

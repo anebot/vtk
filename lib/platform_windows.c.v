@@ -55,7 +55,7 @@ fn (mut d Driver) stop_platform() {
 
 fn (mut d Driver) read(timeout int, terminals []&Ctl) string {
 	// Console mode does not expose resize events or readable pipe events.
-	d.terminals_ready = terminals.any(!it.closed && !it.term.exited)
+	d.terminals_ready = terminals.any(!it.closed && it.term != none && !it.term.exited)
 	wait := limit_wait(timeout, if d.terminals_ready { 25 } else { 100 })
 	result := C.WaitForSingleObject(d.input, u32(wait))
 	control := C.vtk_console_take_control()
@@ -70,7 +70,7 @@ fn (mut d Driver) read(timeout int, terminals []&Ctl) string {
 	if result != 0 { return '' }
 	if d.read_buffer.len == 0 { d.read_buffer = []u8{len: 16384} }
 	mut n := u32(0)
-	if !C.ReadFile(d.input, d.read_buffer.data, u32(d.read_buffer.len), &n, unsafe { nil }) {
+	if !C.ReadFile(d.input, d.read_buffer.data, u32(d.read_buffer.len), &n, 0) {
 		d.eof = true
 		return ''
 	}

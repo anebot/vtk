@@ -28,7 +28,7 @@ fn clock_clicked(event vtk.Event, mut app vtk.App) {
 }
 
 fn hover_status(mut c vtk.Ctl, mut _ vtk.App) {
-	mut status := unsafe { &vtk.Ctl(c.user) }
+	mut status := c.context[vtk.Ctl]() or { return }
 	status.set_text(if c.is_hovered() { 'Mouse over ${c.kind}' } else { 'Tab cycles controls | F10 menus | Ctrl-C quits' })
 }
 
@@ -102,7 +102,7 @@ fn main() {
 	mut status := vtk.statusbar('Tab cycles controls | F10 menus | Ctrl-C quits')
 	mut hovered_controls := [check, switch, combo, slider, spin, table, tree, radio, calendar]
 	for mut ctl in hovered_controls {
-		ctl.user = status
+		ctl.set_context(status)
 		ctl.mouse_enter = hover_status
 		ctl.mouse_leave = hover_status
 	}

@@ -98,7 +98,7 @@ fn test_date_picker_mouse_grid_matches_rendered_days_including_sixth_week() {
 			cell := offset + day - 1
 			cx, cy := x + cell % 7 * 3, picker.y + 2 + cell / 7
 			date_click(mut app, cx + 2, cy, false)
-			assert picker.date().day == day && app.focus == picker
+			assert picker.date().day == day && same_ctl(app.focus, picker)
 			app.redraw()
 			assert app.screen.cells[cy * app.width + cx + 2].glyph == (day % 10).str()
 			assert app.screen.cells[cy * app.width + cx].bg == app.theme.focus_bg
@@ -124,13 +124,13 @@ fn test_date_dialog_accept_cancel_and_focus_restoration() {
 	owner.add(mut field)
 	app.set_focus(field)
 	app.after(0, fn (mut app App) {
-		assert app.focus.kind == .date_picker
+		assert (app.focus or { panic('expected focus') }).kind == .date_picker
 		app.dispatch(Event{ key: int(Key.right) })
 		app.dispatch(Event{ key: int(Key.enter) })
 	})
 	date := app.date_pick(owner, 'Pick a date', time.Time{ year: 2024, month: 2, day: 28 }) or { panic('Date was cancelled') }
 	assert picker_date_text(date) == '2024-02-29'
-	assert app.focus == field && app.windows.len == 1
+	assert same_ctl(app.focus, field) && app.windows.len == 1
 	for cancel_with_escape in [true, false] {
 		app.after(0, fn [cancel_with_escape] (mut app App) {
 			if cancel_with_escape {
@@ -138,13 +138,13 @@ fn test_date_dialog_accept_cancel_and_focus_restoration() {
 			} else {
 				app.dispatch(Event{ key: int(Key.tab) })
 				app.dispatch(Event{ key: int(Key.tab) })
-				assert app.focus.text == 'Cancel'
+				assert (app.focus or { panic('expected focus') }).text == 'Cancel'
 				app.dispatch(Event{ key: int(Key.enter) })
 			}
 		})
 		if _ := app.date_pick(owner, 'Cancel date', date) {
 			assert false
 		}
-		assert app.focus == field && app.windows.len == 1
+		assert same_ctl(app.focus, field) && app.windows.len == 1
 	}
 }

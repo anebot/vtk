@@ -35,7 +35,7 @@ fn test_tree_selection_and_expansion_preserve_callback_associations() {
 	mut status := label('Ready')
 	nodes.link = status
 	nodes.changed = fn (mut c Ctl, mut _ App) {
-		if mut status := c.link { status.set_text(c.selected_node.text) }
+		if mut status := c.link { status.set_text((c.selected_node or { panic('expected selected node') }).text) }
 	}
 	mut root := nodes.tree_add(none, 'Root')
 	child := nodes.tree_add(root, 'Child')
@@ -45,21 +45,21 @@ fn test_tree_selection_and_expansion_preserve_callback_associations() {
 	w.add(mut body)
 	app.set_focus(nodes)
 	app.redraw()
-	assert nodes.selected_node == root && nodes.tree_rows().len == 3
+	assert same_ctl(nodes.selected_node, root) && nodes.tree_rows().len == 3
 	app.dispatch(Event{ key: int(Key.left) })
 	assert !root.expanded && nodes.tree_rows().len == 2 && status.text == 'Root'
 	app.dispatch(Event{ key: int(Key.down) })
-	assert nodes.selected_node == other && status.text == 'Other'
+	assert same_ctl(nodes.selected_node, other) && status.text == 'Other'
 	app.dispatch(Event{ key: int(Key.home) })
 	app.dispatch(Event{ key: int(Key.right) })
 	assert root.expanded && nodes.tree_rows().len == 3
 	app.dispatch(Event{ key: int(Key.down) })
-	assert nodes.selected_node == child && status.text == 'Child'
+	assert same_ctl(nodes.selected_node, child) && status.text == 'Child'
 	app.dispatch(Event{ kind: .mouse, x: nodes.x + 2, y: nodes.y, button: .left, pressed: true })
-	assert nodes.selected_node == root && !root.expanded && status.text == 'Root'
+	assert same_ctl(nodes.selected_node, root) && !root.expanded && status.text == 'Root'
 	app.dispatch(Event{ key: int(Key.enter) })
 	assert root.expanded
-	nodes.submit = fn (mut c Ctl, mut app App) { app.clipboard_set(c.selected_node.text) }
+	nodes.submit = fn (mut c Ctl, mut app App) { app.clipboard_set((c.selected_node or { panic('expected selected node') }).text) }
 	app.dispatch(Event{ key: int(Key.enter) })
 	assert root.expanded && app.clipboard_text() == 'Root'
 	assert nodes.link == ?&Ctl(status)
@@ -84,7 +84,7 @@ fn test_dialog_result_and_default_button_preserve_callback_associations() {
 	app.set_focus(field)
 	app.after(0, fn [dialog, associated, accept] (mut app App) {
 		app.dispatch(Event{ key: int(Key.enter) })
-		assert dialog.link == ?&Ctl(associated) && dialog.default_button == accept
+		assert dialog.link == ?&Ctl(associated) && same_ctl(dialog.default_button, accept)
 		app.quit() // A regression must fail instead of blocking the modal loop.
 	})
 	assert app.modal_for(mut dialog, none) == 7

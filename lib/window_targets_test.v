@@ -33,7 +33,7 @@ fn test_window_actions_reject_widget_targets_before_mutation() {
 			action(mut app, mut c)
 			assert c.rect() == before && !c.is_closed() && !c.is_minimized() && !c.is_maximized()
 			assert !c.is_modal() && !c.is_always_on_top() && c.get_desktop_id() == 1
-			assert app.window_list() == [w] && app.popups.len == 1 && isnil(app.placement)
+			assert app.window_list() == [w] && app.popups.len == 1 && app.placement == none
 			assert !app.dirty && app.is_running()
 			assert (c.parent_ctl() != none) == attached
 		}

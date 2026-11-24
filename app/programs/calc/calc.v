@@ -37,8 +37,8 @@ mut:
 	error   bool
 	message string
 	theme   vtk.Theme
-	window  &vtk.Ctl = unsafe { nil }
-	display &vtk.Ctl = unsafe { nil }
+	window  &vtk.Ctl @[required]
+	display &vtk.Ctl @[required]
 }
 
 fn format_number(value f64) string {
@@ -175,7 +175,7 @@ fn (mut c Calculator) input(key string) {
 }
 
 fn paint_display(mut c vtk.Ctl, mut screen vtk.Screen) {
-	calc := unsafe { &Calculator(c.user) }
+	calc := c.context[Calculator]() or { return }
 	bounds := c.rect()
 	theme := calc.theme
 	screen.fill(bounds, ` `, theme.field_fg, theme.field_bg)
@@ -192,13 +192,13 @@ fn paint_display(mut c vtk.Ctl, mut screen vtk.Screen) {
 }
 
 fn button_press(mut c vtk.Ctl, mut app vtk.App) {
-	mut calc := unsafe { &Calculator(c.user) }
+	mut calc := c.context[Calculator]() or { return }
 	calc.input(c.text)
 	app.invalidate()
 }
 
 fn key(mut c vtk.Ctl, e vtk.Event, mut app vtk.App) bool {
-	mut calc := unsafe { &Calculator(c.user) }
+	mut calc := c.context[Calculator]() or { return false }
 	if e.ctrl {
 		if e.key == int(`q`) {
 			app.close(mut calc.window)
@@ -224,8 +224,9 @@ fn key(mut c vtk.Ctl, e vtk.Event, mut app vtk.App) bool {
 }
 
 fn menu_action(mut c vtk.Ctl, mut app vtk.App) {
-	mut calc := unsafe { &Calculator(c.user) }
-	match unsafe { Action(c.data) } {
+	mut calc := c.context[Calculator]() or { return }
+	cmd := Action.from(c.data) or { return }
+	match cmd {
 		.clear {
 			calc.reset()
 			app.invalidate()
@@ -238,15 +239,18 @@ fn menu_action(mut c vtk.Ctl, mut app vtk.App) {
 
 fn menu_item(mut menu vtk.Ctl, calc &Calculator, title string, id Action) {
 	mut item := menu.menu_item(title, menu_action)
-	item.user = calc
+	item.set_context(calc)
 	item.data = i64(id)
 }
 
 fn new_calculator(mut app vtk.App) &Calculator {
-	mut calc := &Calculator{ theme: app.theme }
-	calc.window = app.window('VTK Calc', window_width, window_height)
+	mut calc := &Calculator{
+		theme: app.theme
+		window: app.window('VTK Calc', window_width, window_height)
+		display: vtk.canvas(window_width - 2, 2, paint_display)
+	}
 	calc.window.set_size_limits(window_width, window_height, 0, 0)
-	calc.window.user = calc
+	calc.window.set_context(calc)
 	calc.window.keyfn = key
 	mut calc_menu := calc.window.add_menu('Calc')
 	menu_item(mut calc_menu, calc, 'Clear   C', .clear)
@@ -257,10 +261,9 @@ fn new_calculator(mut app vtk.App) &Calculator {
 	help.menu_separator()
 	menu_item(mut help, calc, 'About', .about)
 	mut body := vtk.box(true)
-	calc.display = vtk.canvas(window_width - 2, 2, paint_display)
 	calc.display.expand = true
 	calc.display.focusable = true
-	calc.display.user = calc
+	calc.display.set_context(calc)
 	calc.display.keyfn = key
 	body.add(mut calc.display)
 	mut keys := vtk.grid()
@@ -271,7 +274,7 @@ fn new_calculator(mut app vtk.App) &Calculator {
 			button.row = row
 			button.min_w = key_width
 			button.expand = true
-			button.user = calc
+			button.set_context(calc)
 			button.changed = button_press
 			button.keyfn = key
 			keys.add(mut button)
@@ -287,7 +290,7 @@ fn new_calculator(mut app vtk.App) &Calculator {
 	return calc
 }
 
-pub fn launch(mut app vtk.App, _ voidptr) {
+pub fn launch(mut app vtk.App) {
 	_ := new_calculator(mut app)
 }
 

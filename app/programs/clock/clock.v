@@ -34,9 +34,9 @@ enum Action {
 struct Clock {
 mut:
 	theme  vtk.Theme
-	window &vtk.Ctl = unsafe { nil }
-	dial   &vtk.Ctl = unsafe { nil }
-	status &vtk.Ctl = unsafe { nil }
+	window &vtk.Ctl @[required]
+	dial   &vtk.Ctl @[required]
+	status &vtk.Ctl @[required]
 }
 
 // Dial is the largest circle that fits the cell area: cx/cy are its cell
@@ -179,7 +179,7 @@ fn paint_clock(mut screen vtk.Screen, area vtk.Rect, now time.Time, theme vtk.Th
 }
 
 fn paint_dial(mut c vtk.Ctl, mut screen vtk.Screen) {
-	clock := unsafe { &Clock(c.user) }
+	clock := c.context[Clock]() or { return }
 	paint_clock(mut screen, c.rect(), time.now(), clock.theme)
 }
 
@@ -190,7 +190,7 @@ fn (mut clock Clock) refresh() {
 }
 
 fn key(mut c vtk.Ctl, e vtk.Event, mut app vtk.App) bool {
-	mut clock := unsafe { &Clock(c.user) }
+	mut clock := c.context[Clock]() or { return false }
 	if e.ctrl && e.key == int(`q`) {
 		app.close(mut clock.window)
 		return true
@@ -203,8 +203,9 @@ fn key(mut c vtk.Ctl, e vtk.Event, mut app vtk.App) bool {
 }
 
 fn menu_action(mut c vtk.Ctl, mut app vtk.App) {
-	mut clock := unsafe { &Clock(c.user) }
-	match unsafe { Action(c.data) } {
+	mut clock := c.context[Clock]() or { return }
+	cmd := Action.from(c.data) or { return }
+	match cmd {
 		.help { app.msgbox_for(clock.window, 'Clock keys', help_text) }
 		.about { app.about_for(clock.window, app_name, app_version) }
 		.quit { app.close(mut clock.window) }
@@ -213,15 +214,20 @@ fn menu_action(mut c vtk.Ctl, mut app vtk.App) {
 
 fn menu_item(mut menu vtk.Ctl, clock &Clock, title string, id Action) {
 	mut item := menu.menu_item(title, menu_action)
-	item.user = clock
+	item.set_context(clock)
 	item.data = i64(id)
 }
 
 fn new_clock(mut app vtk.App) &Clock {
-	mut clock := &Clock{ theme: app.theme }
-	clock.window = app.window('VTK Clock', window_width, window_height)
+	mut clock := &Clock{
+		theme: app.theme
+		window: app.window('VTK Clock', window_width, window_height)
+		// The preferred canvas fits inside the smallest window.
+		dial: vtk.canvas(minimum_width - 2, minimum_height - 4, paint_dial)
+		status: vtk.statusbar('')
+	}
 	clock.window.set_size_limits(minimum_width, minimum_height, 0, 0)
-	clock.window.user = clock
+	clock.window.set_context(clock)
 	clock.window.keyfn = key
 	mut clock_menu := clock.window.add_menu('Clock')
 	menu_item(mut clock_menu, clock, 'Quit   Ctrl-Q', .quit)
@@ -230,15 +236,11 @@ fn new_clock(mut app vtk.App) &Clock {
 	help.menu_separator()
 	menu_item(mut help, clock, 'About', .about)
 	mut body := vtk.box(true)
-	// The preferred canvas size stays inside the smallest window, so a resized
-	// window never lays the dial out over its frame; expand grows it from there.
-	clock.dial = vtk.canvas(minimum_width - 2, minimum_height - 4, paint_dial)
 	clock.dial.expand = true
 	clock.dial.focusable = true
-	clock.dial.user = clock
+	clock.dial.set_context(clock)
 	clock.dial.keyfn = key
 	body.add(mut clock.dial)
-	clock.status = vtk.statusbar('')
 	body.add(mut clock.status)
 	clock.window.add(mut body)
 	app.set_focus(clock.dial)
@@ -253,7 +255,7 @@ fn (mut clock Clock) schedule(mut app vtk.App) {
 	})
 }
 
-pub fn launch(mut app vtk.App, _ voidptr) {
+pub fn launch(mut app vtk.App) {
 	mut clock := new_clock(mut app)
 	clock.refresh()
 	clock.schedule(mut app)
@@ -273,7 +275,7 @@ pub fn run() {
 		}
 	}
 	defer { app.fini() }
-	launch(mut app, unsafe { nil })
+	launch(mut app)
 	if snapshot {
 		app.redraw()
 		println(app.snapshot())

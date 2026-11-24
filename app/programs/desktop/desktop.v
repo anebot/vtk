@@ -18,10 +18,10 @@ fn open_clock(mut app vtk.App) {
 			return
 		}
 	}
-	clock.launch(mut app, unsafe { nil })
+	clock.launch(mut app)
 }
 
-fn launch_clock(mut app vtk.App, _ voidptr) {
+fn launch_clock(mut app vtk.App) {
 	open_clock(mut app)
 }
 
@@ -33,11 +33,11 @@ fn clock_clicked(event vtk.Event, mut app vtk.App) {
 
 pub fn register(mut app vtk.App) {
 	app.clock_clicked = clock_clicked
-	app.register('Word', word.launch, unsafe { nil })
-	app.register('Slides', slides.launch, unsafe { nil })
-	app.register('Spread', spread.launch, unsafe { nil })
-	app.register('Paint', paint.launch, unsafe { nil })
-	app.register('Calc', calc.launch, unsafe { nil })
-	app.register('Clock', launch_clock, unsafe { nil })
-	app.register('Files', files.launch, unsafe { nil })
+	app.register('Word', word.launch)
+	app.register('Slides', slides.launch)
+	app.register('Spread', spread.launch)
+	app.register('Paint', paint.launch)
+	app.register('Calc', calc.launch)
+	app.register('Clock', launch_clock)
+	app.register('Files', files.launch)
 }

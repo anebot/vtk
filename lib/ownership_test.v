@@ -192,7 +192,7 @@ fn test_context_menus_and_standalone_menus_receive_the_correct_app() {
 	item.fire()
 	assert item.data == 2
 	replacement.detach()
-	assert isnil(text.menu)
+	assert text.menu == none
 	mut standalone := context_menu()
 	mut submenu := standalone.add_menu('Submenu')
 	mut action := submenu.menu_item('Standalone', ownership_changed)

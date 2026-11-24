@@ -3,8 +3,7 @@ module vtk
 import time
 
 fn (c &Ctl) sources_changed() {
-	mut app := c.root().app
-	if !isnil(app) { app.sources_dirty = true }
+	if mut app := c.root().app { app.sources_dirty = true }
 }
 
 fn (mut app App) update_sources() {
@@ -16,7 +15,9 @@ fn (mut app App) update_sources() {
 
 fn (mut app App) collect_sources(c &Ctl) {
 	if c.closed { return }
-	if !isnil(c.term) && !c.term.exited { app.terminals << c }
+	if term := c.term {
+		if !term.exited { app.terminals << c }
+	}
 	if c.kind == .spinner { app.spinners << c }
 	for child in c.kids { app.collect_sources(child) }
 }

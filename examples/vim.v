@@ -17,9 +17,9 @@ mut:
 @[heap]
 struct Editor {
 mut:
-	window      &vtk.Ctl = unsafe { nil }
-	workspace   &vtk.Ctl = unsafe { nil }
-	status      &vtk.Ctl = unsafe { nil }
+	window      &vtk.Ctl @[required]
+	workspace   &vtk.Ctl @[required]
+	status      &vtk.Ctl @[required]
 	panes       []&vtk.Ctl
 	buffers     []&Buffer
 	search      string
@@ -53,10 +53,10 @@ fn buffer_open(mut editor Editor, path string, mut app vtk.App) ?&Buffer {
 }
 
 fn pane_changed(mut c vtk.Ctl, mut app vtk.App) {
-	mut pane := unsafe { &Pane(c.user) }
+	mut pane := c.context[Pane]() or { return }
 	pane.buffer.text = c.text
 	for mut other in pane.editor.panes {
-		p := unsafe { &Pane(other.user) }
+		p := other.context[Pane]() or { continue }
 		if other != &c && p.buffer == pane.buffer {
 			other.text = c.text
 			other.cursor = vtk.clamp(other.cursor, 0, c.text.len)
@@ -68,7 +68,7 @@ fn pane_changed(mut c vtk.Ctl, mut app vtk.App) {
 }
 
 fn status(mut editor Editor, c &vtk.Ctl) {
-	pane := unsafe { &Pane(c.user) }
+	pane := c.context[Pane]() or { return }
 	line := c.text[..vtk.clamp(c.cursor, 0, c.text.len)].count('\n') + 1
 	editor.status.text = '${c.vim.mode} | ${line} | ${if pane.buffer.path == '' {
 		'[No Name]'
@@ -78,7 +78,7 @@ fn status(mut editor Editor, c &vtk.Ctl) {
 }
 
 fn write_buffer(mut c vtk.Ctl, path string, force bool, mut app vtk.App) bool {
-	mut pane := unsafe { &Pane(c.user) }
+	mut pane := c.context[Pane]() or { return false }
 	name := if path != '' { path } else { pane.buffer.path }
 	if name == '' {
 		app.notify('Use :w path', 2500)
@@ -104,7 +104,7 @@ fn make_pane(mut editor Editor, buffer &Buffer) &vtk.Ctl {
 	mut pane := &Pane{ editor: editor, buffer: buffer }
 	mut c := vtk.markdown(buffer.text)
 	c.edit = buffer.history
-	c.user = pane
+	c.set_context(pane)
 	c.markdown_mode(.source)
 	c.set_wrap_mode(.none)
 	c.md.tab_width = 8
@@ -120,7 +120,7 @@ fn make_pane(mut editor Editor, buffer &Buffer) &vtk.Ctl {
 }
 
 fn split_pane(mut c vtk.Ctl, vertical bool, path string, fresh bool, mut app vtk.App) {
-	mut pane := unsafe { &Pane(c.user) }
+	mut pane := c.context[Pane]() or { return }
 	mut buffer := pane.buffer
 	if path != '' || fresh { buffer = buffer_open(mut pane.editor, path, mut app) or { return } }
 	mut next := make_pane(mut pane.editor, buffer)
@@ -134,9 +134,13 @@ fn split_pane(mut c vtk.Ctl, vertical bool, path string, fresh bool, mut app vtk
 }
 
 fn close_pane(mut c vtk.Ctl, force bool, mut app vtk.App) bool {
-	mut pane := unsafe { &Pane(c.user) }
+	mut pane := c.context[Pane]() or { return false }
 	mut editor := pane.editor
-	refs := editor.panes.count(unsafe { &Pane(it.user) }.buffer == pane.buffer)
+	mut refs := 0
+	for ctl in editor.panes {
+		other := ctl.context[Pane]() or { continue }
+		if other.buffer == pane.buffer { refs++ }
+	}
 	if !force && refs == 1 && c.text != pane.buffer.saved {
 		app.notify('Unsaved changes; use :w or :q!', 2500)
 		return false
@@ -158,7 +162,7 @@ fn close_pane(mut c vtk.Ctl, force bool, mut app vtk.App) bool {
 }
 
 fn search(mut c vtk.Ctl, backward bool, mut app vtk.App) {
-	mut pane := unsafe { &Pane(c.user) }
+	mut pane := c.context[Pane]() or { return }
 	query := pane.editor.search
 	if query == '' { return }
 	mut hit := -1
@@ -179,7 +183,7 @@ fn search(mut c vtk.Ctl, backward bool, mut app vtk.App) {
 }
 
 fn command(mut c vtk.Ctl, source string, mut app vtk.App) {
-	mut pane := unsafe { &Pane(c.user) }
+	mut pane := c.context[Pane]() or { return }
 	mut editor := pane.editor
 	parts := source.trim_space().trim_left(':').split_nth(' ', 2)
 	name := parts[0].trim_right('!')
@@ -282,7 +286,7 @@ fn command(mut c vtk.Ctl, source string, mut app vtk.App) {
 }
 
 fn pane_key(mut c vtk.Ctl, e vtk.Event, mut app vtk.App) bool {
-	mut pane := unsafe { &Pane(c.user) }
+	mut pane := c.context[Pane]() or { return false }
 	mut editor := pane.editor
 	status(mut editor, &c)
 	if e.ctrl && e.key == `s` {
@@ -330,7 +334,7 @@ fn pane_key(mut c vtk.Ctl, e vtk.Event, mut app vtk.App) bool {
 }
 
 fn closing(mut w vtk.Ctl, mut app vtk.App) bool {
-	mut editor := unsafe { &Editor(w.user) }
+	mut editor := w.context[Editor]() or { return true }
 	if editor.force_close { return true }
 	if editor.buffers.any(it.text != it.saved) {
 		app.notify('Unsaved buffers; use :w or :qa!', 2500)
@@ -347,13 +351,14 @@ fn main() {
 		return
 	}
 	defer { app.fini() }
-	mut editor := &Editor{}
-	editor.window = app.window('VTK Vim', 90, 28)
-	editor.window.user = editor
+	mut editor := &Editor{
+		window: app.window('VTK Vim', 90, 28)
+		workspace: vtk.box(true)
+		status: vtk.statusbar('')
+	}
+	editor.window.set_context(editor)
 	editor.window.closing = closing
-	editor.workspace = vtk.box(true)
 	editor.workspace.expand = true
-	editor.status = vtk.statusbar('')
 	buffer := buffer_open(mut editor, if os.args.len > 1 { os.args[1] } else { '' }, mut app) or { return }
 	mut pane := make_pane(mut editor, buffer)
 	editor.workspace.add(mut pane)

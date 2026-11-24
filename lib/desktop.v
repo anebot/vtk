@@ -3,8 +3,8 @@ module vtk
 import os
 import time
 
-pub fn (mut app App) register(name string, start fn (mut App, voidptr), data voidptr) {
-	app.launchers << Launcher{name, start, data}
+pub fn (mut app App) register(name string, start fn (mut App)) {
+	app.launchers << Launcher{name, start}
 }
 
 pub fn (mut app App) notify(text string, timeout_ms int) &Notice {
@@ -79,9 +79,11 @@ fn (mut app App) draw_bar() {
 	buttons := app.bar_buttons_rect()
 	mut x := buttons.x - app.bar_offset
 	old := app.screen.set_clip(buttons)
+	top := app.top_window()
 	for w in app.bar_windows() {
 		text := '[= ${w.text}] '
-		app.screen.text(x, y, text, if w == app.top_window_ptr() { t.sel_fg } else { t.bar_fg }, if w == app.top_window_ptr() {
+		active := same_ctl(top, w)
+		app.screen.text(x, y, text, if active { t.sel_fg } else { t.bar_fg }, if active {
 			t.sel_bg
 		} else {
 			t.bar_bg
@@ -125,7 +127,7 @@ fn (mut app App) draw_notices() {
 fn launcher_action(mut c Ctl, mut app App) {
 	if c.data >= 0 && c.data < app.launchers.len {
 		launcher := app.launchers[int(c.data)]
-		launcher.start(mut app, launcher.data)
+		launcher.start(mut app)
 	}
 }
 
@@ -144,9 +146,9 @@ fn desktop_action(mut c Ctl, mut app App) {
 }
 
 pub fn (mut app App) app_menu(x int, y int) {
-	if !app.desktop || !isnil(app.blocker(unsafe { nil })) { return }
+	if !app.desktop || app.blocker(none) != none { return }
 	anchored := x == 0 && y == app.bar_y() && app.bar_height() > 0
-	if anchored && !isnil(app.app_popup) {
+	if anchored && app.app_popup != none {
 		app.close_popups()
 		return
 	}
@@ -178,7 +180,7 @@ pub fn (mut app App) app_menu(x int, y int) {
 
 fn (mut app App) bar_mouse(e Event) bool {
 	if app.bar_height() == 0 || e.y != app.bar_y() { return false }
-	if !isnil(app.blocker(unsafe { nil })) { return true }
+	if app.blocker(none) != none { return true }
 	if e.button in [.wheel_left, .wheel_right] { return true }
 	if e.button in [.wheel_up, .wheel_down] {
 		offset := max(0, app.bar_offset + if e.button == .wheel_up { -3 } else { 3 })
@@ -347,24 +349,24 @@ pub fn (mut app App) settings_reset() ! {
 struct Settings {
 mut:
 	palette      Theme
-	theme        &Ctl = unsafe { nil }
-	desktop      &Ctl = unsafe { nil }
-	desktop_preview &Ctl = unsafe { nil }
-	bar          &Ctl = unsafe { nil }
-	bar_top      &Ctl = unsafe { nil }
-	clock        &Ctl = unsafe { nil }
-	desktops     &Ctl = unsafe { nil }
-	desktops_minus &Ctl = unsafe { nil }
-	desktops_plus &Ctl = unsafe { nil }
-	desktops_label &Ctl = unsafe { nil }
-	shadow       &Ctl = unsafe { nil }
-	dim          &Ctl = unsafe { nil }
-	gradient     &Ctl = unsafe { nil }
-	macos_buttons &Ctl = unsafe { nil }
-	mouse_cursor &Ctl = unsafe { nil }
-	vim          &Ctl = unsafe { nil }
-	move         &Ctl = unsafe { nil }
-	resize       &Ctl = unsafe { nil }
+	theme        &Ctl @[required]
+	desktop      &Ctl @[required]
+	desktop_preview &Ctl @[required]
+	bar          &Ctl @[required]
+	bar_top      &Ctl @[required]
+	clock        &Ctl @[required]
+	desktops     &Ctl @[required]
+	desktops_minus &Ctl @[required]
+	desktops_plus &Ctl @[required]
+	desktops_label &Ctl @[required]
+	shadow       &Ctl @[required]
+	dim          &Ctl @[required]
+	gradient     &Ctl @[required]
+	macos_buttons &Ctl @[required]
+	mouse_cursor &Ctl @[required]
+	vim          &Ctl @[required]
+	move         &Ctl @[required]
+	resize       &Ctl @[required]
 }
 
 fn (mut s Settings) update_desktop_color() {
@@ -373,16 +375,17 @@ fn (mut s Settings) update_desktop_color() {
 }
 
 fn settings_theme_changed(mut c Ctl, mut app App) {
-	mut s := unsafe { &Settings(c.user) }
-	s.palette = theme_preset(unsafe { Preset(clamp(c.value, 0, theme_names.len - 1)) })
+	mut s := c.context[Settings]() or { return }
+	preset := Preset.from(clamp(c.value, 0, theme_names.len - 1)) or { return }
+	s.palette = theme_preset(preset)
 	if c.value == int(Preset.wineight) { s.gradient.value = 1 }
 	s.update_desktop_color()
 	app.dirty = true
 }
 
 fn settings_desktop_color(mut c Ctl, mut app App) {
-	mut s := unsafe { &Settings(c.user) }
-	if rgb := app.color_pick(c.owner_window_ptr(), 'Desktop background', color_as_rgb(s.palette.desk_bg)) {
+	mut s := c.context[Settings]() or { return }
+	if rgb := app.color_pick(c.owner_window(), 'Desktop background', color_as_rgb(s.palette.desk_bg)) {
 		s.palette.desk_bg = 0x1000000 | rgb
 		s.update_desktop_color()
 		app.dirty = true
@@ -397,12 +400,12 @@ fn (mut s Settings) update_desktops(count int) {
 }
 
 fn settings_desktops_changed(mut c Ctl, mut _ App) {
-	mut s := unsafe { &Settings(c.user) }
+	mut s := c.context[Settings]() or { return }
 	s.update_desktops(s.desktops.value + int(c.data))
 }
 
 fn settings_apply(mut c Ctl, mut app App) {
-	mut s := unsafe { &Settings(c.user) }
+	mut s := c.context[Settings]() or { return }
 	if c.data == 2 {
 		app.settings_reset() or { app.notify(err.msg(), 2500) }
 		s.palette = app.theme
@@ -455,21 +458,40 @@ fn settings_apply(mut c Ctl, mut app App) {
 }
 
 pub fn (mut app App) settings_dialog() {
-	mut s := &Settings{ palette: app.theme }
+	mut s := &Settings{
+		palette: app.theme
+		theme: combo()
+		desktop: button('')
+		desktop_preview: canvas(2, 1, draw_color_preview)
+		bar: checkbox('Always show window bar', app.bar_always)
+		bar_top: checkbox('Window bar at top', app.bar_top)
+		clock: checkbox('Clock', app.bar_clock)
+		shadow: checkbox('Window shadows', app.window_shadow)
+		dim: checkbox('Dim inactive windows', app.dim_inactive)
+		gradient: checkbox('Gradient window titles', app.title_gradient)
+		macos_buttons: checkbox('macOS window buttons', app.macos_buttons)
+		mouse_cursor: checkbox('Block mouse cursor', app.mouse_cursor.enabled)
+		vim: checkbox('Vim mode', app.vim_mode)
+		move: entry(app.move_key.str(), 0)
+		resize: entry(app.resize_key.str(), 0)
+		desktops_minus: button('-')
+		desktops: progress()
+		desktops_plus: button('+')
+		desktops_label: label('')
+	}
 	mut body := box(true)
 	mut spacer := label('')
 	body.add(mut spacer)
-	s.theme = combo()
 	s.theme.text_align = .center
 	for name in theme_names {
 		s.theme.add_item(name)
 	}
 	s.theme.value = 0
 	for i in 0 .. theme_names.len {
-		preset := theme_preset(unsafe { Preset(i) })
+		preset := theme_preset(Preset.from(i) or { continue })
 		if Theme{ ...app.theme, desk_bg: preset.desk_bg } == preset { s.theme.value = i }
 	}
-	s.theme.user = s
+	s.theme.set_context(s)
 	s.theme.changed = settings_theme_changed
 	mut theme_row := box(false)
 	mut theme_label := label('Theme:')
@@ -480,27 +502,14 @@ pub fn (mut app App) settings_dialog() {
 	mut desktop_row := box(false)
 	mut desktop_label := label('Desktop background:')
 	desktop_row.add(mut desktop_label)
-	s.desktop = button('')
-	s.desktop.user = s
+	s.desktop.set_context(s)
 	s.desktop.changed = settings_desktop_color
 	desktop_row.add(mut s.desktop)
-	s.desktop_preview = canvas(2, 1, draw_color_preview)
 	desktop_row.add(mut s.desktop_preview)
 	s.update_desktop_color()
 	body.add(mut desktop_row)
-	s.bar = checkbox('Always show window bar', app.bar_always)
-	s.bar_top = checkbox('Window bar at top', app.bar_top)
-	s.clock = checkbox('Clock', app.bar_clock)
-	s.shadow = checkbox('Window shadows', app.window_shadow)
-	s.dim = checkbox('Dim inactive windows', app.dim_inactive)
-	s.gradient = checkbox('Gradient window titles', app.title_gradient)
-	s.macos_buttons = checkbox('macOS window buttons', app.macos_buttons)
-	s.mouse_cursor = checkbox('Block mouse cursor', app.mouse_cursor.enabled)
-	s.vim = checkbox('Vim mode', app.vim_mode)
-	s.move = entry(app.move_key.str(), 0)
 	s.move.expand = false
 	s.move.col = 1
-	s.resize = entry(app.resize_key.str(), 0)
 	s.resize.expand = false
 	s.resize.col = 1
 	s.resize.row = 1
@@ -508,19 +517,15 @@ pub fn (mut app App) settings_dialog() {
 	for mut ctl in controls { body.add(mut ctl) }
 	mut desktop_count_row := box(false)
 	mut desktop_count_label := label('Virtual desktops:')
-	s.desktops_minus = button('-')
-	s.desktops_minus.user = s
+	s.desktops_minus.set_context(s)
 	s.desktops_minus.data = -1
 	s.desktops_minus.changed = settings_desktops_changed
-	s.desktops = progress()
 	s.desktops.blocky = true
 	s.desktops.high = 4
 	s.desktops.expand = false
-	s.desktops_plus = button('+')
-	s.desktops_plus.user = s
+	s.desktops_plus.set_context(s)
 	s.desktops_plus.data = 1
 	s.desktops_plus.changed = settings_desktops_changed
-	s.desktops_label = label('')
 	s.update_desktops(app.desktop_count)
 	desktop_count_row.add(mut desktop_count_label)
 	desktop_count_row.add(mut s.desktops_minus)
@@ -541,7 +546,7 @@ pub fn (mut app App) settings_dialog() {
 	for i, text in ['Apply', 'Save', 'Reset'] {
 		mut b := button(text)
 		b.data = i
-		b.user = s
+		b.set_context(s)
 		b.changed = settings_apply
 		row.add(mut b)
 	}

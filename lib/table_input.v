@@ -53,7 +53,7 @@ fn (mut c Ctl) table_mouse(e Event, mut app App) bool {
 		if column < 0 { return true }
 		if c.table.selection == .columns && !e.ctrl && !e.alt && c.row_count > 0 {
 			c.table_select_to(c.table_view_column(column), max(0, c.table_view_row(c.value)), e.shift)
-			if c.destroyed || c.root().app != &app || !c.visible() { return true }
+			if c.destroyed || !same_app(c.root().app, &app) || !c.visible() { return true }
 			if c.table.multi_select { c.table.drag = .range; app.drag = &c }
 			return true
 		}
@@ -77,20 +77,20 @@ fn (mut c Ctl) table_mouse(e Event, mut app App) bool {
 		c.table.drag_full_rows = true
 		c.table_select(0, ay, c.kids.len - 1, y)
 	} else { c.table_select_to(x, y, e.shift) }
-	if c.destroyed || c.root().app != &app || !c.visible() { return true }
+	if c.destroyed || !same_app(c.root().app, &app) || !c.visible() { return true }
 	if c.table.multi_select { c.table.drag = .range; app.drag = &c }
 	return true
 }
 
 fn (mut c Ctl) table_drag(e Event, mut app App) {
-	if e.button == .none && !e.pressed { app.drag = unsafe { nil }; return }
+	if e.button == .none && !e.pressed { app.drag = none; return }
 	if e.button != .left { return }
-	if !e.pressed { app.drag = unsafe { nil } }
-	if app.popups.len > 0 { app.drag = unsafe { nil }; return }
+	if !e.pressed { app.drag = none }
+	if app.popups.len > 0 { app.drag = none; return }
 	c.table_sync()
 	match c.table.drag {
 		.resize {
-			if !c.table.resizable_columns { app.drag = unsafe { nil }; return }
+			if !c.table.resizable_columns { app.drag = none; return }
 			if e.x != app.drag_x { c.table.last_boundary = -1 }
 			c.table_set_column_width(c.table.drag_id, max(1, app.drag_start.w + e.x - app.drag_x))
 		}
@@ -115,9 +115,9 @@ fn (mut c Ctl) table_drag(e Event, mut app App) {
 			}
 		}
 		.range, .row {
-			if c.row_count == 0 || c.kids.len == 0 { app.drag = unsafe { nil }; return }
-			if c.table.drag == .range && (!c.table.multi_select || c.table.selection == .none) { app.drag = unsafe { nil }; return }
-			if c.table.drag == .row && !c.table.reorderable_rows { app.drag = unsafe { nil }; return }
+			if c.row_count == 0 || c.kids.len == 0 { app.drag = none; return }
+			if c.table.drag == .range && (!c.table.multi_select || c.table.selection == .none) { app.drag = none; return }
+			if c.table.drag == .row && !c.table.reorderable_rows { app.drag = none; return }
 			if c.table.selection != .columns {
 				if e.y <= c.y { c.top = max(0, c.top - 1) }
 				if e.y >= c.y + c.h { c.top = clamp(c.top + 1, 0, c.row_count - max(1, c.h - 1)) }
@@ -131,7 +131,7 @@ fn (mut c Ctl) table_drag(e Event, mut app App) {
 				c.table_select(0, max(0, c.table_view_row(c.table.anchor_row)), c.kids.len - 1, y)
 			} else if column >= 0 { c.table_select_to(c.table_view_column(column), y, true) }
 		}
-		.none { app.drag = unsafe { nil } }
+		.none { app.drag = none }
 	}
 }
 
@@ -204,7 +204,7 @@ struct TableEditor {
 }
 
 fn table_editor_accept(mut button Ctl, mut app App) {
-	mut editor := unsafe { &TableEditor(button.user) }
+	mut editor := button.context[TableEditor]() or { return }
 	editor.table.table_apply([TableCellEdit{row: editor.row, column: editor.column, value: editor.entry.text}]) or {
 		editor.message.set_text(err.msg()); return
 	}
@@ -215,8 +215,8 @@ fn table_editor_accept(mut button Ctl, mut app App) {
 }
 
 pub fn (mut c Ctl) table_begin_edit() {
-	mut app := c.root().app
-	if !isnil(app) { c.table_edit_dialog(none, mut app) }
+	mut app := c.root().app or { return }
+	c.table_edit_dialog(none, mut app)
 }
 
 fn (mut c Ctl) table_edit_dialog(initial ?string, mut app App) {
@@ -231,7 +231,8 @@ fn (mut c Ctl) table_edit_dialog(initial ?string, mut app App) {
 	mut save := button('Apply')
 	mut cancel := dialog_button('Cancel', false)
 	editor := &TableEditor{ table: &c, row: c.value, column: c.table.column, entry: input, message: message }
-	save.user, input.user = editor, editor
+	save.set_context(editor)
+	input.set_context(editor)
 	save.changed, input.submit = table_editor_accept, table_editor_accept
 	buttons.add(mut save); buttons.add(mut cancel)
 	body.add(mut input); body.add(mut message); body.add(mut buttons)

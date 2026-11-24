@@ -55,7 +55,7 @@ fn (mut app App) draw_table(mut c Ctl, fg int, bg int) {
 	if c.kids.len == 0 { return }
 	if c.value >= 0 { c.scroll_into_view(c.table_view_row(c.value), c.h - 1) }
 	c.top = clamp(c.top, 0, c.row_count - max(1, c.h - 1))
-	if !c.table.left_hold && c.table.selection in [.cells, .columns] && (app.drag != c || c.table.drag == .range) {
+	if !c.table.left_hold && c.table.selection in [.cells, .columns] && (!same_ctl(app.drag, c) || c.table.drag == .range) {
 		r := c.table_column_rect(c.table.column)
 		left, right := c.x + c.table_gutter(), c.x + c.w - int(c.scrollbar)
 		if r.w > right - left { c.left = max(0, c.left + r.x - left) }
@@ -63,7 +63,7 @@ fn (mut app App) draw_table(mut c Ctl, fg int, bg int) {
 		else if r.x + r.w > right { c.left += r.x + r.w - right }
 	}
 	range := c.table_selection()
-	active := app.focus == c && !c.disabled
+	active := same_ctl(app.focus, c) && !c.disabled
 	t := app.theme
 	selected_fg, selected_bg := if active { t.focus_fg } else { t.sel_fg }, if active { t.focus_bg } else { t.sel_bg }
 	app.fill_ctl(c, fg, bg)
@@ -86,7 +86,7 @@ fn (mut app App) draw_table(mut c Ctl, fg int, bg int) {
 		left += width
 		if left <= app.screen.clip.x { continue }
 		if app.screen.paints(Rect{r.x, c.y, r.w, 1})
-			&& !(app.drag == c && c.table.drag == .header && c.table.drag_moved && c.table.reorderable_columns && c.table.drag_id == column) {
+			&& !(same_ctl(app.drag, c) && c.table.drag == .header && c.table.drag_moved && c.table.reorderable_columns && c.table.drag_id == column) {
 			app.draw_table_header(c, column, r.x, fg, bg)
 		}
 		for y in first .. last {
@@ -104,7 +104,7 @@ fn (mut app App) draw_table(mut c Ctl, fg int, bg int) {
 			if c.table.grid_lines { app.screen.put(r.x + r.w - 1, cy, `│`, t.dim, cell_bg, 0) }
 		}
 	}
-	if app.drag == c && c.table.drag == .header && c.table.drag_moved && c.table.reorderable_columns {
+	if same_ctl(app.drag, c) && c.table.drag == .header && c.table.drag_moved && c.table.reorderable_columns {
 		column := c.table.drag_id
 		if column >= 0 && column < c.kids.len {
 			x := clamp(app.drag_start.x + app.mouse_x - app.drag_x, body.x, max(body.x, body.x + body.w - c.table_column_width(column)))

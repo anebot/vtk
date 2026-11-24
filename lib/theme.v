@@ -83,7 +83,7 @@ const theme_names = ['Borland', 'Light Borland', 'Dark', 'Light', 'Teal', 'Moder
 
 fn default_title_gradient_end(background int, foreground int, inactive bool) int {
 	for i in 0 .. theme_names.len {
-		t := theme_preset(unsafe { Preset(i) })
+		t := theme_preset(Preset.from(i) or { continue })
 		if background == if inactive { t.inactive_title_bg } else { t.title_bg } {
 			return if inactive { t.inactive_title_bg_end } else { t.title_bg_end }
 		}

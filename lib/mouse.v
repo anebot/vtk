@@ -34,10 +34,10 @@ pub fn (app &App) mouse_position() (int, int) { return app.mouse_x, app.mouse_y 
 
 // hovered_ctl is the deepest eligible control under the pointer; events do not
 // bubble to its parents. Keyboard focus and mouse capture are independent.
-pub fn (app &App) hovered_ctl() ?&Ctl { return ctl_option(app.hover) }
+pub fn (app &App) hovered_ctl() ?&Ctl { return app.hover }
 
 fn (mut app App) sync_mouse_motion() {
-	terminal_motion := app.terminals.any(!it.term.exited && it.term.mouse_mode == 1003 && it.is_drawable())
+	terminal_motion := app.terminals.any(it.term != none && !it.term.exited && it.term.mouse_mode == 1003 && it.is_drawable())
 	app.driver.set_mouse_motion((app.mouse_motion && !app.rendering.slow_terminal) || app.mouse_cursor.enabled || terminal_motion)
 	app.sync_mouse_pointer()
 }
@@ -50,50 +50,51 @@ fn (mut d Driver) set_mouse_motion(enabled bool) {
 	}, discard_on_stop: true)
 }
 
-fn (app &App) hover_target() &Ctl {
+fn (app &App) hover_target() ?&Ctl {
 	x, y := app.mouse_x, app.mouse_y
-	if !Rect{0, 0, app.width, app.height}.contains(x, y) { return unsafe { nil } }
+	if !Rect{0, 0, app.width, app.height}.contains(x, y) { return none }
 	if app.popups.len > 0 {
 		p := app.popups.last()
-		if !p.rect().contains(x, y) { return unsafe { nil } }
+		if !p.rect().contains(x, y) { return none }
+		owner := p.popup_owner or { return none }
 		row := p.top + y - p.y - 1
 		if x > p.x && x < p.x + p.w - 1 && y > p.y && y < p.y + p.h - 1
-			&& row >= 0 && row < p.popup_owner.kids.len {
-			item := p.popup_owner.kids[row]
-			if item.disabled || item.hidden || item.kind == .separator { return unsafe { nil } }
+			&& row >= 0 && row < owner.kids.len {
+			item := owner.kids[row]
+			if item.disabled || item.hidden || item.kind == .separator { return none }
 			return item
 		}
 		return p
 	}
 	for n in app.notices {
-		if !n.closed && n.rect.contains(x, y) { return unsafe { nil } }
+		if !n.closed && n.rect.contains(x, y) { return none }
 	}
-	if y == app.bar_y() && (app.bar_height() > 0 || !isnil(app.placement)) {
-		return unsafe { nil }
+	if y == app.bar_y() && (app.bar_height() > 0 || app.placement != none) {
+		return none
 	}
 	for i := app.windows.len - 1; i >= 0; i-- {
 		w := app.windows[i]
 		if !app.on_desktop(w) || w.hidden || w.closed || w.minimized || !w.rect().contains(x, y) { continue }
-		if !w.visible() || !isnil(app.blocker(w)) { return unsafe { nil } }
+		if !w.visible() || app.blocker(w) != none { return none }
 		// The frame and menubar cover any children extending beyond the body.
 		if x == w.x || x == w.x + w.w - 1 || y == w.y || y == w.y + w.h - 1 {
 			return w
 		}
 		for menu in w.kids {
 			if menu.kind == .menu && !menu.hidden && menu.rect().contains(x, y) {
-				return if menu.visible() { menu } else { unsafe { nil } }
+				return if menu.visible() { menu } else { none }
 			}
 		}
-		c := w.hit_ptr(x, y)
-		return if !isnil(c) && c.visible() { c } else { unsafe { nil } }
+		c := w.hit(x, y) or { return none }
+		if c.visible() { return c }
+		return none
 	}
-	return unsafe { nil }
+	return none
 }
 
 fn (mut app App) clear_hover() {
-	mut old := app.hover
-	app.hover = unsafe { nil }
-	if isnil(old) { return }
+	mut old := app.hover or { return }
+	app.hover = none
 	old.hovered = false
 	if old.kind == .canvas { old.invalidate_paint() }
 	if f := old.mouse_leave {
@@ -113,11 +114,11 @@ fn (mut app App) release_ctl(c &Ctl) {
 			if c.contains_ctl(previous) { app.desktop_focus[i] = none }
 		}
 	}
-	if c.contains_ctl(app.focus) { app.focus = unsafe { nil } }
-	if c.contains_ctl(app.drag) { app.drag = unsafe { nil } }
-	if c.contains_ctl(app.scroll_drag) { app.scroll_drag = unsafe { nil } }
-	if c.contains_ctl(app.placement) { app.placement = unsafe { nil } }
-	if c.contains_ctl(app.title_click) { app.title_click = unsafe { nil } }
+	if c.contains_ctl(app.focus) { app.focus = none }
+	if c.contains_ctl(app.drag) { app.drag = none }
+	if c.contains_ctl(app.scroll_drag) { app.scroll_drag = none }
+	if c.contains_ctl(app.placement) { app.placement = none }
+	if c.contains_ctl(app.title_click) { app.title_click = none }
 	if app.popups.any(c.contains_ctl(it.popup_owner)) { app.close_popups() }
 }
 
@@ -125,11 +126,10 @@ fn (mut app App) update_hover() {
 	if app.updating_hover { return }
 	app.updating_hover = true
 	defer { app.updating_hover = false }
-	if app.hover_target() == app.hover { return }
+	if same_ctl(app.hover_target(), app.hover) { return }
 	app.clear_hover()
 	// A leave callback may close, hide, reparent or replace the next target.
-	mut target := app.hover_target()
-	if isnil(target) { return }
+	mut target := app.hover_target() or { return }
 	app.hover = target
 	target.hovered = true
 	if target.kind == .canvas { target.invalidate_paint() }
