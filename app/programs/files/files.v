@@ -81,7 +81,8 @@ mut:
 }
 
 struct Column {
-	path string
+	path        string
+	scan_capped bool
 mut:
 	entries []Entry
 	cursor  int = -1
@@ -99,6 +100,7 @@ mut:
 	hidden_btn  &vtk.Ctl @[required]
 	path        string
 	issue       string
+	scan_capped bool
 	entries     []Entry
 	selected    map[string]bool
 	cursor      int = -1
@@ -296,11 +298,11 @@ fn entry_color(e &Entry, t vtk.Theme) int {
 // File system
 // ---------------------------------------------------------------------------
 
-fn read_entries(dir string, hidden bool) ![]Entry {
-	mut names := os.ls(dir)!
-	if names.len > scan_limit { names = names[..scan_limit] }
-	mut entries := []Entry{cap: names.len}
-	for name in names {
+fn read_entries(dir string, hidden bool) !([]Entry, bool) {
+	names := os.ls(dir)!
+	limit := imin(names.len, scan_limit)
+	mut entries := []Entry{cap: limit}
+	for name in names[..limit] {
 		if name.starts_with('.') && !hidden { continue }
 		path := os.join_path(dir, name)
 		st := os.stat(path) or { continue }
@@ -315,7 +317,7 @@ fn read_entries(dir string, hidden bool) ![]Entry {
 			ext:      if is_dir { '' } else { os.file_ext(name).to_lower() }
 		}
 	}
-	return entries
+	return entries, names.len > scan_limit
 }
 
 fn compare_entries(a Entry, b Entry, by SortBy, desc bool) int {
@@ -427,9 +429,9 @@ fn (mut p Pane) sort_listing() {
 
 fn (mut p Pane) refresh() {
 	p.issue = ''
-	p.entries = read_entries(p.path, p.show_hidden) or {
+	p.entries, p.scan_capped = read_entries(p.path, p.show_hidden) or {
 		p.issue = err.msg()
-		[]Entry{}
+		[]Entry{}, false
 	}
 	mut keep := map[string]bool{}
 	for e in p.entries {
@@ -488,8 +490,8 @@ fn (mut p Pane) build_columns() {
 	}
 	mut cols := []Column{cap: paths.len}
 	for path in paths[..paths.len - 1] {
-		entries := read_entries(path, p.show_hidden) or { []Entry{} }
-		cols << Column{ path: path, entries: entries }
+		entries, capped := read_entries(path, p.show_hidden) or { []Entry{}, false }
+		cols << Column{ path: path, entries: entries, scan_capped: capped }
 	}
 	// The last column displays the pane's current listing.
 	cols << Column{ path: p.path }
@@ -563,6 +565,11 @@ fn (mut p Pane) scroll(delta int) {
 
 fn (mut p Pane) update_status() {
 	mut parts := []string{}
+	if p.scan_capped {
+		parts << 'Scan capped at ${scan_limit} names'
+	} else if p.view == .columns && p.cols.any(it.scan_capped) {
+		parts << 'Column scan capped at ${scan_limit} names'
+	}
 	if p.issue != '' {
 		parts << p.issue
 	} else {

@@ -51,6 +51,31 @@ fn test_sort_reorders_cached_columns_and_preserves_selection() ! {
 	assert pane.cursor == 1 && pane.anchor == 1 && pane.selected[picked]
 }
 
+fn test_status_reports_capped_directory_scans() ! {
+	root := util.temp_dir(pattern: 'vtk-files-limit-')!
+	defer { os.rmdir_all(root) or {} }
+	child := os.join_path(root, 'child')
+	os.mkdir(child)!
+	for i in 1 .. scan_limit {
+		os.write_file(os.join_path(root, '${i}'), '')!
+	}
+	mut app := vtk.new_app()
+	defer { app.fini() }
+	app.dispatch(vtk.Event{kind: .resize, width: 100, height: 30})
+	mut pane := new_files_window(mut app, shared_for(mut app), root)
+	assert pane.entries.len == scan_limit
+	assert !pane.status.text.contains('capped')
+	os.write_file(os.join_path(root, 'extra'), '')!
+	pane.refresh()
+	assert pane.entries.len == scan_limit
+	app.redraw()
+	assert app.snapshot().contains('Scan capped at ${scan_limit} names')
+	pane.navigate(child, false)
+	assert !pane.status.text.contains('capped')
+	set_view(mut pane, .columns)
+	assert pane.status.text.contains('Column scan capped at ${scan_limit} names')
+}
+
 fn test_launch_opens_windows_that_share_drag_state() {
 	mut app := vtk.new_app()
 	app.dispatch(vtk.Event{ kind: .resize, width: 100, height: 30 })
