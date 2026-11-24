@@ -45,7 +45,9 @@ fn (mut app App) sync_mouse_motion() {
 fn (mut d Driver) set_mouse_motion(enabled bool) {
 	if !d.active || d.mouse_motion == enabled { return }
 	d.mouse_motion = enabled
-	d.output(if enabled { '\x1b[?1002l\x1b[?1003h' } else { '\x1b[?1003l\x1b[?1002h' })
+	d.output(if enabled { tty_mouse_drag_off + tty_mouse_all } else {
+		tty_mouse_all_off + tty_mouse_drag
+	}, discard_on_stop: true)
 }
 
 fn (app &App) hover_target() &Ctl {

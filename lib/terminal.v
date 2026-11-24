@@ -186,6 +186,13 @@ fn (mut t Terminal) damage_rows(top int, end int) {
 pub fn (mut t Terminal) feed(bytes string) {
 	for i in 0 .. bytes.len {
 		byte := bytes[i]
+		if byte == 0x18 || byte == 0x1a {
+			t.state = 0
+			t.sequence = ''
+			t.osc_escape = false
+			t.utf8_buffer = ''
+			continue
+		}
 		match t.state {
 			0 {
 				if byte == 27 {
@@ -520,6 +527,7 @@ pub fn (mut t Terminal) close() {
 	t.exited = true
 	t.pending = ''
 	t.mouse_mode = 0
+	t.mouse_sgr = false
 	t.on_exit = none
 	t.standalone_window = none
 }

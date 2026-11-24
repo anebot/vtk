@@ -280,7 +280,8 @@ A veto prevents toolkit cleanup; side effects performed by callbacks remain.
 Destroy callbacks run after their children have been disposed. Disposed controls
 cannot be reattached or raised. Detached controls are the caller's responsibility;
 use `destroy_ctl` to dispose them without requesting window closure. `run()`
-always calls `fini()` after its loop.
+always calls `fini()` after its loop. In a custom loop, a false result from
+`step()` releases the physical terminal. Call `fini()` to dispose of the app.
 
 `app.close(mut window)` returns false if closing is vetoed or the control is not
 a window owned by that app. Closing an already closed window owned by the app
@@ -532,8 +533,11 @@ The slow terminal profile uses ASCII and basic colors, limits frames to about
 12 per second, slows spinners, and suppresses passive mouse reports unless a
 software cursor is enabled. On Unix, pending output is drained as the tty
 becomes writable. The event loop can continue handling input and coalesce new
-damage meanwhile. The Windows console uses its native synchronous output and
-a bounded wait for size changes and embedded terminal output.
+damage meanwhile. On shutdown, terminal cleanup takes priority over queued
+frames and clears any input reports still buffered in the tty. On Unix,
+`SIGTSTP` releases the terminal, and foreground resume reopens it
+and redraws the screen. The Windows console uses its native synchronous output
+and a bounded wait for size changes and embedded terminal output.
 
 Use `ctl.invalidate_paint()` or `app.invalidate_area(rect)` when layout is
 unchanged. VTK batches and recomposes the touched rows, including overlapping

@@ -1,5 +1,18 @@
 module vtk
 
+fn test_terminal_recovers_from_cancelled_frame_and_clipboard_output() {
+	for incomplete in ['\x1b[38;2;255;', '\x1b]52;c;abc'] {
+		mut t := new_terminal(20, 10)
+		t.feed(tty_setup + tty_mouse_drag_off + tty_mouse_all + '\x1b[2;8r')
+		assert t.mouse_mode == 1003 && t.mouse_sgr && t.cursor_hidden && t.top == 1
+		t.feed(incomplete)
+		t.feed('\x18\x1b[r' + tty_restore(false, ''))
+		assert t.mouse_mode == 0 && !t.mouse_sgr && !t.cursor_hidden && t.top == 0
+		t.mouse(Event{kind: .mouse, motion: true}, 1, 1)
+		assert t.pending == ''
+	}
+}
+
 fn test_terminal_mouse_modes_and_encodings() {
 	mut t := new_terminal(300, 30)
 	press := Event{kind: .mouse, button: .left, pressed: true, shift: true, alt: true, ctrl: true}

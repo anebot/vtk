@@ -63,9 +63,12 @@ pub fn (mut app App) run() ! {
 	for app.running { app.advance(-1) }
 }
 
-// step also works headlessly: dispatch events yourself and inspect screen.
+// step releases the terminal when the loop stops. Call fini to dispose of the app.
+// Headless callers can dispatch events themselves and inspect the screen.
 pub fn (mut app App) step(timeout_ms int) bool {
-	return app.advance(max(0, timeout_ms))
+	if app.advance(max(0, timeout_ms)) { return true }
+	app.driver.stop()
+	return false
 }
 
 fn (mut app App) advance(timeout_ms int) bool {
@@ -74,19 +77,36 @@ fn (mut app App) advance(timeout_ms int) bool {
 	wait := app.wait_time(timeout_ms)
 	if app.driver.active {
 		app.sync_mouse_motion()
-		bytes := app.driver.read(wait, app.terminals)
+		bytes := if app.driver.eof { '' } else { app.driver.read(wait, app.terminals) }
+		if app.driver.eof {
+			app.running = false
+			return false
+		}
+		if app.driver.resumed {
+			app.driver.resumed = false
+			app.input = Input{}
+			app.events.clear()
+			app.event_index = 0
+			app.dispatch(Event{kind: .focus_out})
+			app.terminal_focused = true
+			app.screen.invalidate()
+			app.next_frame = 0
+			app.dirty = true
+			app.sync_mouse_motion()
+		}
 		if app.driver.resize_pending() {
 			width, height := app.driver.size()
 			if width != app.width || height != app.height {
 				app.dispatch(Event{kind: .resize, width: width, height: height})
 			}
 		}
-		if app.driver.eof {
-			app.running = false
-			return false
-		}
 		if bytes != '' || app.input.buffer == '\x1b' {
 			app.events << app.input.feed(bytes)
+		}
+		if app.driver.interrupted {
+			// An OS interrupt is independent of a partially received escape or paste.
+			app.driver.interrupted = false
+			app.events << Event{key: `c`, ctrl: true}
 		}
 		// Process the queue by index instead of copying it on every event.
 		// A callback may enter a modal loop, which can consume the remaining events.
@@ -113,15 +133,16 @@ fn (mut app App) advance(timeout_ms int) bool {
 		for mut w in app.windows.filter(it.closed) { app.dispose_ctl(mut w) }
 	}
 	app.update_sources()
+	if !app.windows.any(!it.closed) && app.launchers.len == 0 { app.running = false }
+	if !app.running && app.driver.active { return false }
 	if app.needs_frame() && (!app.driver.active || (!app.driver.output_busy() && time.ticks() >= app.next_frame)) {
 		if app.dirty || app.damage.count > 0 { app.repaint() }
 		app.cursor_dirty = false
 		if app.driver.active {
-			app.driver.output(app.screen.present(app.rendering))
+			app.driver.output(app.screen.present(app.rendering), discard_on_stop: true)
 			if app.rendering.slow_terminal { app.next_frame = time.ticks() + 80 }
 		}
 	}
-	if !app.windows.any(!it.closed) && app.launchers.len == 0 { app.running = false }
 	return app.running
 }
 

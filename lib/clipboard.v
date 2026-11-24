@@ -9,7 +9,7 @@ fn (app &App) now() i64 { return time.ticks() }
 pub fn (mut app App) clipboard_set(text string) {
 	app.clipboard = text
 	if app.native_clipboard && app.driver.active {
-		app.driver.output('\x1b]52;c;${base64.encode_str(text)}\x07')
+		app.driver.output('\x1b]52;c;${base64.encode_str(text)}\x07', discard_on_stop: true)
 	}
 }
 

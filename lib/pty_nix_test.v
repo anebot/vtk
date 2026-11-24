@@ -4,6 +4,63 @@ import io.util
 import os
 import time
 
+fn test_tty_shutdown_sends_resets_ahead_of_a_blocked_frame() {
+	mut pipe := [2]i32{}
+	assert C.pipe(&pipe[0]) == 0
+	defer { C.close(pipe[0]) }
+	assert C.fcntl(pipe[1], C.F_SETFL, C.O_NONBLOCK) == 0
+	mut driver := Driver{write_fd: pipe[1]}
+	driver.output(tty_setup)
+	frame := '\x1b[2;10r' + 'x'.repeat(1024 * 1024)
+	driver.output(frame, discard_on_stop: true)
+	assert driver.output_at > 0 && driver.output_at < frame.len
+	driver.output(tty_mouse_all, discard_on_stop: true)
+	driver.output('\x1b]22;>none\x1b\\')
+	driver.pointer.hidden = true
+
+	reader := spawn read_tty_test_output(pipe[0])
+	driver.finish_output()
+	C.close(pipe[1])
+	output := reader.wait()
+	assert !driver.output_busy()
+	assert output.len < frame.len && !output.contains(tty_mouse_all)
+	assert output.ends_with('\x18\x1b[r\x1b]22;>none\x1b\\' + tty_restore(false, '\x1b]22;<\x1b\\'))
+}
+
+fn read_tty_test_output(fd int) string {
+	mut output := []u8{}
+	mut bytes := [4096]u8{}
+	for {
+		count := int(C.read(fd, &bytes[0], bytes.len))
+		if count < 0 && C.errno == C.EINTR { continue }
+		if count <= 0 { return output.bytestr() }
+		output << bytes[..count]
+	}
+	return ''
+}
+
+fn test_tty_shutdown_reaches_a_macos_pty_with_a_stalled_reader() {
+	$if macos {
+		master := C.posix_openpt(C.O_RDWR | C.O_NOCTTY)
+		assert master >= 0
+		defer { C.close(master) }
+		assert C.grantpt(master) == 0 && C.unlockpt(master) == 0
+		slave := C.open(C.ptsname(master), C.O_WRONLY | C.O_NOCTTY | C.O_NONBLOCK, 0)
+		assert slave >= 0
+		defer { C.close(slave) }
+		assert C.fcntl(master, C.F_SETFL, C.O_NONBLOCK) == 0
+		mut driver := Driver{write_fd: slave}
+		driver.output('x'.repeat(1024 * 1024), discard_on_stop: true)
+		assert driver.output_at > 0 && driver.output_busy()
+		driver.finish_output()
+		assert !driver.output_busy()
+		mut bytes := [4096]u8{}
+		count := int(C.read(master, &bytes[0], bytes.len))
+		assert count > 0
+		assert bytes[..count].bytestr().ends_with(tty_restore(false, ''))
+	}
+}
+
 fn test_pty_shell_output_and_cleanup() {
 	mut pty := spawn_pty(40, 8, '') or { panic(err) }
 	defer { pty.close() }
