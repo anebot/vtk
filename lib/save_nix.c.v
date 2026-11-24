@@ -1,4 +1,4 @@
-module support
+module vtk
 
 import os
 

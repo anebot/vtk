@@ -1,4 +1,4 @@
-module support
+module vtk
 
 #include <windows.h>
 

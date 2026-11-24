@@ -1,10 +1,12 @@
-module support
+module vtk
 
 import io.util
 import os
 
-// Keep the previous file intact if writing or replacing the new one fails.
-pub fn save(path string, text string) ! {
+// save_atomic writes text to path through a temporary file beside it, so a
+// failed write or replace keeps the previous contents. The temporary file
+// inherits the target's permissions and replaces it atomically.
+pub fn save_atomic(path string, text string) ! {
 	target := if os.exists(path) { os.real_path(path) } else { os.abs_path(path) }
 	mut file, temporary := util.temp_file(path: os.dir(target), pattern: '.vtk-*.tmp')!
 	defer {

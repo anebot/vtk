@@ -7,7 +7,6 @@ import math
 import os
 import strconv
 import vtk
-import vtk.examples.support
 import image
 import image.jpeg
 import image.png
@@ -1574,7 +1573,7 @@ fn (mut deck Deck) save(save_as bool, mut app vtk.App) bool {
 			return false
 		}
 	}
-	support.save(path, deck.text()) or {
+	vtk.save_atomic(path, deck.text()) or {
 		app.notify(err.msg(), 3000)
 		return false
 	}

@@ -3,7 +3,6 @@ module main
 
 import os
 import vtk
-import vtk.examples.support
 
 @[heap]
 struct Document {
@@ -217,7 +216,7 @@ fn save(mut doc Document, save_as bool, mut app vtk.App) bool {
 		if !app.confirm_for(doc.window, 'Replace file', 'Replace ${path}?') { return false }
 	}
 	doc.view.end_edit_group()
-	support.save(path, doc.view.text) or {
+	vtk.save_atomic(path, doc.view.text) or {
 		app.notify(err.msg(), 3000)
 		return false
 	}

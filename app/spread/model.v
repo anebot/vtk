@@ -2,7 +2,6 @@ module spread
 
 import encoding.csv
 import json2
-import io.util
 import math
 import os
 import strconv
@@ -193,13 +192,7 @@ fn (book &Book) dirty() bool { return book.snapshot() != book.saved }
 
 fn (mut book Book) save(path string) ! {
 	text := book.snapshot()
-	// Write beside the destination before replacing it, preserving the old
-	// workbook if encoding or writing fails.
-	mut file, temporary := util.temp_file(pattern: '.vtk-sheet-', path: os.dir(path))!
-	file.close()
-	defer { if os.exists(temporary) { os.rm(temporary) or {} } }
-	os.write_file(temporary, text)!
-	os.rename(temporary, path)!
+	vtk.save_atomic(path, text)!
 	book.path, book.saved = path, text
 }
 

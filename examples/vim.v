@@ -3,7 +3,6 @@ module main
 
 import os
 import vtk
-import vtk.examples.support
 
 @[heap]
 struct Buffer {
@@ -90,7 +89,7 @@ fn write_buffer(mut c vtk.Ctl, path string, force bool, mut app vtk.App) bool {
 		return false
 	}
 	c.end_edit_group()
-	support.save(name, c.text) or {
+	vtk.save_atomic(name, c.text) or {
 		app.notify(err.msg(), 3000)
 		return false
 	}
