@@ -22,11 +22,13 @@ fn test_parse_single_series_chart() {
 	assert data.series[0] == [10.0, 20.0, 15.0]
 }
 
-fn test_transition_values() {
-	assert transition_from_int(0) == SlideTransition.none
-	assert transition_from_int(1) == SlideTransition.slide
-	assert transition_from_int(2) == SlideTransition.fade
-	assert transition_from_int(99) == SlideTransition.none
+fn test_transition_preferences() {
+	assert parse_prefs('transition = 0') == SlideTransition.none
+	assert parse_prefs('# Slides preferences\n\ntransition = 1') == SlideTransition.slide
+	assert parse_prefs('transition = 2') == SlideTransition.fade
+	for value in ['', '3', '-1', '99', '2fade', '4294967298'] {
+		assert parse_prefs('transition = ${value}') == SlideTransition.none
+	}
 	assert transition_label(.slide) == 'Slide'
 }
 

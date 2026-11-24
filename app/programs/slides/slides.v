@@ -231,15 +231,6 @@ fn transition_names() []string {
 	return ['No transition', 'Slide', 'Fade out → in']
 }
 
-fn transition_from_int(value int) SlideTransition {
-	return match value {
-		1 { .slide }
-		2 { .fade }
-		3 { .fade }
-		else { .none }
-	}
-}
-
 fn transition_label(transition SlideTransition) string {
 	return transition_names()[int(transition)]
 }
@@ -250,6 +241,10 @@ fn prefs_file() string {
 
 fn load_prefs() SlideTransition {
 	text := os.read_file(prefs_file()) or { return .none }
+	return parse_prefs(text)
+}
+
+fn parse_prefs(text string) SlideTransition {
 	for line in text.split_into_lines() {
 		trim := line.trim_space()
 		if trim == '' || trim.starts_with('#') {
@@ -257,7 +252,8 @@ fn load_prefs() SlideTransition {
 		}
 		parts := trim.split_nth('=', 2)
 		if parts.len == 2 && parts[0].trim_space() == 'transition' {
-			return transition_from_int(parts[1].trim_space().int())
+			value := strconv.atoi(parts[1].trim_space()) or { return .none }
+			return SlideTransition.from(value) or { SlideTransition.none }
 		}
 	}
 	return .none
@@ -1887,7 +1883,7 @@ fn template_cancel(mut c vtk.Ctl, mut app vtk.App) {
 
 fn settings_ok(mut c vtk.Ctl, mut app vtk.App) {
 	mut dialog := c.context[SettingsDialog]() or { return }
-	dialog.deck.transition = transition_from_int(dialog.radio.value)
+	dialog.deck.transition = SlideTransition.from(dialog.radio.value) or { return }
 	save_prefs(dialog.deck)
 	dialog.deck.refresh()
 	app.close(mut dialog.window)
