@@ -4,6 +4,75 @@ import io.util
 import os
 import vtk
 
+fn test_location_submits_with_enter_and_go_at_minimum_window_width() ! {
+	root := util.temp_dir(pattern: 'vtk-files-location-')!
+	defer { os.rmdir_all(root) or {} }
+	child := os.join_path(root, 'folder with spaces')
+	os.mkdir(child)!
+	os.write_file(os.join_path(root, 'notes.txt'), '')!
+	mut app := vtk.new_app()
+	defer { app.fini() }
+	app.dispatch(vtk.Event{kind: .resize, width: 40, height: 20})
+	pane := new_files_window(mut app, shared_for(mut app), root)
+	app.redraw()
+	mut field := pane.path_field
+	app.dispatch(vtk.Event{key: int(`l`), ctrl: true})
+	assert app.focused_ctl() == ?&vtk.Ctl(field)
+	field.set_text('folder with spaces')
+	app.dispatch(vtk.Event{key: int(vtk.Key.enter)})
+	assert pane.path == os.real_path(child)
+	assert app.focused_ctl() == ?&vtk.Ctl(pane.canvas)
+
+	row := field.parent_ctl() or { return error('missing location row') }
+	go_button := row.children().filter(it.text == 'Go')[0]
+	app.redraw()
+	area := go_button.rect()
+	assert area.y == field.rect().y && area.x >= field.rect().x + field.rect().w
+	assert area.x + area.w <= pane.win.rect().x + pane.win.rect().w - 1
+	click := vtk.Event{kind: .mouse, button: .left, pressed: true, x: area.x, y: area.y}
+	field.set_text('missing')
+	app.dispatch(click)
+	assert pane.path == os.real_path(child)
+	assert field.text == 'missing' && app.focused_ctl() == ?&vtk.Ctl(field)
+	assert pane.status.text.contains('missing')
+	app.dispatch(vtk.Event{...click, pressed: false})
+
+	field.set_text(os.join_path('..', 'notes.txt'))
+	app.dispatch(click)
+	assert pane.path == os.real_path(root)
+	assert pane.selected[os.join_path(os.real_path(root), 'notes.txt')]
+	assert app.focused_ctl() == ?&vtk.Ctl(pane.canvas)
+}
+
+fn test_files_menubar_dispatches_window_edit_and_view_actions() ! {
+	root := util.temp_dir(pattern: 'vtk-files-menus-')!
+	defer { os.rmdir_all(root) or {} }
+	os.write_file(os.join_path(root, 'notes.txt'), '')!
+	mut app := vtk.new_app()
+	defer { app.fini() }
+	app.dispatch(vtk.Event{kind: .resize, width: 100, height: 30})
+	first := new_files_window(mut app, shared_for(mut app), root)
+	app.redraw()
+	assert first.win.children().filter(it.kind == .menu).map(it.text) == ['File', 'Edit', 'View', 'Help']
+	app.dispatch(vtk.Event{key: int(vtk.Key.f10)})
+	app.dispatch(vtk.Event{key: int(vtk.Key.enter)})
+	assert app.window_list().len == 2
+	second := pane_from(app.window_list().last()) or { return error('missing second Files pane') }
+	assert second.path == first.path
+	app.redraw()
+
+	menus := second.win.children().filter(it.kind == .menu)
+	edit := menus[1].rect()
+	app.dispatch(vtk.Event{kind: .mouse, button: .left, pressed: true, x: edit.x, y: edit.y})
+	app.dispatch(vtk.Event{key: int(vtk.Key.enter)})
+	assert second.selected.len == 1 && first.selected.len == 0
+	view := menus[2].rect()
+	app.dispatch(vtk.Event{kind: .mouse, button: .left, pressed: true, x: view.x, y: view.y})
+	app.dispatch(vtk.Event{key: int(vtk.Key.down)})
+	app.dispatch(vtk.Event{key: int(vtk.Key.enter)})
+	assert second.view == .icons && first.view == .list
+}
+
 fn test_double_click_prompts_for_an_opener_and_loads_the_file_in_word() ! {
 	directory := util.temp_dir(pattern: 'vtk-files-open-')!
 	defer { os.rmdir_all(directory) or {} }
@@ -66,10 +135,10 @@ fn test_sort_reorders_cached_columns_and_preserves_selection() ! {
 	set_view(mut pane, .columns)
 	// The original path is unreadable and the parent listing has changed on disk.
 	os.mv(dir, os.join_path(root, 'renamed'))!
-	mut option := vtk.new_ctl(.menuitem)
-	option.set_context(pane)
-	option.data = i64(SortBy.name)
-	choose_sort(mut option, mut app)
+	view_menu := pane.win.children().filter(it.kind == .menu && it.text == 'View')[0]
+	sort_menu := view_menu.children().filter(it.kind == .menu && it.text == 'Sort by')[0]
+	mut sort_by_name := sort_menu.children().filter(it.text == 'Name')[0]
+	sort_by_name.fire()
 	last := pane.cols.len - 1
 	parent := pane.cols[last - 1]
 	assert parent.entries.map(it.name) == ['target', 'other']

@@ -38,7 +38,6 @@ mut:
 	canvas      &vtk.Ctl @[required]
 	status      &vtk.Ctl @[required]
 	path_field  &vtk.Ctl @[required]
-	hidden_btn  &vtk.Ctl @[required]
 	path        string
 	issue       string
 	scan_capped bool
@@ -104,7 +103,6 @@ fn (mut p Pane) refresh() {
 	}
 	if p.cursor < 0 { p.cursor_path = '' }
 	if p.view == .columns { p.build_columns() }
-	p.hidden_btn.value = int(p.show_hidden)
 	p.path_field.set_text(p.path)
 	p.path_field.cursor = 0
 	p.win.set_text(title_prefix + os.base(p.path))
@@ -113,16 +111,15 @@ fn (mut p Pane) refresh() {
 	p.canvas.invalidate()
 }
 
-fn (mut p Pane) navigate(path string, remember bool) {
+fn (mut p Pane) navigate(path string, remember bool) bool {
 	target := os.real_path(path)
 	if !os.is_dir(target) {
-		p.issue = 'Not a folder: ${path}'
-		p.canvas.invalidate_paint()
-		return
+		p.status.set_text('Not a folder: ${path}')
+		return false
 	}
 	if target == p.path {
 		p.refresh()
-		return
+		return true
 	}
 	if remember {
 		p.history << p.path
@@ -136,6 +133,7 @@ fn (mut p Pane) navigate(path string, remember bool) {
 	p.anchor_path = ''
 	p.top = 0
 	p.refresh()
+	return true
 }
 
 fn (mut p Pane) ensure_visible() {
@@ -490,37 +488,13 @@ fn pane_key(mut c vtk.Ctl, e vtk.Event, mut app vtk.App) bool {
 	}
 	if e.ctrl {
 		match key {
-			`a` {
-				p.selected = map[string]bool{}
-				for entry in p.entries { p.selected[entry.path] = true }
-				p.update_status()
-				p.canvas.invalidate_paint()
-				return true
-			}
-			`h` {
-				p.show_hidden = !p.show_hidden
-				p.refresh()
-				return true
-			}
-			`n` {
-				new_files_window(mut app, p.shared, p.path)
-				return true
-			}
-			`q` {
-				app.close(mut p.win)
-				return true
-			}
-			`r` {
-				p.refresh()
-				return true
-			}
-			`l` {
-				app.set_focus(p.path_field)
-				return true
-			}
-			`v` {
-				return p.import_text(mut app, app.clipboard_text())
-			}
+			`a` { return p.perform(.select_all, mut app) }
+			`h` { return p.perform(.toggle_hidden, mut app) }
+			`n` { return p.perform(.new_window, mut app) }
+			`q` { return p.perform(.close_window, mut app) }
+			`r` { return p.perform(.refresh, mut app) }
+			`l` { return p.perform(.focus_location, mut app) }
+			`v` { return p.perform(.import_files, mut app) }
 			else {}
 		}
 	}
@@ -585,10 +559,7 @@ fn pane_key(mut c vtk.Ctl, e vtk.Event, mut app vtk.App) bool {
 			p.go_up()
 			return true
 		}
-		int(vtk.Key.delete) {
-			p.delete_selection(mut app)
-			return true
-		}
+		int(vtk.Key.delete) { return p.perform(.delete_items, mut app) }
 		int(vtk.Key.space) {
 			if p.cursor >= 0 {
 				p.toggle(p.cursor)
@@ -597,18 +568,12 @@ fn pane_key(mut c vtk.Ctl, e vtk.Event, mut app vtk.App) bool {
 			}
 			return true
 		}
-		int(vtk.Key.f2) {
-			p.rename_cursor(mut app)
-			return true
-		}
+		int(vtk.Key.f2) { return p.perform(.rename, mut app) }
 		int(vtk.Key.f3) {
 			p.cycle_view()
 			return true
 		}
-		int(vtk.Key.f5) {
-			p.refresh()
-			return true
-		}
+		int(vtk.Key.f5) { return p.perform(.refresh, mut app) }
 		else {
 			if !e.ctrl && !e.alt && key >= 32 && key < 127 {
 				p.type_ahead(rune(key).str())
@@ -638,15 +603,12 @@ fn (mut p Pane) scroll_cursor() {
 }
 
 fn (mut p Pane) cycle_view() {
-	p.view = match p.view {
+	view := match p.view {
 		.list { View.icons }
 		.icons { View.columns }
 		.columns { View.list }
 	}
-	p.top = 0
-	if p.view == .columns { p.build_columns() }
-	p.update_status()
-	p.canvas.invalidate()
+	set_view(mut p, view)
 }
 
 fn (mut p Pane) go_up() {
@@ -669,49 +631,30 @@ fn (mut p Pane) go_forward() {
 }
 
 // ---------------------------------------------------------------------------
-// Toolbar and window creation
+// Menus and window creation
 // ---------------------------------------------------------------------------
 
-fn toolbar_back(mut c vtk.Ctl, mut _ vtk.App) {
-	mut p := pane_from(c) or { return }
-	p.go_back()
-}
-
-fn toolbar_forward(mut c vtk.Ctl, mut _ vtk.App) {
-	mut p := pane_from(c) or { return }
-	p.go_forward()
-}
-
-fn toolbar_up(mut c vtk.Ctl, mut _ vtk.App) {
-	mut p := pane_from(c) or { return }
-	p.go_up()
-}
-
-fn toolbar_home(mut c vtk.Ctl, mut _ vtk.App) {
-	mut p := pane_from(c) or { return }
-	p.navigate(os.home_dir(), true)
-}
-
-fn toolbar_refresh(mut c vtk.Ctl, mut _ vtk.App) {
-	mut p := pane_from(c) or { return }
-	p.refresh()
-}
-
-fn toolbar_new_folder(mut c vtk.Ctl, mut app vtk.App) {
-	mut p := pane_from(c) or { return }
-	p.new_folder(mut app)
-}
-
-fn toolbar_hidden(mut c vtk.Ctl, mut _ vtk.App) {
-	mut p := pane_from(c) or { return }
-	p.show_hidden = !p.show_hidden
-	c.value = int(p.show_hidden)
-	p.refresh()
-}
-
-fn toolbar_new_window(mut c vtk.Ctl, mut app vtk.App) {
-	mut p := pane_from(c) or { return }
-	new_files_window(mut app, p.shared, p.path)
+enum FilesAction {
+	new_window
+	new_folder
+	open_item
+	close_window
+	select_all
+	copy_paths
+	import_files
+	rename
+	delete_items
+	list
+	icons
+	columns
+	toggle_hidden
+	refresh
+	back
+	forward
+	up
+	home
+	focus_location
+	help
 }
 
 fn set_view(mut p Pane, view View) {
@@ -722,25 +665,108 @@ fn set_view(mut p Pane, view View) {
 	p.canvas.invalidate()
 }
 
-fn toolbar_list(mut c vtk.Ctl, mut _ vtk.App) {
-	mut p := pane_from(c) or { return }
-	set_view(mut p, .list)
+fn (mut p Pane) perform(action FilesAction, mut app vtk.App) bool {
+	match action {
+		.new_window { new_files_window(mut app, p.shared, p.path) }
+		.new_folder { p.new_folder(mut app) }
+		.open_item { p.activate(mut app) }
+		.close_window { app.close(mut p.win) }
+		.select_all {
+			p.selected = map[string]bool{}
+			for entry in p.entries { p.selected[entry.path] = true }
+			p.update_status()
+			p.canvas.invalidate_paint()
+		}
+		.copy_paths {
+			paths := p.chosen_paths()
+			app.clipboard_set(paths.join('\n'))
+			if paths.len > 0 { app.notify('Copied ${paths.len} path(s)', 1500) }
+		}
+		.import_files { return p.import_text(mut app, app.clipboard_text()) }
+		.rename { p.rename_cursor(mut app) }
+		.delete_items { p.delete_selection(mut app) }
+		.list { set_view(mut p, .list) }
+		.icons { set_view(mut p, .icons) }
+		.columns { set_view(mut p, .columns) }
+		.toggle_hidden {
+			p.show_hidden = !p.show_hidden
+			p.refresh()
+		}
+		.refresh { p.refresh() }
+		.back { p.go_back() }
+		.forward { p.go_forward() }
+		.up { p.go_up() }
+		.home { p.navigate(os.home_dir(), true) }
+		.focus_location { app.set_focus(p.path_field) }
+		.help {
+			app.msgbox_for(p.win, 'Using Files', 'Ctrl-L focuses the location field.\n'
+				+ 'Press Enter or click Go to navigate.\n'
+				+ 'F3 cycles the layout. F5 refreshes.\n'
+				+ 'Shift-click selects a range.\n'
+				+ 'Ctrl-click toggles an item.\n'
+				+ 'Drag files between folders.\n'
+				+ 'Hold Ctrl to copy or Shift to move.')
+		}
+	}
+	return true
 }
 
-fn toolbar_icons(mut c vtk.Ctl, mut _ vtk.App) {
+fn menu_action(mut c vtk.Ctl, mut app vtk.App) {
 	mut p := pane_from(c) or { return }
-	set_view(mut p, .icons)
+	action := FilesAction.from(c.data) or { return }
+	p.perform(action, mut app)
 }
 
-fn toolbar_columns(mut c vtk.Ctl, mut _ vtk.App) {
-	mut p := pane_from(c) or { return }
-	set_view(mut p, .columns)
+fn window_key(mut c vtk.Ctl, e vtk.Event, mut app vtk.App) bool {
+	if e.key != int(vtk.Key.f1) { return false }
+	mut p := pane_from(c) or { return false }
+	return p.perform(.help, mut app)
 }
 
-fn toolbar_sort(mut c vtk.Ctl, mut app vtk.App) {
-	menu := c.context_menu() or { return }
-	area := c.rect()
-	app.open_menu(menu, area.x, area.y + 1)
+fn menu_item(mut menu vtk.Ctl, p &Pane, label string, action FilesAction) {
+	mut item := menu.menu_item(label, menu_action)
+	item.set_context(p)
+	item.data = i64(action)
+}
+
+fn add_menus(mut win vtk.Ctl, p &Pane) {
+	mut file := win.add_menu('File')
+	menu_item(mut file, p, 'New window   Ctrl-N', .new_window)
+	menu_item(mut file, p, 'New folder...', .new_folder)
+	menu_item(mut file, p, 'Open   Enter', .open_item)
+	file.menu_separator()
+	menu_item(mut file, p, 'Close window   Ctrl-Q', .close_window)
+
+	mut edit := win.add_menu('Edit')
+	menu_item(mut edit, p, 'Select all   Ctrl-A', .select_all)
+	menu_item(mut edit, p, 'Copy paths', .copy_paths)
+	menu_item(mut edit, p, 'Paste files   Ctrl-V', .import_files)
+	edit.menu_separator()
+	menu_item(mut edit, p, 'Rename...   F2', .rename)
+	menu_item(mut edit, p, 'Delete...   Del', .delete_items)
+
+	mut view := win.add_menu('View')
+	menu_item(mut view, p, 'List', .list)
+	menu_item(mut view, p, 'Icons', .icons)
+	menu_item(mut view, p, 'Columns', .columns)
+	mut sort := view.add_menu('Sort by')
+	for entry in sort_entries {
+		mut item := sort.menu_item(entry.label, choose_sort)
+		item.data = i64(entry.by)
+		item.set_context(p)
+	}
+	view.menu_separator()
+	menu_item(mut view, p, 'Show / hide hidden files   Ctrl-H', .toggle_hidden)
+	menu_item(mut view, p, 'Refresh   F5', .refresh)
+	mut navigate := view.add_menu('Navigate')
+	menu_item(mut navigate, p, 'Back   Alt-Left', .back)
+	menu_item(mut navigate, p, 'Forward   Alt-Right', .forward)
+	menu_item(mut navigate, p, 'Up   Backspace', .up)
+	menu_item(mut navigate, p, 'Home folder', .home)
+	menu_item(mut navigate, p, 'Edit location   Ctrl-L', .focus_location)
+
+	mut help := win.add_menu('Help')
+	menu_item(mut help, p, 'Using Files   F1', .help)
 }
 
 fn choose_sort(mut c vtk.Ctl, mut _ vtk.App) {
@@ -761,31 +787,34 @@ fn choose_sort(mut c vtk.Ctl, mut _ vtk.App) {
 
 fn path_submitted(mut c vtk.Ctl, mut app vtk.App) {
 	mut p := pane_from(c) or { return }
-	text := c.text.trim_space()
-	if text == '' { return }
-	target := os.expand_tilde_to_home(text)
-	if os.is_file(target) && os.is_abs_path(target) {
-		p.navigate(os.dir(target), true)
-		p.cursor_path = os.real_path(target)
-		p.cursor = p.index_of(p.cursor_path)
-		p.select_only(p.cursor)
-		p.ensure_visible()
-	} else {
-		p.navigate(target, true)
+	text := os.expand_tilde_to_home(p.path_field.text)
+	if text == '' {
+		app.set_focus(p.path_field)
+		return
+	}
+	target := if os.is_abs_path(text) { text } else { os.join_path(p.path, text) }
+	file := os.is_file(target)
+	if !p.navigate(if file { os.dir(target) } else { target }, true) {
+		app.set_focus(p.path_field)
+		return
+	}
+	if file {
+		index := p.index_of(os.join_path(p.path, os.base(target)))
+		if index >= 0 { p.set_cursor(index, false) }
 	}
 	app.set_focus(p.canvas)
 }
 
 fn copy_focused_selection(mut app vtk.App) {
 	if f := app.focused_ctl() {
-		if p := pane_from(f) {
-			mut paths := []string{}
-			for path in p.chosen_paths() { paths << path }
-			app.clipboard_set(paths.join('\n'))
-			if paths.len > 0 { app.notify('Copied ${paths.len} path(s)', 1500) }
-			return
+		if f.kind == .canvas {
+			if mut p := pane_from(f) {
+				p.perform(.copy_paths, mut app)
+				return
+			}
 		}
 	}
+	app.copy_focus()
 }
 
 fn window_destroyed(mut c vtk.Ctl, mut _ vtk.App) {
@@ -817,20 +846,8 @@ fn new_files_window(mut app vtk.App, shared &Shared, path string) &Pane {
 	win.destroy = window_destroyed
 	win.set_size_limits(40, 8, 0, 0)
 
-	mut tools := vtk.toolbar()
-	mut back := vtk.toolbutton('←')
-	mut fwd := vtk.toolbutton('→')
-	mut up := vtk.toolbutton('↑')
-	mut home := vtk.toolbutton('~')
-	mut refresh := vtk.toolbutton('R')
-	mut folder := vtk.toolbutton('+')
-	mut hidden := vtk.toolbutton('H')
-	mut newwin := vtk.toolbutton('New window')
-	mut list := vtk.toolbutton('List')
-	mut icons := vtk.toolbutton('Icons')
-	mut columns := vtk.toolbutton('Cols')
-	mut sort_btn := vtk.toolbutton('Sort')
 	mut field := vtk.entry(start, 0)
+	mut go_button := vtk.button('Go')
 	mut status := vtk.statusbar('')
 	mut canvas := vtk.canvas(20, 10, paint_pane)
 	mut p := &Pane{
@@ -840,41 +857,18 @@ fn new_files_window(mut app vtk.App, shared &Shared, path string) &Pane {
 		canvas:     canvas
 		status:     status
 		path_field: field
-		hidden_btn: hidden
 		path:       start
 		selected:   map[string]bool{}
 		sort:       .name
 		view:       .list
 	}
 	win.set_context(p)
-	field.expand = true
+	win.keyfn = window_key
+	add_menus(mut win, p)
+	field.set_context(p)
 	field.submit = path_submitted
-
-	mut buttons := [back, fwd, up, home, refresh, folder, hidden, newwin, list, icons, columns,
-		sort_btn]
-	for mut button in buttons {
-		button.set_context(p)
-	}
-	back.changed = toolbar_back
-	fwd.changed = toolbar_forward
-	up.changed = toolbar_up
-	home.changed = toolbar_home
-	refresh.changed = toolbar_refresh
-	folder.changed = toolbar_new_folder
-	hidden.changed = toolbar_hidden
-	newwin.changed = toolbar_new_window
-	list.changed = toolbar_list
-	icons.changed = toolbar_icons
-	columns.changed = toolbar_columns
-	sort_btn.changed = toolbar_sort
-
-	mut sort_menu := vtk.context_menu()
-	for entry in sort_entries {
-		mut item := sort_menu.menu_item(entry.label, choose_sort)
-		item.data = i64(int(entry.by))
-		item.set_context(p)
-	}
-	sort_btn.set_menu(mut sort_menu)
+	go_button.set_context(p)
+	go_button.changed = path_submitted
 
 	canvas.expand = true
 	canvas.focusable = true
@@ -883,22 +877,12 @@ fn new_files_window(mut app vtk.App, shared &Shared, path string) &Pane {
 	canvas.mousefn = pane_mouse
 	canvas.keyfn = pane_key
 
-	tools.add(mut back)
-	tools.add(mut fwd)
-	tools.add(mut up)
-	tools.add(mut home)
-	tools.add(mut refresh)
-	tools.add(mut folder)
-	tools.add(mut hidden)
-	tools.add(mut newwin)
-	tools.add(mut list)
-	tools.add(mut icons)
-	tools.add(mut columns)
-	tools.add(mut sort_btn)
-	tools.add(mut field)
+	mut location := vtk.toolbar()
+	location.add(mut field)
+	location.add(mut go_button)
 
 	mut body := vtk.box(true)
-	body.add(mut tools)
+	body.add(mut location)
 	body.add(mut canvas)
 	body.add(mut status)
 	win.add(mut body)
