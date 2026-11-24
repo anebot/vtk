@@ -34,12 +34,21 @@ v run examples/vim.v README.md
 v run app/paint.v
 v run examples/widgets.v
 v run examples/terminal.v
-v run app/spread.v
+./build/spreadsheet
 v test .
 ```
 
 V 0.5.2 and a C compiler are sufficient. There are no VPM dependencies.
 Copying the entire checkout into a V module search path as `vtk` works too.
+
+For a headless debug preview, compile with `-d vtk_snapshot`. VTK apps that
+call `App.run()` render their first frame to stdout and exit. If the app opens
+a modal dialog on startup, the preview captures that dialog. For example:
+
+```sh
+v -d vtk_snapshot run app/calc.v
+v -d vtk_snapshot -o build/spreadsheet-preview run app/spread.v --chart
+```
 
 Declarative UI files can be compiled into V builder functions with
 [VML](vml/README.md). Its Gtkon-style syntax uses a separate `vtk.vmlt` descriptor
@@ -742,7 +751,8 @@ Slides, Spread, Paint, Calc, Clock and Files as native windows.
 Files is a file manager with list, icon and column views, sorting, Shift/Ctrl
 multi-selection and drag and drop between its windows; it uses `app.overlay`
 and `Ctl.mouse_capture`. Its program lives in `app/programs/files`, and
-`app/files.v` runs it standalone.
+`app/files.v` runs it standalone. Double-click a file to choose a VTK document
+app, open its containing folder in a VTK Terminal, or use the system launcher.
 The spreadsheet exercises editable tables, formulas, workbook persistence,
 selection, sorting, colors and sheet tab reordering.
 

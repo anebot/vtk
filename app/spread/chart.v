@@ -5,7 +5,7 @@ import strconv
 import vtk
 
 // A selected block uses its first column as categories when it has several
-// columns. A text heading row names the series; one column uses row addresses.
+// columns. A row of text headings names the series; one column uses row addresses.
 fn (mut current SheetView) selection_chart() !vtk.Chart {
 	grid := current.grid
 	range := grid.table_selection()
@@ -16,8 +16,16 @@ fn (mut current SheetView) selection_chart() !vtk.Chart {
 	for x in first_value .. range.x2 + 1 {
 		row, column := grid.table_row_at(first_row), grid.table_column_at(x)
 		raw := current.sheet.raw(row, column).trim_space()
-		if raw == '' || raw.starts_with('=') { continue }
-		strconv.atof64(raw) or { heading = true }
+		if raw == '' { continue }
+		mut visiting := map[string]bool{}
+		value := current.sheet.number(row, column, mut visiting) or {
+			if !raw.starts_with('=') { heading = true }
+			continue
+		}
+		if !math.is_nan(value) && !math.is_inf(value, 0) {
+			heading = false
+			break
+		}
 	}
 	if heading { first_row++ }
 	mut result := vtk.Chart{title: current.sheet.data.name, x_axis: vtk.ChartAxis{title: 'Category'}, y_axis: vtk.ChartAxis{title: 'Value'}}

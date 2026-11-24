@@ -2,7 +2,6 @@
 module clock
 
 import math
-import os
 import time
 import vtk
 import vtk.app.programs.common
@@ -25,7 +24,7 @@ const second_hand = 0.9
 const number_ring = 0.78
 const help_text = 'Drag the window frame or press Alt-F8 to resize the dial.\nThe short hand shows hours, the long hand minutes and the dotted hand seconds.\nThe bottom line shows the weekday, month, day and year.\nF1: this help; Ctrl-Q: quit.'
 
-enum Action {
+enum ClockAction {
 	help
 	about
 	quit
@@ -205,7 +204,7 @@ fn key(mut c vtk.Ctl, e vtk.Event, mut app vtk.App) bool {
 
 fn menu_action(mut c vtk.Ctl, mut app vtk.App) {
 	mut clock := c.context[Clock]() or { return }
-	cmd := Action.from(c.data) or { return }
+	cmd := ClockAction.from(c.data) or { return }
 	match cmd {
 		.help { app.msgbox_for(clock.window, 'Clock keys', help_text) }
 		.about { app.about_for(clock.window, app_name, app_version) }
@@ -213,7 +212,7 @@ fn menu_action(mut c vtk.Ctl, mut app vtk.App) {
 	}
 }
 
-fn menu_item(mut menu vtk.Ctl, clock &Clock, title string, id Action) {
+fn menu_item(mut menu vtk.Ctl, clock &Clock, title string, id ClockAction) {
 	mut item := menu.menu_item(title, menu_action)
 	item.set_context(clock)
 	item.data = i64(id)
@@ -275,10 +274,5 @@ pub fn open_or_raise(mut app vtk.App) {
 
 pub fn run() {
 	mut app := vtk.new_app()
-	if '--snapshot' in os.args {
-		app.desktop = false
-		common.snapshot(mut app, 64, 24, launch)
-		return
-	}
 	common.run(mut app, launch)
 }

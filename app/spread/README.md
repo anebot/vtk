@@ -7,9 +7,8 @@ VTK checkout:
 make build/spreadsheet
 ./build/spreadsheet
 ./build/spreadsheet budget.vtksheet
-./build/spreadsheet --snapshot
 ./build/spreadsheet --chart
-./build/spreadsheet --snapshot --chart
+v -d vtk_snapshot -o build/spreadsheet-preview run app/spread.v --chart
 ```
 
 The initial workbook has a Budget sheet with working formulas and a Notes sheet.
@@ -29,7 +28,7 @@ Select a cell range and click **Chart** (also in the Data menu) to plot it as
 grouped columns, horizontal bars or connected lines. For a block with several
 columns, the first selected column supplies category labels and the remaining
 columns supply series. A single column uses cell addresses as categories. A
-first row containing text in a value column supplies series headings. For example,
+first row of text headings supplies series names. For example,
 select A1:D4 in Budget to chart Quantity, Unit cost and calculated Total by item.
 Blank, text and error cells become gaps rather than zero values. Charts follow
 the current row/column view order and keep the formulas' full numeric precision.
@@ -40,7 +39,7 @@ update titles and bounds. Blank bounds use automatic scaling, including zero;
 switching to bars swaps the category and value axes. Escape closes the chart.
 Charts are previews of the selected values at opening time; their settings are
 not saved in the workbook. `--chart` opens a chart of the first four rows and
-columns on startup; combine it with `--snapshot` for a headless chart preview.
+columns on startup. Build with `-d vtk_snapshot` for a headless chart preview.
 
 Ctrl-click a column header cycles ascending, descending and source order. The
 toolbar also sorts the active column. Drag headers to reorder columns; drag their

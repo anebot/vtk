@@ -15,7 +15,7 @@ const thumbnail_height = 12
 
 const default_sidebar_share = 260
 
-enum Action {
+enum SlideAction {
 	new_slide
 	open
 	save
@@ -498,18 +498,18 @@ fn window_key(mut w vtk.Ctl, e vtk.Event, mut app vtk.App) bool {
 	}
 	action := match e.key {
 		`n` {
-			if e.shift { Action.toggle_notes } else { Action.new_slide }
+			if e.shift { SlideAction.toggle_notes } else { SlideAction.new_slide }
 		}
-		`o` { Action.open }
+		`o` { SlideAction.open }
 		`s` {
-			if e.shift { Action.save_as } else { Action.save }
+			if e.shift { SlideAction.save_as } else { SlideAction.save }
 		}
-		`q` { Action.quit }
+		`q` { SlideAction.quit }
 		`d` {
-			if e.shift { Action.delete_slide } else { Action.clone_slide }
+			if e.shift { SlideAction.delete_slide } else { SlideAction.clone_slide }
 		}
-		`e` { Action.source }
-		`,` { Action.settings }
+		`e` { SlideAction.source }
+		`,` { SlideAction.settings }
 		else { return false }
 	}
 	deck.action(action, mut app)
@@ -531,36 +531,36 @@ fn editor_key(mut c vtk.Ctl, e vtk.Event, mut app vtk.App) bool {
 	}
 	action := match e.key {
 		`n` {
-			if e.shift { Action.toggle_notes } else { Action.new_slide }
+			if e.shift { SlideAction.toggle_notes } else { SlideAction.new_slide }
 		}
-		`o` { Action.open }
+		`o` { SlideAction.open }
 		`s` {
-			if e.shift { Action.save_as } else { Action.save }
+			if e.shift { SlideAction.save_as } else { SlideAction.save }
 		}
-		`q` { Action.quit }
+		`q` { SlideAction.quit }
 		`d` {
-			if e.shift { Action.delete_slide } else { Action.clone_slide }
+			if e.shift { SlideAction.delete_slide } else { SlideAction.clone_slide }
 		}
-		`b` { Action.bold }
-		`i` { Action.italic }
-		`k` { Action.code }
-		`e` { Action.source }
-		`,` { Action.settings }
-		`z` { Action.undo }
-		`y` { Action.redo }
+		`b` { SlideAction.bold }
+		`i` { SlideAction.italic }
+		`k` { SlideAction.code }
+		`e` { SlideAction.source }
+		`,` { SlideAction.settings }
+		`z` { SlideAction.undo }
+		`y` { SlideAction.redo }
 		else { return false }
 	}
 	deck.action(action, mut app)
 	return true
 }
 
-fn menu_item(mut menu vtk.Ctl, deck &Deck, title string, action Action) {
+fn menu_item(mut menu vtk.Ctl, deck &Deck, title string, action SlideAction) {
 	mut item := menu.menu_item(title, deck_action)
 	item.set_context(deck)
 	item.data = i64(action)
 }
 
-fn add_action_button(mut parent vtk.Ctl, deck &Deck, title string, action Action) {
+fn add_action_button(mut parent vtk.Ctl, deck &Deck, title string, action SlideAction) {
 	mut button := vtk.toolbutton(title)
 	button.set_context(deck)
 	button.data = i64(action)
@@ -570,11 +570,11 @@ fn add_action_button(mut parent vtk.Ctl, deck &Deck, title string, action Action
 
 fn deck_action(mut c vtk.Ctl, mut app vtk.App) {
 	mut deck := c.context[Deck]() or { return }
-	cmd := Action.from(c.data) or { return }
+	cmd := SlideAction.from(c.data) or { return }
 	deck.action(cmd, mut app)
 }
 
-fn (mut deck Deck) action(action Action, mut app vtk.App) {
+fn (mut deck Deck) action(action SlideAction, mut app vtk.App) {
 	match action {
 		.new_slide { new_slide_dialog(mut deck, mut app) }
 		.open { deck.open(mut app) }
@@ -785,6 +785,8 @@ pub fn launch(mut app vtk.App) {
 	new_deck(mut app, '')
 }
 
+pub fn open_file(mut app vtk.App, path string) { new_deck(mut app, path) }
+
 pub fn run() {
 	mut app := vtk.new_app()
 	app.ctrl_c = .copy
@@ -799,11 +801,6 @@ pub fn run() {
 			break
 		}
 		new_deck(mut app, path)
-	}
-	if '--snapshot' in os.args {
-		app.desktop = false
-		common.snapshot(mut app, 120, 50, launch_cli)
-		return
 	}
 	common.run(mut app, launch_cli)
 }

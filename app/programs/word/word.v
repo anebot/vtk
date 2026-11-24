@@ -705,6 +705,8 @@ fn new_document(mut app vtk.App, path string, standalone bool) {
 
 pub fn launch(mut app vtk.App) { new_document(mut app, '', false) }
 
+pub fn open_file(mut app vtk.App, path string) { new_document(mut app, path, false) }
+
 fn standalone_launch(mut app vtk.App) { new_document(mut app, '', true) }
 
 pub fn run() {

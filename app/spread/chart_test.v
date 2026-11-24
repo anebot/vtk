@@ -3,6 +3,19 @@ module spread
 import math
 import vtk
 
+fn test_chart_keeps_numeric_data_in_a_row_with_text() ! {
+	mut app := vtk.new_app()
+	defer { app.fini() }
+	mut view := create_view(mut app, demo_book())
+	mut current := view.current() or { panic('missing sheet') }
+	current.sheet.apply([vtk.TableCellEdit{row: 1, column: 2, value: 'estimate'}])!
+	assert current.grid.table_select(0, 1, 3, 1)
+	options := current.selection_chart()!
+	assert options.labels == ['Notebook']
+	assert options.series[0].values == [f64(4)]
+	assert math.is_nan(options.series[1].values[0])
+}
+
 fn test_selected_cells_chart_calculates_formulas_and_follows_view_order() ! {
 	mut app := vtk.new_app()
 	app.desktop = false

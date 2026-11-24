@@ -6,6 +6,9 @@ import time
 
 pub fn (mut app App) init() ! {
 	if app.started { return }
+	$if vtk_snapshot ? {
+		app.rendering = RenderOptions{...app.rendering, backend: .memory}
+	}
 	if app.rendering == RenderOptions{} {
 		app.rendering = RenderOptions{
 			backend: if os.getenv('VTK_RENDERER') == 'conservative' { .conservative } else { .ansi }
@@ -61,7 +64,17 @@ pub fn (mut app App) fini() {
 pub fn (mut app App) run() ! {
 	app.init()!
 	defer { app.fini() }
-	for app.running { app.advance(-1) }
+	$if vtk_snapshot ? {
+		if app.running { app.print_snapshot() }
+	} $else {
+		for app.running { app.advance(-1) }
+	}
+}
+
+fn (mut app App) print_snapshot() {
+	app.redraw()
+	println(app.snapshot())
+	app.running = false
 }
 
 // step releases the terminal when the loop stops. Call fini to dispose of the app.

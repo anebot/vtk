@@ -13,7 +13,7 @@ const palette_colors = [0x000000, 0xffffff, 0x808080, 0xc0c0c0, 0xe53935, 0xff8c
 const palette_names = ['Black', 'White', 'Gray', 'Silver', 'Red', 'Orange', 'Yellow', 'Lime', 'Green',
 	'Cyan', 'Sky blue', 'Blue', 'Purple', 'Pink', 'Brown', 'Peach']
 const pencil_names = ['Round', 'Square', 'Diamond', 'Horizontal', 'Vertical']
-const toolbar_actions = [Action.new_drawing, .open, .save, .save_as, .quit, .undo, .redo, .clear]
+const toolbar_actions = [PaintAction.new_drawing, .open, .save, .save_as, .quit, .undo, .redo, .clear]
 
 enum PencilShape {
 	round
@@ -23,7 +23,7 @@ enum PencilShape {
 	vertical
 }
 
-enum Action {
+enum PaintAction {
 	new_drawing
 	open
 	save
@@ -364,11 +364,11 @@ fn open_drawing(mut drawing Drawing, path string, mut app vtk.App) bool {
 
 fn action(mut c vtk.Ctl, mut app vtk.App) {
 	mut drawing := c.context[Drawing]() or { return }
-	cmd := Action.from(c.data) or { return }
+	cmd := PaintAction.from(c.data) or { return }
 	drawing_action(mut drawing, cmd, mut app)
 }
 
-fn drawing_action(mut drawing Drawing, cmd Action, mut app vtk.App) {
+fn drawing_action(mut drawing Drawing, cmd PaintAction, mut app vtk.App) {
 	drawing.active = false
 	match cmd {
 		.new_drawing {
@@ -448,33 +448,33 @@ fn key(mut c vtk.Ctl, e vtk.Event, mut app vtk.App) bool {
 	mut drawing := c.context[Drawing]() or { return false }
 	code := if e.key >= int(`A`) && e.key <= int(`Z`) { e.key + 32 } else { e.key }
 	if !e.ctrl && !e.alt && code in [int(`p`), int(`e`)] {
-		id := if code == int(`e`) { Action.eraser } else { Action.pencil }
+		id := if code == int(`e`) { PaintAction.eraser } else { PaintAction.pencil }
 		drawing_action(mut drawing, id, mut app)
 		return true
 	}
 	if e.key == int(vtk.Key.f1) {
-		drawing_action(mut drawing, Action.help, mut app)
+		drawing_action(mut drawing, PaintAction.help, mut app)
 		return true
 	}
 	if !e.ctrl { return false }
 	id := match code {
-		int(`n`) { Action.new_drawing }
-		int(`o`) { Action.open }
+		int(`n`) { PaintAction.new_drawing }
+		int(`o`) { PaintAction.open }
 		int(`s`) {
-			if e.shift { Action.save_as } else { Action.save }
+			if e.shift { PaintAction.save_as } else { PaintAction.save }
 		}
-		int(`q`) { Action.quit }
+		int(`q`) { PaintAction.quit }
 		int(`z`) {
-			if e.shift { Action.redo } else { Action.undo }
+			if e.shift { PaintAction.redo } else { PaintAction.undo }
 		}
-		int(`y`) { Action.redo }
+		int(`y`) { PaintAction.redo }
 		else { return false }
 	}
 	drawing_action(mut drawing, id, mut app)
 	return true
 }
 
-fn menu_item(mut menu vtk.Ctl, drawing &Drawing, title string, id Action) {
+fn menu_item(mut menu vtk.Ctl, drawing &Drawing, title string, id PaintAction) {
 	mut item := menu.menu_item(title, action)
 	item.set_context(drawing)
 	item.data = i64(id)
@@ -541,12 +541,12 @@ fn new_drawing(mut app vtk.App) &Drawing {
 	drawing.paint_tool.set_context(drawing)
 	drawing.paint_tool.changed = action
 	drawing.paint_tool.keyfn = key
-	drawing.paint_tool.data = i64(Action.pencil)
+	drawing.paint_tool.data = i64(PaintAction.pencil)
 	bar.add(mut drawing.paint_tool)
 	drawing.eraser.set_context(drawing)
 	drawing.eraser.changed = action
 	drawing.eraser.keyfn = key
-	drawing.eraser.data = i64(Action.eraser)
+	drawing.eraser.data = i64(PaintAction.eraser)
 	bar.add(mut drawing.eraser)
 	body.add(mut bar)
 	mut tools := vtk.toolbar()
@@ -565,7 +565,7 @@ fn new_drawing(mut app vtk.App) &Drawing {
 	tools.add(mut drawing.width)
 	mut picker := vtk.toolbutton('RGB...')
 	picker.set_context(drawing)
-	picker.data = i64(Action.color)
+	picker.data = i64(PaintAction.color)
 	picker.changed = action
 	picker.keyfn = key
 	tools.add(mut picker)
@@ -573,7 +573,7 @@ fn new_drawing(mut app vtk.App) &Drawing {
 	preview.set_context(drawing)
 	tools.add(mut preview)
 	drawing.color.set_context(drawing)
-	drawing.color.data = i64(Action.hex_color)
+	drawing.color.data = i64(PaintAction.hex_color)
 	drawing.color.changed = action
 	drawing.color.keyfn = key
 	tools.add(mut drawing.color)
@@ -601,6 +601,11 @@ fn new_drawing(mut app vtk.App) &Drawing {
 
 pub fn launch(mut app vtk.App) {
 	_ := new_drawing(mut app)
+}
+
+pub fn open_file(mut app vtk.App, path string) {
+	mut drawing := new_drawing(mut app)
+	if !open_drawing(mut drawing, path, mut app) { app.close(mut drawing.window) }
 }
 
 pub fn run() {

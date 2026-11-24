@@ -3,11 +3,12 @@ module spread
 import math
 import os
 import vtk
+import vtk.app.programs.common
 
 const app_name = 'VtkSheets'
 const app_version = '0.1.0'
 
-enum Action { new_sheet open save save_as import_csv export_csv quit edit apply copy paste undo redo ascending descending reset color clear_color chart help about }
+enum SheetAction { new_sheet open save save_as import_csv export_csv quit edit apply copy paste undo redo ascending descending reset color clear_color chart help about }
 
 @[heap]
 struct BookView {
@@ -130,7 +131,7 @@ fn configure_selection(mut c vtk.Ctl, mut app vtk.App) {
 
 fn book_action(mut c vtk.Ctl, mut app vtk.App) {
 	mut view := c.context[BookView]() or { return }
-	cmd := Action.from(c.data) or { return }
+	cmd := SheetAction.from(c.data) or { return }
 	view.action(cmd, mut app)
 }
 
@@ -147,12 +148,12 @@ fn sheet_key(mut c vtk.Ctl, event vtk.Event, mut app vtk.App) bool {
 fn (mut view BookView) key(event vtk.Event, mut app vtk.App) bool {
 	if !event.ctrl { return false }
 	action := match event.key {
-		`s` { if event.shift { Action.save_as } else { Action.save } }
-		`o` { Action.open }
-		`n` { Action.new_sheet }
-		`q` { Action.quit }
-		`z` { if event.shift { Action.redo } else { Action.undo } }
-		`y` { Action.redo }
+		`s` { if event.shift { SheetAction.save_as } else { SheetAction.save } }
+		`o` { SheetAction.open }
+		`n` { SheetAction.new_sheet }
+		`q` { SheetAction.quit }
+		`z` { if event.shift { SheetAction.redo } else { SheetAction.undo } }
+		`y` { SheetAction.redo }
 		else { return false }
 	}
 	view.action(action, mut app)
@@ -213,7 +214,7 @@ fn (mut view BookView) save(as_new bool, mut app vtk.App) {
 	app.notify('Saved ${path}', 1500)
 }
 
-fn (mut view BookView) action(action Action, mut app vtk.App) {
+fn (mut view BookView) action(action SheetAction, mut app vtk.App) {
 	if action == .about {
 		app.about_for(view.window, app_name, app_version)
 		return
@@ -316,17 +317,17 @@ fn create_view(mut app vtk.App, book Book) &BookView {
 	tabs.changed, tabs.reordered = sheet_tab_changed, sheet_tab_moved
 	formula.set_context(view)
 	formula.submit, formula.keyfn = book_action, book_key
-	formula.data = i64(Action.apply)
+	formula.data = i64(SheetAction.apply)
 	apply.set_context(view)
-	apply.changed, apply.data = book_action, i64(Action.apply)
+	apply.changed, apply.data = book_action, i64(SheetAction.apply)
 	mode.set_context(view)
 	mode.changed = configure_selection
 	multiple.set_context(view)
 	multiple.changed = configure_selection
 	for title, actions in {
-		'File': [Action.new_sheet, .open, .save, .save_as, .import_csv, .export_csv, .quit]
-		'Edit': [Action.edit, .copy, .paste, .undo, .redo, .color, .clear_color]
-		'Data': [Action.ascending, .descending, .reset, .chart, .help]
+		'File': [SheetAction.new_sheet, .open, .save, .save_as, .import_csv, .export_csv, .quit]
+		'Edit': [SheetAction.edit, .copy, .paste, .undo, .redo, .color, .clear_color]
+		'Data': [SheetAction.ascending, .descending, .reset, .chart, .help]
 	} {
 		mut menu := window.add_menu(title)
 		for action in actions {
@@ -338,8 +339,8 @@ fn create_view(mut app vtk.App, book Book) &BookView {
 	mut help := window.add_menu('Help')
 	mut about := help.menu_item('About', book_action)
 	about.set_context(view)
-	about.data = i64(Action.about)
-	for title, action in {'Undo': Action.undo, 'Redo': .redo, 'Sort ↑': .ascending, 'Sort ↓': .descending, 'Edit': .edit, 'Color': .color, 'Chart': .chart, 'Help': .help} {
+	about.data = i64(SheetAction.about)
+	for title, action in {'Undo': SheetAction.undo, 'Redo': .redo, 'Sort ↑': .ascending, 'Sort ↓': .descending, 'Edit': .edit, 'Color': .color, 'Chart': .chart, 'Help': .help} {
 		mut button := vtk.button(title)
 		button.set_context(view)
 		button.changed, button.data = book_action, i64(action)
@@ -360,32 +361,26 @@ pub fn launch(mut app vtk.App) {
 	_ := create_view(mut app, demo_book())
 }
 
+pub fn open_file(mut app vtk.App, path string) {
+	book := load_book(path) or { app.notify(err.msg(), 4000); return }
+	_ := create_view(mut app, book)
+}
+
 pub fn run() {
-	mut app := vtk.new_app()
-	app.ctrl_c = .copy
-	app.native_clipboard = true
-	snapshot := '--snapshot' in os.args
-	if snapshot { app.desktop = false; app.dispatch(vtk.Event{kind: .resize, width: 100, height: 32}) }
-	else { app.init() or { eprintln(err); return } }
 	mut book := demo_book()
 	for arg in os.args[1..] {
 		if arg.starts_with('--') { continue }
-		book = load_book(arg) or { app.fini(); eprintln(err); return }
+		book = load_book(arg) or { eprintln(err); return }
 		break
 	}
-	mut view := create_view(mut app, book)
-	if '--chart' in os.args {
-		if mut current := view.current() { current.grid.table_select(0, 0, math.min(3, current.sheet.columns() - 1), math.min(3, current.grid.row_count - 1)) }
-		if snapshot {
-			app.after(0, fn (mut app vtk.App) {
-				app.redraw()
-				println(app.snapshot())
-				app.dispatch(vtk.Event{key: int(vtk.Key.escape)})
-			})
+	mut app := vtk.new_app()
+	app.ctrl_c = .copy
+	app.native_clipboard = true
+	common.run(mut app, fn [book] (mut app vtk.App) {
+		mut view := create_view(mut app, book)
+		if '--chart' in os.args {
+			if mut current := view.current() { current.grid.table_select(0, 0, math.min(3, current.sheet.columns() - 1), math.min(3, current.grid.row_count - 1)) }
+			view.action(.chart, mut app)
 		}
-		view.action(.chart, mut app)
-		if snapshot { app.fini(); return }
-	}
-	if snapshot { app.redraw(); println(app.snapshot()); app.fini(); return }
-	app.run() or { eprintln(err) }
+	})
 }

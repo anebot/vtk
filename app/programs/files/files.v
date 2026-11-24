@@ -309,8 +309,9 @@ fn (mut p Pane) press(x int, y int, e vtk.Event, mut app vtk.App) {
 	p.last_click = now
 	p.last_path = entry.path
 	if double {
-		p.open(mut app, entry)
+		p.last_path = ''
 		p.pressing = false
+		p.open(mut app, entry)
 		return
 	}
 	if column >= 0 && column < p.cols.len - 1 {
@@ -405,8 +406,7 @@ fn (mut p Pane) open(mut app vtk.App, e Entry) {
 		p.navigate(e.path, true)
 		return
 	}
-	spawn open_path(e.path)
-	app.notify('Opening ${e.name}', 1500)
+	open_with(mut app, p.win, e)
 }
 
 fn (mut p Pane) activate(mut app vtk.App) {
@@ -930,18 +930,10 @@ pub fn run() {
 	app.native_clipboard = true
 	args := os.args[1..].filter(!it.starts_with('--'))
 	start := if args.len > 0 { args[0] } else { os.home_dir() }
-	snapshot := '--snapshot' in os.args
-	launch_cli := fn [start, snapshot] (mut app vtk.App) {
+	common.run(mut app, fn [start] (mut app vtk.App) {
 		mut pane := new_files_window(mut app, shared_for(mut app), start)
 		if '--icons' in os.args { set_view(mut pane, .icons) }
 		if '--columns' in os.args { set_view(mut pane, .columns) }
-		if !snapshot {
-			app.notify('Ctrl-N opens another Files window. Drag with the mouse; Ctrl copies, Shift moves. Pasting file paths imports them.', 7000)
-		}
-	}
-	if snapshot {
-		common.snapshot(mut app, 100, 30, launch_cli)
-		return
-	}
-	common.run(mut app, launch_cli)
+		app.notify('Ctrl-N opens another Files window. Drag with the mouse; Ctrl copies, Shift moves. Pasting file paths imports them.', 7000)
+	})
 }

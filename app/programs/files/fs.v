@@ -5,6 +5,10 @@ import math
 import os
 import time
 import vtk
+import vtk.app.programs.paint
+import vtk.app.programs.slides
+import vtk.app.programs.word
+import vtk.app.spread
 
 enum SortBy {
 	name
@@ -111,6 +115,33 @@ fn drop_allowed(paths []string, dir string, copy bool) bool {
 		if !copy && os.dir(path) == dir { return false }
 	}
 	return true
+}
+
+struct FileOpener {
+	label string
+	open  fn (mut vtk.App, string) @[required]
+}
+
+fn open_with(mut app vtk.App, owner &vtk.Ctl, entry Entry) {
+	openers := [
+		FileOpener{'Word', word.open_file},
+		FileOpener{'Slides', slides.open_file},
+		FileOpener{'Sheets', spread.open_file},
+		FileOpener{'Paint', paint.open_file},
+		FileOpener{'Open folder in Terminal', open_containing_folder},
+		FileOpener{'System launcher', open_with_system},
+	]
+	choice := app.choice_for(owner, 'Open ${entry.name} with', openers.map(it.label), 2)
+	if choice >= 0 { openers[choice].open(mut app, entry.path) }
+}
+
+fn open_containing_folder(mut app vtk.App, path string) {
+	app.terminal_window(directory: os.dir(path)) or { app.notify(err.msg(), 3000); return }
+}
+
+fn open_with_system(mut app vtk.App, path string) {
+	spawn open_path(path)
+	app.notify('Opening ${os.base(path)}', 1500)
 }
 
 fn open_path(path string) {

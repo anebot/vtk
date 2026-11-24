@@ -4,6 +4,35 @@ import io.util
 import os
 import vtk
 
+fn test_double_click_prompts_for_an_opener_and_loads_the_file_in_word() ! {
+	directory := util.temp_dir(pattern: 'vtk-files-open-')!
+	defer { os.rmdir_all(directory) or {} }
+	os.write_file(os.join_path(directory, 'draft notes.md'), 'Content from the selected file')!
+	mut app := vtk.new_app()
+	defer { app.fini() }
+	app.dispatch(vtk.Event{kind: .resize, width: 100, height: 30})
+	pane := new_files_window(mut app, shared_for(mut app), directory)
+	app.redraw()
+	area := pane.canvas.rect()
+	press := vtk.Event{kind: .mouse, button: .left, pressed: true, x: area.x + 2, y: area.y + header_rows}
+	app.dispatch(press)
+	app.dispatch(vtk.Event{...press, pressed: false})
+	app.after(0, fn (mut app vtk.App) {
+		app.redraw()
+		dialog := app.top_window() or { panic('missing Open With dialog') }
+		assert dialog.text == 'Open draft notes.md with'
+		buttons := dialog.children()[0].children()
+		assert buttons.map(it.text) == ['Word', 'Slides', 'Sheets', 'Paint',
+			'Open folder in Terminal', 'System launcher']
+		button := buttons[0].rect()
+		app.dispatch(vtk.Event{kind: .mouse, button: .left, pressed: true, x: button.x, y: button.y})
+	})
+	app.dispatch(press)
+	assert app.window_list().len == 2
+	app.redraw()
+	assert app.snapshot().contains('Content from the selected file')
+}
+
 fn test_decode_uri_preserves_utf8_and_literal_path_characters() {
 	assert decode_uri('caf%C3%A9%20%E6%97%A5+%f0%9f%8c%9f.txt') == 'café 日+🌟.txt'
 	assert decode_uri('café%20photo.jpg') == 'café photo.jpg'

@@ -2,7 +2,6 @@
 module calc
 
 import math
-import os
 import vtk
 import vtk.app.programs.common
 
@@ -21,7 +20,7 @@ const keypad = [
 ]
 const help_text = 'Click a key or type it.\n+ - * / fold into the running total.\nEnter or = shows the result.\nDel removes the last digit; C or Esc clears.\n+/- changes the sign; % divides by 100.\nCtrl-Q quits.'
 
-enum Action {
+enum CalcAction {
 	clear
 	help
 	about
@@ -226,7 +225,7 @@ fn key(mut c vtk.Ctl, e vtk.Event, mut app vtk.App) bool {
 
 fn menu_action(mut c vtk.Ctl, mut app vtk.App) {
 	mut calc := c.context[Calculator]() or { return }
-	cmd := Action.from(c.data) or { return }
+	cmd := CalcAction.from(c.data) or { return }
 	match cmd {
 		.clear {
 			calc.reset()
@@ -238,7 +237,7 @@ fn menu_action(mut c vtk.Ctl, mut app vtk.App) {
 	}
 }
 
-fn menu_item(mut menu vtk.Ctl, calc &Calculator, title string, id Action) {
+fn menu_item(mut menu vtk.Ctl, calc &Calculator, title string, id CalcAction) {
 	mut item := menu.menu_item(title, menu_action)
 	item.set_context(calc)
 	item.data = i64(id)
@@ -297,10 +296,5 @@ pub fn launch(mut app vtk.App) {
 
 pub fn run() {
 	mut app := vtk.new_app()
-	if '--snapshot' in os.args {
-		app.desktop = false
-		common.snapshot(mut app, 41, 12, launch)
-		return
-	}
 	common.run(mut app, launch)
 }
