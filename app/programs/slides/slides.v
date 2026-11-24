@@ -1872,8 +1872,7 @@ fn new_slide_dialog(mut deck Deck, mut app vtk.App) {
 	mut row := vtk.button_bar()
 	mut cancel := vtk.button('Cancel')
 	cancel.user = picker
-	cancel.data = -1
-	cancel.changed = template_pick
+	cancel.changed = template_cancel
 	row.add(mut cancel)
 	body.add(mut row)
 	mut window := app.dialog('New slide', mut body)
@@ -1892,13 +1891,21 @@ fn template_pick(mut c vtk.Ctl, mut app vtk.App) {
 	app.close(mut picker.window)
 }
 
-fn settings_apply(mut c vtk.Ctl, mut app vtk.App) {
+fn template_cancel(mut c vtk.Ctl, mut app vtk.App) {
+	mut picker := unsafe { &TemplatePicker(c.user) }
+	app.close(mut picker.window)
+}
+
+fn settings_ok(mut c vtk.Ctl, mut app vtk.App) {
 	mut dialog := unsafe { &SettingsDialog(c.user) }
-	if int(c.data) == 1 {
-		dialog.deck.transition = transition_from_int(dialog.radio.value)
-		save_prefs(dialog.deck)
-		dialog.deck.refresh()
-	}
+	dialog.deck.transition = transition_from_int(dialog.radio.value)
+	save_prefs(dialog.deck)
+	dialog.deck.refresh()
+	app.close(mut dialog.window)
+}
+
+fn settings_cancel(mut c vtk.Ctl, mut app vtk.App) {
+	mut dialog := unsafe { &SettingsDialog(c.user) }
 	app.close(mut dialog.window)
 }
 
@@ -1926,8 +1933,8 @@ fn settings_dialog(mut deck Deck, mut app vtk.App) {
 		window: window
 		radio:  radio
 	}
-	ok.user, ok.changed, ok.data = dialog, settings_apply, 1
-	cancel.user, cancel.changed, cancel.data = dialog, settings_apply, 0
+	ok.user, ok.changed = dialog, settings_ok
+	cancel.user, cancel.changed = dialog, settings_cancel
 	app.set_default_button(mut window, ok)
 	app.set_focus(radio)
 	app.modal_for(mut window, deck.window)
@@ -2288,7 +2295,10 @@ fn (mut deck Deck) action(action Action, mut app vtk.App) {
 		.open { deck.open(mut app) }
 		.save { deck.save(false, mut app) }
 		.save_as { deck.save(true, mut app) }
-		.quit { app.close(mut deck.window); return }
+		.quit {
+			app.close(mut deck.window)
+			return
+		}
 		.clone_slide { deck.clone_slide(mut app) }
 		.delete_slide { deck.delete_slide(mut app) }
 		.move_up { deck.move(-1, mut app) }

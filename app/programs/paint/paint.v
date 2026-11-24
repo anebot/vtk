@@ -11,6 +11,7 @@ const palette_colors = [0x000000, 0xffffff, 0x808080, 0xc0c0c0, 0xe53935, 0xff8c
 const palette_names = ['Black', 'White', 'Gray', 'Silver', 'Red', 'Orange', 'Yellow', 'Lime', 'Green',
 	'Cyan', 'Sky blue', 'Blue', 'Purple', 'Pink', 'Brown', 'Peach']
 const pencil_names = ['Round', 'Square', 'Diamond', 'Horizontal', 'Vertical']
+const toolbar_actions = [Action.new_drawing, .open, .save, .save_as, .quit, .undo, .redo, .clear]
 
 enum PencilShape {
 	round
@@ -383,7 +384,10 @@ fn action(mut c vtk.Ctl, mut app vtk.App) {
 		}
 		.save { save(mut drawing, false, mut app) }
 		.save_as { save(mut drawing, true, mut app) }
-		.quit { app.close(mut drawing.window); return }
+		.quit {
+			app.close(mut drawing.window)
+			return
+		}
 		.undo {
 			if drawing.strokes.len > 0 { drawing.undone << drawing.strokes.pop() }
 		}
@@ -513,7 +517,7 @@ fn new_drawing(mut app vtk.App) &Drawing {
 		button.user = drawing
 		button.changed = action
 		button.keyfn = key
-		button.data = i
+		button.data = i64(int(toolbar_actions[i]))
 		bar.add(mut button)
 	}
 	drawing.paint_tool = vtk.toolbutton('Paint')

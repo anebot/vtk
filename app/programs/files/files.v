@@ -20,6 +20,14 @@ enum SortBy {
 	date
 }
 
+struct SortEntry {
+	label string
+	by    SortBy
+}
+
+const sort_entries = [SortEntry{'Name', .name}, SortEntry{'Size', .size}, SortEntry{'Type', .kind},
+	SortEntry{'Modified', .date}]
+
 const title_prefix = 'Files - '
 const header_rows = 2
 const tile_width = 14
@@ -1707,12 +1715,7 @@ fn toolbar_sort(mut c vtk.Ctl, mut app vtk.App) {
 
 fn choose_sort(mut c vtk.Ctl, mut _ vtk.App) {
 	mut p := pane_from(c) or { return }
-	by := match int(c.data) {
-		0 { SortBy.name }
-		1 { SortBy.size }
-		2 { SortBy.kind }
-		else { SortBy.date }
-	}
+	by := unsafe { SortBy(int(c.data)) }
 	if p.sort == by {
 		p.descending = !p.descending
 	} else {
@@ -1830,9 +1833,9 @@ fn new_files_window(mut app vtk.App, shared &Shared, path string) &Pane {
 	sort_btn.changed = toolbar_sort
 
 	mut sort_menu := vtk.context_menu()
-	for i, name in ['Name', 'Size', 'Type', 'Modified'] {
-		mut item := sort_menu.menu_item(name, choose_sort)
-		item.data = i64(i)
+	for entry in sort_entries {
+		mut item := sort_menu.menu_item(entry.label, choose_sort)
+		item.data = i64(int(entry.by))
 		item.user = voidptr(p)
 	}
 	sort_btn.set_menu(mut sort_menu)
