@@ -152,13 +152,18 @@ pub fn (mut app App) app_menu(x int, y int) {
 	}
 	if anchored && (app.height < 4 || app.width < 7) { return }
 	mut menu := context_menu()
+	mut launchers_menu := menu
+	if app.start_programs {
+		launchers_menu = menu.add_menu('Programs')
+	}
 	for i, launcher in app.launchers {
-		mut item := menu.menu_item(launcher.name, launcher_action)
+		mut item := launchers_menu.menu_item(launcher.name, launcher_action)
 		item.data = i
 	}
-	if app.launchers.len > 0 { menu.menu_separator() }
-	mut terminal_item := menu.menu_item('Terminal', desktop_action)
+	if app.launchers.len > 0 { launchers_menu.menu_separator() }
+	mut terminal_item := launchers_menu.menu_item('Terminal', desktop_action)
 	terminal_item.data = 3
+	if app.start_programs { menu.menu_separator() }
 	mut settings := menu.menu_item('Settings...', desktop_action)
 	settings.data = 1
 	mut quit := menu.menu_item('Quit', desktop_action)

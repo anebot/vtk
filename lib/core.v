@@ -393,6 +393,7 @@ pub mut:
 	bar_always       bool = true
 	bar_top          bool
 	bar_clock        bool = true
+	start_programs   bool
 	clock_clicked    ?fn (Event, mut App)
 	window_shadow    bool = true
 	dim_inactive     bool = true
