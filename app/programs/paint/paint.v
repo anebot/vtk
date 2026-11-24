@@ -223,7 +223,7 @@ fn mouse(mut c vtk.Ctl, e vtk.Event, mut app vtk.App) bool {
 			size:  drawing.size
 			erase: drawing.erase
 		}
-		drawing.undone.clear()
+		drawing.undone = []
 	}
 	drawing.active = true
 	point := Point{e.x - bounds.x, e.y - bounds.y}
@@ -354,7 +354,8 @@ fn open_drawing(mut drawing Drawing, path string, mut app vtk.App) bool {
 	}
 	drawing.strokes = strokes
 	drawing.saved = strokes.clone()
-	drawing.undone.clear()
+	drawing.undone = []
+	drawing.active = false
 	drawing.path = path
 	update(mut drawing)
 	app.invalidate()
@@ -372,9 +373,10 @@ fn drawing_action(mut drawing Drawing, cmd Action, mut app vtk.App) {
 	match cmd {
 		.new_drawing {
 			if may_discard(mut drawing, mut app) {
-				drawing.strokes.clear()
-				drawing.saved.clear()
-				drawing.undone.clear()
+				drawing.strokes = []
+				drawing.saved = []
+				drawing.undone = []
+				drawing.active = false
 				drawing.path = ''
 			}
 		}
@@ -391,15 +393,24 @@ fn drawing_action(mut drawing Drawing, cmd Action, mut app vtk.App) {
 			return
 		}
 		.undo {
-			if drawing.strokes.len > 0 { drawing.undone << drawing.strokes.pop() }
+			if drawing.strokes.len > 0 {
+				drawing.undone << drawing.strokes.last()
+				drawing.strokes.delete_last()
+				drawing.active = false
+			}
 		}
 		.redo {
-			if drawing.undone.len > 0 { drawing.strokes << drawing.undone.pop() }
+			if drawing.undone.len > 0 {
+				drawing.strokes << drawing.undone.last()
+				drawing.undone.delete_last()
+				drawing.active = false
+			}
 		}
 		.clear {
 			if drawing.strokes.len > 0 && app.confirm_for(drawing.window, 'Clear canvas', 'Clear all strokes?') {
-				drawing.strokes.clear()
-				drawing.undone.clear()
+				drawing.strokes = []
+				drawing.undone = []
+				drawing.active = false
 			}
 		}
 		.color {
