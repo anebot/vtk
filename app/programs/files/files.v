@@ -81,7 +81,8 @@ mut:
 }
 
 struct Column {
-	path    string
+	path string
+mut:
 	entries []Entry
 	cursor  int = -1
 }
@@ -418,20 +419,24 @@ fn (mut p Pane) index_of(path string) int {
 	return -1
 }
 
+fn (mut p Pane) sort_listing() {
+	sort_entries(mut p.entries, p.sort, p.descending)
+	p.cursor = p.index_of(p.cursor_path)
+	p.anchor = p.index_of(p.anchor_path)
+}
+
 fn (mut p Pane) refresh() {
 	p.issue = ''
 	p.entries = read_entries(p.path, p.show_hidden) or {
 		p.issue = err.msg()
 		[]Entry{}
 	}
-	sort_entries(mut p.entries, p.sort, p.descending)
 	mut keep := map[string]bool{}
 	for e in p.entries {
 		if p.selected[e.path] { keep[e.path] = true }
 	}
 	p.selected = keep
-	p.cursor = p.index_of(p.cursor_path)
-	p.anchor = p.index_of(p.anchor_path)
+	p.sort_listing()
 	if p.cursor < 0 && p.entries.len > 0 {
 		p.cursor = 0
 		p.cursor_path = p.entries[0].path
@@ -482,22 +487,33 @@ fn (mut p Pane) build_columns() {
 		at = parent
 	}
 	mut cols := []Column{cap: paths.len}
-	for i, path in paths {
-		mut entries := read_entries(path, p.show_hidden) or { []Entry{} }
-		sort_entries(mut entries, p.sort, p.descending)
-		mut cursor := -1
-		if i + 1 < paths.len {
-			child := os.base(paths[i + 1])
-			for j, e in entries {
-				if e.name == child {
-					cursor = j
-					break
-				}
+	for path in paths[..paths.len - 1] {
+		entries := read_entries(path, p.show_hidden) or { []Entry{} }
+		cols << Column{ path: path, entries: entries }
+	}
+	// The last column displays the pane's current listing.
+	cols << Column{ path: p.path }
+	p.cols = cols
+	p.sort_columns()
+}
+
+fn (mut p Pane) sort_columns() {
+	for i in 0 .. p.cols.len - 1 {
+		child := os.base(p.cols[i + 1].path)
+		mut col := &p.cols[i]
+		sort_entries(mut col.entries, p.sort, p.descending)
+		col.cursor = -1
+		for j, entry in col.entries {
+			if entry.name == child {
+				col.cursor = j
+				break
 			}
 		}
-		cols << Column{ path: path, entries: entries, cursor: cursor }
 	}
-	p.cols = cols
+}
+
+fn (p &Pane) column_entries(column int) []Entry {
+	return if column == p.cols.len - 1 { p.entries } else { p.cols[column].entries }
 }
 
 fn (mut p Pane) list_rows() int {
@@ -852,6 +868,7 @@ fn (p &Pane) paint_columns(mut s vtk.Screen, r vtk.Rect, t vtk.Theme) {
 	arrow := if p.descending { '▾' } else { '▴' }
 	for i := first; i < p.cols.len; i++ {
 		col := p.cols[i]
+		entries := p.column_entries(i)
 		x := r.x + (i - first) * cw
 		last := i == p.cols.len - 1
 		w := if last { r.x + r.w - x } else { cw - 1 }
@@ -864,8 +881,8 @@ fn (p &Pane) paint_columns(mut s vtk.Screen, r vtk.Rect, t vtk.Theme) {
 			t.bg, vtk.bold)
 		for row in 0 .. rows {
 			index := top + row
-			if index >= col.entries.len { break }
-			e := col.entries[index]
+			if index >= entries.len { break }
+			e := entries[index]
 			y := r.y + 1 + row
 			sel := if last { p.selected[e.path] } else { index == col.cursor }
 			drag := p.shared.drag
@@ -1023,21 +1040,17 @@ fn hit_entry(p &Pane, x int, y int) (int, int) {
 			rows := imax(1, p.canvas.rect().h - 1)
 			top := if column == p.cols.len - 1 { p.top } else { imax(0, col.cursor - rows + 1) }
 			index := top + y - 1
-			if index >= col.entries.len { return -1, -1 }
+			if index >= p.column_entries(column).len { return -1, -1 }
 			return column, index
 		}
 	}
 }
 
 fn entry_at(p &Pane, column int, row int) ?Entry {
-	if column < 0 {
-		if row < 0 || row >= p.entries.len { return none }
-		return p.entries[row]
-	}
 	if column >= p.cols.len { return none }
-	col := p.cols[column]
-	if row < 0 || row >= col.entries.len { return none }
-	return col.entries[row]
+	entries := if column < 0 { p.entries } else { p.column_entries(column) }
+	if row < 0 || row >= entries.len { return none }
+	return entries[row]
 }
 
 fn update_drag(mut app vtk.App, mut p Pane, e vtk.Event) {
@@ -1681,10 +1694,9 @@ fn choose_sort(mut c vtk.Ctl, mut _ vtk.App) {
 		p.sort = by
 		p.descending = false
 	}
-	p.entries = read_entries(p.path, p.show_hidden) or { []Entry{} }
-	sort_entries(mut p.entries, p.sort, p.descending)
-	p.cursor = p.index_of(p.cursor_path)
-	if p.view == .columns { p.build_columns() }
+	p.sort_listing()
+	if p.view == .columns { p.sort_columns() }
+	p.ensure_visible()
 	p.update_status()
 	p.canvas.invalidate_paint()
 }

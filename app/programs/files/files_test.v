@@ -1,5 +1,7 @@
 module files
 
+import io.util
+import os
 import vtk
 
 fn test_decode_uri_preserves_utf8_and_literal_path_characters() {
@@ -15,6 +17,38 @@ fn test_sort_keeps_folders_first_and_preserves_ties() {
 	assert entries.map(it.name) == ['aardvark', 'Zoo', 'before', 'same', 'SAME']
 	sort_entries(mut entries, .name, true)
 	assert entries.map(it.name) == ['Zoo', 'aardvark', 'same', 'SAME', 'before']
+}
+
+fn test_sort_reorders_cached_columns_and_preserves_selection() ! {
+	root := util.temp_dir(pattern: 'vtk-files-sort-')!
+	defer { os.rmdir_all(root) or {} }
+	dir := os.join_path(root, 'target')
+	os.mkdir(dir)!
+	os.mkdir(os.join_path(root, 'other'))!
+	for name in ['a.txt', 'b.txt'] {
+		os.write_file(os.join_path(dir, name), '')!
+	}
+	mut app := vtk.new_app()
+	defer { app.fini() }
+	app.dispatch(vtk.Event{kind: .resize, width: 100, height: 30})
+	mut pane := new_files_window(mut app, shared_for(mut app), dir)
+	pane.set_cursor(0, false)
+	picked := pane.cursor_path
+	set_view(mut pane, .columns)
+	// The original path is unreadable and the parent listing has changed on disk.
+	os.mv(dir, os.join_path(root, 'renamed'))!
+	mut option := vtk.new_ctl(.menuitem)
+	option.set_context(pane)
+	option.data = i64(SortBy.name)
+	choose_sort(mut option, mut app)
+	last := pane.cols.len - 1
+	parent := pane.cols[last - 1]
+	assert parent.entries.map(it.name) == ['target', 'other']
+	assert parent.cursor == 0
+	assert pane.entries.map(it.name) == ['b.txt', 'a.txt']
+	entry := entry_at(pane, last, 1) or { return error('missing selected entry in column view') }
+	assert entry.path == picked
+	assert pane.cursor == 1 && pane.anchor == 1 && pane.selected[picked]
 }
 
 fn test_launch_opens_windows_that_share_drag_state() {
