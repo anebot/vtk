@@ -24,6 +24,12 @@ pub enum FontStyle {
 	smallcaps
 }
 
+// font_styles lists every FontStyle in declaration order, for pickers and menus.
+pub const font_styles = [FontStyle.none, .bold, .italic, .script, .doublestruck,
+	.underline, .strikethrough, .fraktur, .bolditalic, .sansserif, .sansserifitalic,
+	.monospace, .boldscript, .boldfraktur, .sansserifbold, .sansserifbolditalic,
+	.openface, .smallcaps]
+
 // font_style_from_name accepts the names used by aholyc's FontStyleFromName.
 pub fn font_style_from_name(name string) ?FontStyle {
 	return match name.to_lower() {

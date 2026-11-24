@@ -1,6 +1,7 @@
 module spread
 
 import strconv
+import vtk
 
 struct Formula {
 	sheet &Sheet
@@ -92,8 +93,8 @@ fn (mut p Formula) function(name string) !f64 {
 				if p.take(`:`) {
 					last_row, last_column := p.reference()!
 					if last_row >= p.sheet.data.cells.len || last_column >= p.sheet.columns() || row >= p.sheet.data.cells.len || column >= p.sheet.columns() { return error('#REF!') }
-					for r in min(row, last_row) .. max(row, last_row) + 1 {
-						for c in min(column, last_column) .. max(column, last_column) + 1 {
+					for r in vtk.min(row, last_row) .. vtk.max(row, last_row) + 1 {
+						for c in vtk.min(column, last_column) .. vtk.max(column, last_column) + 1 {
 							raw := p.sheet.raw(r, c).trim_space()
 							if raw == '' { continue }
 							if !raw.starts_with('=') { strconv.atof64(raw) or { continue } }
@@ -121,5 +122,3 @@ fn (mut p Formula) function(name string) !f64 {
 	return if name == 'AVG' { result / values.len } else { result }
 }
 
-fn min(a int, b int) int { return if a < b { a } else { b } }
-fn max(a int, b int) int { return if a > b { a } else { b } }

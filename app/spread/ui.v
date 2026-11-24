@@ -118,8 +118,8 @@ fn configure_selection(mut c vtk.Ctl, mut app vtk.App) {
 	current.grid.table.selection = match view.mode.value { 0 { .rows } 1 { .columns } 2 { .cells } else { .none } }
 	current.grid.table.multi_select = view.multiple.value != 0
 	if current.grid.row_count > 0 {
-		x := max(0, current.grid.table_view_column(current.grid.table_selected_column()))
-		y := max(0, current.grid.table_view_row(current.grid.value))
+		x := vtk.max(0, current.grid.table_view_column(current.grid.table_selected_column()))
+		y := vtk.max(0, current.grid.table_view_row(current.grid.value))
 		current.grid.table_select(x, y, x, y)
 	}
 	current.grid.invalidate()
@@ -224,7 +224,7 @@ fn (mut view BookView) action(action Action, mut app vtk.App) {
 			name := app.prompt_for(view.window, 'New sheet', 'Sheet name:', 'Sheet ${view.book.sheets.len + 1}') or { return }
 			if name.trim_space() == '' { return }
 			mut id := 1
-			for sheet in view.book.sheets { id = max(id, sheet.data.id + 1) }
+			for sheet in view.book.sheets { id = vtk.max(id, sheet.data.id + 1) }
 			sheet := new_sheet(id, name.trim_space(), 40, 12)
 			view.book.sheets << sheet
 			view.add_sheet(sheet)
@@ -241,7 +241,7 @@ fn (mut view BookView) action(action Action, mut app vtk.App) {
 			path := app.file_pick_for(view.window, os.getwd()) or { return }
 			text := os.read_file(path) or { app.notify(err.msg(), 4000); return }
 			mut id := 1
-			for sheet in view.book.sheets { id = max(id, sheet.data.id + 1) }
+			for sheet in view.book.sheets { id = vtk.max(id, sheet.data.id + 1) }
 			sheet := import_csv(id, os.file_name(path), text) or { app.notify(err.msg(), 4000); return }
 			view.book.sheets << sheet
 			view.add_sheet(sheet)
@@ -374,7 +374,7 @@ pub fn run() {
 	}
 	mut view := create_view(mut app, book)
 	if '--chart' in os.args {
-		if mut current := view.current() { current.grid.table_select(0, 0, min(3, current.sheet.columns() - 1), min(3, current.grid.row_count - 1)) }
+		if mut current := view.current() { current.grid.table_select(0, 0, vtk.min(3, current.sheet.columns() - 1), vtk.min(3, current.grid.row_count - 1)) }
 		if snapshot {
 			app.after(0, fn (mut app vtk.App) {
 				app.redraw()

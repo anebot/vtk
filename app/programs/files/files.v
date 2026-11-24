@@ -131,18 +131,6 @@ mut:
 	typed_at    i64
 }
 
-fn imin(a int, b int) int {
-	return if a < b { a } else { b }
-}
-
-fn imax(a int, b int) int {
-	return if a > b { a } else { b }
-}
-
-fn iclamp(n int, low int, high int) int {
-	return imax(low, imin(n, imax(low, high)))
-}
-
 fn cmp_text(a string, b string) int {
 	return if a < b {
 		-1
@@ -300,7 +288,7 @@ fn entry_color(e &Entry, t vtk.Theme) int {
 
 fn read_entries(dir string, hidden bool) !([]Entry, bool) {
 	names := os.ls(dir)!
-	limit := imin(names.len, scan_limit)
+	limit := vtk.min(names.len, scan_limit)
 	mut entries := []Entry{cap: limit}
 	for name in names[..limit] {
 		if name.starts_with('.') && !hidden { continue }
@@ -519,15 +507,15 @@ fn (p &Pane) column_entries(column int) []Entry {
 }
 
 fn (mut p Pane) list_rows() int {
-	return imax(1, p.canvas.rect().h - header_rows)
+	return vtk.max(1, p.canvas.rect().h - header_rows)
 }
 
 fn (mut p Pane) icon_cols() int {
-	return imax(1, p.canvas.rect().w / tile_width)
+	return vtk.max(1, p.canvas.rect().w / tile_width)
 }
 
 fn (mut p Pane) icon_rows() int {
-	return imax(1, p.canvas.rect().h / tile_height)
+	return vtk.max(1, p.canvas.rect().h / tile_height)
 }
 
 fn (mut p Pane) ensure_visible() {
@@ -538,27 +526,27 @@ fn (mut p Pane) ensure_visible() {
 	if p.view == .icons {
 		cols := p.icon_cols()
 		rows := p.icon_rows()
-		row := imax(0, p.cursor) / cols
+		row := vtk.max(0, p.cursor) / cols
 		first := p.top / cols
 		if row < first { p.top = row * cols }
 		if row >= first + rows { p.top = (row - rows + 1) * cols }
-		p.top = iclamp(p.top, 0, imax(0, p.entries.len - 1))
+		p.top = vtk.clamp(p.top, 0, vtk.max(0, p.entries.len - 1))
 		return
 	}
 	rows := p.list_rows()
-	cursor := imax(0, p.cursor)
+	cursor := vtk.max(0, p.cursor)
 	if cursor < p.top { p.top = cursor }
 	if cursor >= p.top + rows { p.top = cursor - rows + 1 }
-	p.top = iclamp(p.top, 0, imax(0, p.entries.len - rows))
+	p.top = vtk.clamp(p.top, 0, vtk.max(0, p.entries.len - rows))
 }
 
 fn (mut p Pane) scroll(delta int) {
 	if p.entries.len == 0 { return }
 	if p.view == .icons {
 		step := delta * p.icon_cols()
-		p.top = iclamp(p.top + step, 0, imax(0, p.entries.len - 1))
+		p.top = vtk.clamp(p.top + step, 0, vtk.max(0, p.entries.len - 1))
 	} else {
-		p.top = iclamp(p.top + delta, 0, imax(0, p.entries.len - p.list_rows()))
+		p.top = vtk.clamp(p.top + delta, 0, vtk.max(0, p.entries.len - p.list_rows()))
 	}
 	p.canvas.invalidate_paint()
 }
@@ -649,7 +637,7 @@ fn (mut p Pane) cursor_entry() ?Entry {
 
 fn (mut p Pane) set_cursor(index int, extend bool) {
 	if p.entries.len == 0 { return }
-	next := iclamp(index, 0, p.entries.len - 1)
+	next := vtk.clamp(index, 0, p.entries.len - 1)
 	p.cursor = next
 	p.cursor_path = p.entries[next].path
 	if extend {
@@ -697,7 +685,7 @@ fn list_columns(width int) ListColumns {
 	c.date_x = right - c.date_w
 	c.kind_x = c.date_x - c.kind_w - 1
 	c.size_x = c.kind_x - c.size_w - 1
-	c.name_w = imax(4, c.size_x - c.name_x - 1)
+	c.name_w = vtk.max(4, c.size_x - c.name_x - 1)
 	return c
 }
 
@@ -707,7 +695,7 @@ fn paint_pane(mut c vtk.Ctl, mut s vtk.Screen) {
 	r := c.rect()
 	s.fill(r, ` `, t.fg, t.bg)
 	if p.issue != '' {
-		s.text(r.x + 1, r.y, clip_text(p.issue, imax(1, r.w - 2), ellipsis(s)), vtk.red, t.bg, 0)
+		s.text(r.x + 1, r.y, clip_text(p.issue, vtk.max(1, r.w - 2), ellipsis(s)), vtk.red, t.bg, 0)
 		return
 	}
 	match p.view {
@@ -716,7 +704,7 @@ fn paint_pane(mut c vtk.Ctl, mut s vtk.Screen) {
 		.columns { p.paint_columns(mut s, r, t) }
 	}
 	if p.marquee {
-		band := vtk.Rect{r.x + p.mq_x, r.y + p.mq_y, imax(2, p.mq_x2 - p.mq_x + 1), imax(2, p.mq_y2 - p.mq_y + 1)}
+		band := vtk.Rect{r.x + p.mq_x, r.y + p.mq_y, vtk.max(2, p.mq_x2 - p.mq_x + 1), vtk.max(2, p.mq_y2 - p.mq_y + 1)}
 		s.frame(band, false, t.accent, t.bg)
 	}
 }
@@ -835,7 +823,7 @@ fn (p &Pane) paint_icons(mut s vtk.Screen, r vtk.Rect, t vtk.Theme) {
 
 fn (p &Pane) paint_tile(mut s vtk.Screen, tile vtk.Rect, e Entry, fg int, bg int, attr int, cursor bool, sel bool) {
 	s.fill(tile, ` `, fg, bg)
-	fw := imin(tile.w - 2, 9)
+	fw := vtk.min(tile.w - 2, 9)
 	fx := tile.x + (tile.w - fw) / 2
 	fy := tile.y
 	top_l := if cursor { `╔` } else { `╭` }
@@ -855,17 +843,17 @@ fn (p &Pane) paint_tile(mut s vtk.Screen, tile vtk.Rect, e Entry, fg int, bg int
 	s.fill(vtk.Rect{fx + 1, fy + 2, fw - 2, 1}, line, fg, bg)
 	s.put(fx + fw - 1, fy + 2, low_r, fg, bg, attr)
 	name := clip_text(e.name, tile.w - 1, ellipsis(s))
-	name_x := tile.x + imax(0, (tile.w - vtk.text_width(name)) / 2)
+	name_x := tile.x + vtk.max(0, (tile.w - vtk.text_width(name)) / 2)
 	s.text(name_x, fy + 3, name, fg, bg, attr)
 }
 
 fn (p &Pane) column_layout() (int, int) {
 	width := p.canvas.rect().w
-	if p.cols.len == 0 { return 0, imax(1, width) }
-	fit := imax(1, width / column_min)
-	first := imax(0, p.cols.len - fit)
+	if p.cols.len == 0 { return 0, vtk.max(1, width) }
+	fit := vtk.max(1, width / column_min)
+	first := vtk.max(0, p.cols.len - fit)
 	shown := p.cols.len - first
-	return first, imax(1, width / imax(1, shown))
+	return first, vtk.max(1, width / vtk.max(1, shown))
 }
 
 fn (p &Pane) paint_columns(mut s vtk.Screen, r vtk.Rect, t vtk.Theme) {
@@ -881,8 +869,8 @@ fn (p &Pane) paint_columns(mut s vtk.Screen, r vtk.Rect, t vtk.Theme) {
 		w := if last { r.x + r.w - x } else { cw - 1 }
 		if w < 4 { continue }
 		cursor := if last { p.cursor } else { col.cursor }
-		rows := imax(1, r.h - 1)
-		top := if last { p.top } else { imax(0, cursor - rows + 1) }
+		rows := vtk.max(1, r.h - 1)
+		top := if last { p.top } else { vtk.max(0, cursor - rows + 1) }
 		s.fill(vtk.Rect{x, r.y, w, 1}, ` `, t.accent, t.bg)
 		s.text(x, r.y, clip_text(' ${os.base(col.path)} ' + arrow, w, ellipsis(s)), t.accent,
 			t.bg, vtk.bold)
@@ -925,8 +913,8 @@ fn (p &Pane) paint_columns(mut s vtk.Screen, r vtk.Rect, t vtk.Theme) {
 fn (p &Pane) paint_scrollbar(mut s vtk.Screen, r vtk.Rect, t vtk.Theme, visible int, total int, top int) {
 	if total <= visible || r.w < 3 || r.h < 3 { return }
 	height := r.h
-	thumb := imax(1, height * visible / imax(1, total))
-	at := if total > visible { top * (height - thumb) / imax(1, total - visible) } else { 0 }
+	thumb := vtk.max(1, height * visible / vtk.max(1, total))
+	at := if total > visible { top * (height - thumb) / vtk.max(1, total - visible) } else { 0 }
 	s.fill(vtk.Rect{r.x + r.w - 1, r.y, 1, height}, `░`, t.dim, t.bg)
 	s.fill(vtk.Rect{r.x + r.w - 1, r.y + at, 1, thumb}, `█`, t.frame, t.bg)
 }
@@ -949,8 +937,8 @@ fn drag_label(drag Drag, ascii bool) string {
 }
 
 fn ghost_rect(x int, y int, width int, height int) vtk.Rect {
-	w := iclamp(width, 8, imax(8, width))
-	return vtk.Rect{iclamp(x + 2, 0, imax(0, width - 12)), iclamp(y - 1, 1, imax(1, height - 5)), w, 3}
+	w := vtk.clamp(width, 8, vtk.max(8, width))
+	return vtk.Rect{vtk.clamp(x + 2, 0, vtk.max(0, width - 12)), vtk.clamp(y - 1, 1, vtk.max(1, height - 5)), w, 3}
 }
 
 fn draw_overlay(mut app vtk.App, mut s vtk.Screen) {
@@ -968,10 +956,10 @@ fn draw_overlay(mut app vtk.App, mut s vtk.Screen) {
 	t := app.theme
 	width, height := app.size()
 	label := drag_label(drag, s.ascii)
-	w := imin(imax(14, vtk.text_width(label) + 8), imax(8, width - 4))
+	w := vtk.min(vtk.max(14, vtk.text_width(label) + 8), vtk.max(8, width - 4))
 	mut card := ghost_rect(drag.x, drag.y, width, height)
 	card.w = w
-	card.x = iclamp(card.x, 0, imax(0, width - w - 1))
+	card.x = vtk.clamp(card.x, 0, vtk.max(0, width - w - 1))
 	mut back := vtk.Rect{card.x + 1, card.y - 1, card.w, card.h}
 	if back.y < 0 { back.y = 0 }
 	frame := if drag.target_dir != '' && drag.valid { t.accent } else { vtk.red }
@@ -1044,8 +1032,8 @@ fn hit_entry(p &Pane, x int, y int) (int, int) {
 			if column >= p.cols.len { return -1, -1 }
 			if y < 1 { return -1, -1 }
 			col := p.cols[column]
-			rows := imax(1, p.canvas.rect().h - 1)
-			top := if column == p.cols.len - 1 { p.top } else { imax(0, col.cursor - rows + 1) }
+			rows := vtk.max(1, p.canvas.rect().h - 1)
+			top := if column == p.cols.len - 1 { p.top } else { vtk.max(0, col.cursor - rows + 1) }
 			index := top + y - 1
 			if index >= p.column_entries(column).len { return -1, -1 }
 			return column, index
@@ -1262,10 +1250,10 @@ fn (mut p Pane) drag_motion(x int, y int, e vtk.Event, mut app vtk.App) {
 
 fn (mut p Pane) marquee_select(x int, y int) {
 	area := p.canvas.rect()
-	lo_x := imin(p.press_x - area.x, x)
-	lo_y := imin(p.press_y - area.y, y)
-	hi_x := imax(p.press_x - area.x, x)
-	hi_y := imax(p.press_y - area.y, y)
+	lo_x := vtk.min(p.press_x - area.x, x)
+	lo_y := vtk.min(p.press_y - area.y, y)
+	hi_x := vtk.max(p.press_x - area.x, x)
+	hi_y := vtk.max(p.press_y - area.y, y)
 	p.mq_x, p.mq_y, p.mq_x2, p.mq_y2 = lo_x, lo_y, hi_x, hi_y
 	p.selected = map[string]bool{}
 	match p.view {
@@ -1753,7 +1741,7 @@ fn window_destroyed(mut c vtk.Ctl, mut _ vtk.App) {
 
 fn next_id(sh &Shared) int {
 	mut highest := -1
-	for p in sh.panes { highest = imax(highest, p.id) }
+	for p in sh.panes { highest = vtk.max(highest, p.id) }
 	return highest + 1
 }
 

@@ -177,9 +177,9 @@ fn import_csv(id int, name string, text string) !&Sheet {
 	data := vtk.parse_table_data(text, `,`)!
 	if data.len == 0 || data.len > max_rows { return error('CSV must have 1–${max_rows} rows') }
 	mut columns := 1
-	for row in data { columns = max(columns, row.len) }
+	for row in data { columns = vtk.max(columns, row.len) }
 	if columns > max_columns { return error('CSV supports up to ${max_columns} columns') }
-	mut sheet := new_sheet(id, name, max(40, data.len), max(12, columns))
+	mut sheet := new_sheet(id, name, vtk.max(40, data.len), vtk.max(12, columns))
 	for r, row in data { for c, cell in row { sheet.data.cells[r][c] = cell } }
 	return sheet
 }

@@ -1,5 +1,16 @@
 module vtk
 
+fn test_font_styles_lists_every_style() {
+	mut seen := map[string]bool{}
+	for style in font_styles {
+		assert !seen[style.str()]
+		seen[style.str()] = true
+		// Every listed style must survive a convert round trip through a name.
+		assert font_style_from_name(style.str()) or { panic('missing name') } == style
+	}
+	assert font_styles.len == 18
+}
+
 fn test_font_styles_and_names() {
 	assert font_style_from_name('SaNsSeRiBbOlD') or { panic('alias') } == FontStyle.sansserifbold
 	assert font_style_from_name('missing') == none

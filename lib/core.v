@@ -577,8 +577,8 @@ fn (mut app App) tick() {
 	}
 }
 
-fn min(a int, b int) int { return if a < b { a } else { b } }
+pub fn min(a int, b int) int { return if a < b { a } else { b } }
 
-fn max(a int, b int) int { return if a > b { a } else { b } }
+pub fn max(a int, b int) int { return if a > b { a } else { b } }
 
-fn abs(a int) int { return if a < 0 { -a } else { a } }
+pub fn abs(a int) int { return if a < 0 { -a } else { a } }
