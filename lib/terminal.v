@@ -28,6 +28,9 @@ mut:
 	utf8_buffer string
 	osc_escape  bool
 	pending     string
+	mouse_mode  int
+	mouse_sgr   bool
+	mouse_button MouseButton
 	damage_top  int
 	damage_end  int
 }
@@ -227,6 +230,8 @@ pub fn (mut t Terminal) feed(bytes string) {
 						if t.cy == t.top { t.scroll_region(-1) } else { t.cy = max(0, t.cy - 1) }
 					}
 					`c` {
+						t.mouse_mode = 0
+						t.mouse_sgr = false
 						t.fg = white
 						t.bg = black
 						t.attr = 0
@@ -355,6 +360,10 @@ fn (mut t Terminal) csi(final u8) {
 			if private {
 				for mode in p {
 					if mode == 25 { t.cursor_hidden = final == `l` }
+					if mode in [9, 1000, 1002, 1003] {
+						if final == `h` { t.mouse_mode = mode } else if t.mouse_mode == mode { t.mouse_mode = 0 }
+					}
+					if mode == 1006 { t.mouse_sgr = final == `h` }
 					if mode in [47, 1047, 1049] && final == `h` {
 						for y in 0 .. t.rows { t.clear_range(y, 0, t.cols) }
 						t.cx = 0
@@ -419,6 +428,37 @@ pub fn (mut t Terminal) write(text string) {
 	if t.exited { return }
 	t.pending += text
 	t.flush_input()
+}
+
+// Coordinates are zero-based terminal cells; captured drags are clamped to the viewport.
+fn (mut t Terminal) mouse(e Event, x int, y int) {
+	if t.mouse_mode == 0 || t.exited { return }
+	if e.button.is_wheel() && (!e.pressed || t.mouse_mode == 9) { return }
+	if e.motion && (t.mouse_mode != 1003 && (t.mouse_mode != 1002 || !e.pressed)) { return }
+	if !e.motion && !e.pressed && t.mouse_mode == 9 { return }
+	mut code := match e.button {
+		.left { 0 }
+		.middle { 1 }
+		.right { 2 }
+		.wheel_up { 64 }
+		.wheel_down { 65 }
+		.wheel_left { 66 }
+		.wheel_right { 67 }
+		.none { 3 }
+	}
+	if e.motion { code |= 32 }
+	if t.mouse_mode != 9 {
+		if e.shift { code |= 4 }
+		if e.alt { code |= 8 }
+		if e.ctrl { code |= 16 }
+	}
+	col, row := clamp(x, 0, t.cols - 1) + 1, clamp(y, 0, t.rows - 1) + 1
+	if t.mouse_sgr {
+		t.write('\x1b[<${code};${col};${row}${if e.pressed || e.motion { 'M' } else { 'm' }}')
+	} else if col <= 223 && row <= 223 {
+		if !e.pressed && !e.motion { code = (code & ~3) | 3 }
+		t.write('\x1b[M' + u8(code + 32).ascii_str() + u8(col + 32).ascii_str() + u8(row + 32).ascii_str())
+	}
 }
 
 fn (mut t Terminal) flush_input() {

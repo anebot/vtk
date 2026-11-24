@@ -510,6 +510,10 @@ fn (mut app App) mouse(e Event) {
 		if !isnil(app.scroll_drag) { return }
 		if !isnil(app.drag) {
 			mut target := app.drag
+			if target.kind == .terminal {
+				target.term.mouse(e, e.x - target.x, e.y - target.y)
+				return
+			}
 			if target.kind in [.entry, .multiline, .markdown] && e.button in [.wheel_up, .wheel_down] {
 				app.scroll_ctl(mut target, if e.button == .wheel_up { -1 } else { 1 })
 			}
@@ -561,6 +565,13 @@ fn (mut app App) mouse(e Event) {
 	}
 	if !isnil(app.drag) {
 		mut c := app.drag
+		if c.kind == .terminal {
+			if e.button != c.term.mouse_button && e.button != .none { return }
+			event := if e.button == .none && !e.motion { Event{ ...e, button: c.term.mouse_button } } else { e }
+			c.term.mouse(event, e.x - c.x, e.y - c.y)
+			if !e.pressed && !e.motion { app.drag = unsafe { nil } }
+			return
+		}
 		if c.kind == .table {
 			c.table_drag(e, mut app)
 			c.invalidate_paint()
@@ -755,6 +766,15 @@ fn (mut app App) mouse(e Event) {
 	}
 	mut c := w.hit_ptr(e.x, e.y)
 	if isnil(c) || !c.visible() { return }
+	if c.kind == .terminal && !isnil(c.term) && c.term.mouse_mode != 0 && c.content_rect().contains(e.x, e.y) {
+		if e.pressed && !e.motion && e.button == .left { app.set_focus(c) }
+		c.term.mouse(e, e.x - c.x, e.y - c.y)
+		if e.pressed && !e.motion && !e.button.is_wheel() && e.button != .none && c.term.mouse_mode != 9 {
+			c.term.mouse_button = e.button
+			app.drag = c
+		}
+		return
+	}
 	if e.button == .right && e.pressed {
 		mut p := c
 		for !isnil(p) {

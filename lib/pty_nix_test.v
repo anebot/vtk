@@ -15,6 +15,36 @@ fn test_pty_shell_output_and_cleanup() {
 	assert pty.fd == -1
 }
 
+fn test_terminal_mouse_reports_reach_the_pty_child() ! {
+	directory := util.temp_dir(pattern: 'vtk-mouse-')!
+	defer { os.rmdir_all(directory) or {} }
+	shell := os.join_path(directory, 'mouse-shell')
+	os.write_file(shell, '#!/bin/sh\nstty raw -echo\nprintf "\\033[?1000;1006h"\ndd bs=1 count=28 2>/dev/null | od -An -tx1 | tr -d " \\n"\n')!
+	os.chmod(shell, 0o755)!
+	previous_shell := os.getenv_opt('SHELL')
+	os.setenv('SHELL', shell, true)
+	defer {
+		if value := previous_shell { os.setenv('SHELL', value, true) } else { os.unsetenv('SHELL') }
+	}
+	mut app := new_app()
+	app.desktop = false
+	mut window := app.window('Terminal', 24, 10)
+	mut c := terminal(10, 3)!
+	defer { c.term.close() }
+	window.add(mut c)
+	app.redraw()
+	deadline := time.ticks() + 3000
+	for c.term.mouse_mode == 0 && time.ticks() < deadline {
+		app.pump_terminal(mut c)
+		time.sleep(5 * time.millisecond)
+	}
+	assert c.term.mouse_mode == 1000 && c.term.mouse_sgr
+	app.dispatch(Event{kind: .mouse, x: c.x, y: c.y, button: .left, pressed: true})
+	app.dispatch(Event{kind: .mouse, x: c.x, y: c.y, button: .left})
+	app.dispatch(Event{kind: .mouse, x: c.x, y: c.y, button: .wheel_down, pressed: true})
+	assert terminal_test_output(mut c.term.pty) == '1b5b3c303b313b314d1b5b3c303b313b316d1b5b3c36353b313b314d'
+}
+
 fn test_pty_reads_reuse_storage_and_return_independent_strings() {
 	mut pipe := [2]i32{}
 	assert C.pipe(&pipe[0]) == 0

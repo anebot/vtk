@@ -37,7 +37,8 @@ pub fn (app &App) mouse_position() (int, int) { return app.mouse_x, app.mouse_y 
 pub fn (app &App) hovered_ctl() ?&Ctl { return ctl_option(app.hover) }
 
 fn (mut app App) sync_mouse_motion() {
-	app.driver.set_mouse_motion((app.mouse_motion && !app.rendering.slow_terminal) || app.mouse_cursor.enabled)
+	terminal_motion := app.terminals.any(!it.term.exited && it.term.mouse_mode == 1003 && it.is_drawable())
+	app.driver.set_mouse_motion((app.mouse_motion && !app.rendering.slow_terminal) || app.mouse_cursor.enabled || terminal_motion)
 	app.sync_mouse_pointer()
 }
 

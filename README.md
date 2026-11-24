@@ -677,6 +677,12 @@ xterm subset: cursor movement, erasing, insert/delete, scroll regions, SGR,
 16/256/RGB colors and UTF-8. Output is polled in bounded batches. Closing
 the window releases the child process and PTY. It is not a full VT emulator.
 
+Applications can request X10, normal, button-motion or any-motion mouse
+tracking (modes 9, 1000, 1002 and 1003), with legacy or SGR (1006) reports.
+Clicks, drags and wheel events use coordinates relative to the terminal's
+content area. When tracking is disabled, wheel events follow normal widget
+scrolling behavior.
+
 Open a shell in a specific directory with a custom window title:
 
 ```v
