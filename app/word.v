@@ -638,7 +638,7 @@ fn action(mut c vtk.Ctl, mut app vtk.App) {
 		38 { doc.view.markdown_align(.justify) }
 		39 { insert_table(mut doc, mut app) }
 		41 { choose_font(mut doc, mut app) }
-		42 { app.msgbox_for(doc.window, 'About ${app_name}', '${app_name} version ${app_version}') }
+		42 { app.msgbox_for(doc.window, 'About ${app_name}', '${app_name} version ${app_version}\nAuthor: pancake') }
 		else {}
 	}
 	sync_view_menu(mut doc)
@@ -799,7 +799,7 @@ fn new_document(mut app vtk.App, path string) {
 	}
 	menu_item(mut format, doc, 'Font...', 41)
 	format.menu_separator()
-	mut align_menu := format.add_menu('Text align')
+	mut align_menu := format.add_menu('Align')
 	for i, name in align_names {
 		mut item := align_menu.menu_item(name, action)
 		item.user = doc
