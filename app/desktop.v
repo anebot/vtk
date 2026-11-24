@@ -3,79 +3,13 @@ module main
 
 import os
 import vtk
-
-fn project_root() string {
-	mut starts := [os.getwd()]
-	exe := os.executable()
-	if exe != '' {
-		starts << os.dir(exe)
-	}
-	for start in starts {
-		mut directory := start
-		for {
-			if os.exists(os.join_path(directory, 'v.mod'))
-				&& os.is_dir(os.join_path(directory, 'app')) {
-				return directory
-			}
-			parent := os.dir(directory)
-			if parent == directory {
-				break
-			}
-			directory = parent
-		}
-	}
-	return os.getwd()
-}
-
-fn launch_source(mut app vtk.App, title string, binary string, source string) {
-	root := project_root()
-	mut window := app.terminal_window(directory: root, title: title) or {
-		app.notify(err.msg(), 3000)
-		return
-	}
-	app.maximize(mut window)
-	binary_path := os.join_path(root, 'build', binary)
-	command := if os.exists(binary_path) {
-		os.quoted_path(binary_path)
-	} else {
-		'v run ' + os.quoted_path(os.join_path(root, source))
-	}
-	children := window.children()
-	if children.len > 0 {
-		if mut term := children[0].terminal_state() {
-			term.write(command + '\n')
-		}
-	}
-}
-
-fn launch_word(mut app vtk.App, _ voidptr) {
-	launch_source(mut app, 'Word', 'word', 'app/word.v')
-}
-
-fn launch_slides(mut app vtk.App, _ voidptr) {
-	launch_source(mut app, 'Slides', 'slides', 'app/slides.v')
-}
-
-fn launch_spread(mut app vtk.App, _ voidptr) {
-	launch_source(mut app, 'Spread', 'spreadsheet', 'app/spread.v')
-}
-
-fn launch_paint(mut app vtk.App, _ voidptr) {
-	launch_source(mut app, 'Paint', 'paint', 'app/paint.v')
-}
-
-fn launch_calc(mut app vtk.App, _ voidptr) {
-	launch_source(mut app, 'Calc', 'calc', 'app/calc.v')
-}
-
-fn launch_clock(mut app vtk.App, _ voidptr) {
-	launch_source(mut app, 'Clock', 'clock', 'app/clock.v')
-}
+import vtk.app.programs.desktop
 
 fn main() {
 	mut app := vtk.new_app()
 	app.start_programs = true
-	app.ctrl_c = .quit
+	app.ctrl_c = .copy
+	app.native_clipboard = true
 	snapshot := '--snapshot' in os.args
 	if snapshot {
 		app.dispatch(vtk.Event{ kind: .resize, width: 100, height: 30 })
@@ -86,12 +20,7 @@ fn main() {
 		}
 	}
 	defer { app.fini() }
-	app.register('Word', launch_word, unsafe { nil })
-	app.register('Slides', launch_slides, unsafe { nil })
-	app.register('Spread', launch_spread, unsafe { nil })
-	app.register('Paint', launch_paint, unsafe { nil })
-	app.register('Calc', launch_calc, unsafe { nil })
-	app.register('Clock', launch_clock, unsafe { nil })
+	desktop.register(mut app)
 	if snapshot {
 		_, height := app.size()
 		app.app_menu(0, height - 1)
@@ -100,6 +29,6 @@ fn main() {
 		println(app.snapshot())
 		return
 	}
-	app.notify('Click Start or press Alt-S. Programs lists Word, Slides, Spread, Paint, Calc, Clock and Terminal.', 6000)
+	app.notify('Click Start or press Alt-S. Programs lists Word, Slides, Spread, Paint, Calc, Clock, Files and Terminal.', 6000)
 	app.run() or { eprintln(err) }
 }

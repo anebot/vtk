@@ -320,6 +320,12 @@ events too; these have `motion == true`, `button == .none`, and `pressed == fals
 when no button is held. `app.hovered_ctl()` returns the hovered control or `none`,
 and `app.mouse_position()` returns zero-based terminal cells.
 
+Custom controls that draw their own drags set `control.mouse_capture = true`:
+after its `mousefn` consumes a left press, the control keeps receiving motion
+and the release until the button goes up, even outside its rectangle. Focused
+controls also receive bracketed paste through `keyfn` as an `Event` with
+`kind == .paste`; return true to consume the text.
+
 The cursor supports a single-cell glyph, foreground/background colors and
 `attr`; `set_mouse_cursor` returns false for a wide, combining or control glyph.
 ASCII themes translate its glyph using the normal fallback. Disable it with
@@ -647,7 +653,10 @@ Drawing composes clipped cells and emits a single ANSI diff. Wide Unicode
 characters occupy two cells and combining marks attach to the preceding
 glyph. ASCII fallback changes display only. `Screen` exposes text, fill,
 frame and line primitives; canvas callbacks draw in absolute cell coordinates.
-`app.redraw()` and `app.snapshot()` work without opening a terminal. Canvas painters
+`app.overlay` is an optional `fn (mut App, mut Screen)` painter that runs after
+windows, notices and popups, for drag proxies and other floating feedback. It
+shares the band clipping of a partial repaint, so `invalidate_area` keeps moving
+overlays cheap. `app.redraw()` and `app.snapshot()` work without opening a terminal. Canvas painters
 use `screen.set_cursor(x, y, shape)` to place a caret within their clip rectangle.
 Timers (`after`, `every`, `cancel_hook`) run on the event-loop thread.
 
@@ -711,6 +720,12 @@ Try `v run examples/terminal.v /path/to/worktree 'Shell: feature-worktree'`.
 the HolyC applications' `lib/text` document exporters are outside this module.
 Word's Format > Font... window applies the Unicode styles above to a selection.
 `widgets.v`, `terminal.v` and `spread.v` are additional native demos.
+Run `v run app/desktop.v` for a shared desktop whose Programs menu opens Word,
+Slides, Spread, Paint, Calc, Clock and Files as native windows.
+Files is a file manager with list, icon and column views, sorting, Shift/Ctrl
+multi-selection and drag and drop between its windows; it uses `app.overlay`
+and `Ctl.mouse_capture`. Its program lives in `app/programs/files`, and
+`app/files.v` runs it standalone.
 The spreadsheet exercises editable tables, formulas, workbook persistence,
 selection, sorting, colors and sheet tab reordering.
 

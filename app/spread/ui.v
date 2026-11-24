@@ -160,7 +160,6 @@ fn (mut view BookView) key(event vtk.Event, mut app vtk.App) bool {
 fn book_closing(mut c vtk.Ctl, mut app vtk.App) bool {
 	view := unsafe { &BookView(c.user) }
 	if view.book.dirty() && !app.confirm_for(&c, 'Unsaved workbook', 'Discard unsaved changes and quit?') { return false }
-	app.quit()
 	return true
 }
 
@@ -253,7 +252,7 @@ fn (mut view BookView) action(action Action, mut app vtk.App) {
 			os.write_file(path, text) or { app.notify(err.msg(), 4000); return }
 			app.notify('Exported ${path}', 1500)
 		}
-		.quit { app.close(mut view.window) }
+		.quit { app.close(mut view.window); return }
 		.edit { grid.table_begin_edit() }
 		.apply {
 			if grid.table_selection().x < 0 { app.notify('Select a cell first', 1500); return }
@@ -343,6 +342,10 @@ fn create_view(mut app vtk.App, book Book) &BookView {
 	app.maximize(mut window)
 	if current := view.current() { app.set_focus(current.grid) }
 	return view
+}
+
+pub fn launch(mut app vtk.App, _ voidptr) {
+	_ := create_view(mut app, demo_book())
 }
 
 pub fn run() {

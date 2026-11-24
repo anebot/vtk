@@ -184,6 +184,7 @@ fn (mut app App) paint_band(band Rect) {
 	app.draw_notices()
 	if band.contains(0, app.bar_y()) { app.draw_bar() }
 	app.draw_popups()
+	if paint := app.overlay { paint(mut app, mut app.screen) }
 	if !isnil(app.placement) && band.contains(0, app.bar_y()) {
 		app.screen.fill(Rect{0, app.bar_y(), app.width, 1}, ` `, app.theme.bar_fg, app.theme.bar_bg)
 		app.screen.text(0, app.bar_y(), (if app.placement_resize { 'Resize' } else { 'Move' }) + ': arrows / Shift+arrows, Enter accepts, Esc cancels', app.theme.bar_fg, app.theme.bar_bg, 0)
@@ -244,6 +245,12 @@ pub fn (mut app App) dispatch(e Event) {
 	if e.kind == .paste {
 		if !isnil(app.focus) {
 			mut c := app.focus
+			if f := c.keyfn {
+				if f(mut c, e, mut app) {
+					app.dirty = true
+					return
+				}
+			}
 			if c.kind == .terminal {
 				c.term.write(e.text)
 			} else if c.kind == .table && c.table.pasteable {
@@ -604,6 +611,12 @@ fn (mut app App) mouse(e Event) {
 			}
 			return
 		}
+		if c.mouse_capture {
+			if f := c.mousefn { f(mut c, e, mut app) }
+			if !e.pressed { app.drag = unsafe { nil } }
+			c.invalidate_paint()
+			return
+		}
 		if !e.pressed {
 			app.drag = unsafe { nil }
 			return
@@ -788,6 +801,7 @@ fn (mut app App) mouse(e Event) {
 	if f := c.mousefn {
 		if f(mut c, e, mut app) {
 			// Handled callbacks can mutate public fields and other controls.
+			if c.mouse_capture && e.pressed && !e.motion && e.button == .left { app.drag = c }
 			app.dirty = true
 			return
 		}

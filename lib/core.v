@@ -78,6 +78,7 @@ pub type ScrollCallback = fn (mut Ctl, int, mut App) bool
 pub type CloseCallback = fn (mut Ctl, mut App) bool
 pub type CellCallback = fn (&Ctl, int, int) string
 pub type PaintCallback = fn (mut Ctl, mut Screen)
+pub type OverlayCallback = fn (mut App, mut Screen)
 pub type TabReorderCallback = fn (mut Ctl, int, int, mut App)
 
 // Ctl is the shared control model. Positions are zero-based terminal cells;
@@ -140,6 +141,9 @@ pub mut:
 	reorderable   bool
 	resizable     bool
 	dismissable   bool
+	// A custom mousefn keeps receiving motion and the release after it consumes
+	// a left press, so drags can continue outside the control.
+	mouse_capture bool
 	controls      int         = window_default_controls
 	cursor_shape  CursorShape = .bar
 	edit          &Edit = &Edit{}
@@ -389,6 +393,7 @@ pub struct App {
 pub mut:
 	theme            Theme = theme_default()
 	rendering        RenderOptions
+	overlay          ?OverlayCallback
 	desktop          bool = true
 	bar_always       bool = true
 	bar_top          bool
