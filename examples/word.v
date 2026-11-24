@@ -156,6 +156,8 @@ const view_ids = [17, 34, 18, 19, 20]
 const wrap_names = ['Disabled', 'Character', 'Word']
 const page_names = ['Line numbers', 'Top ruler', 'Left ruler']
 const align_names = ['Left', 'Center', 'Right', 'Justify']
+const app_name = 'VtkWord'
+const app_version = '0.1.0'
 const font_styles = [vtk.FontStyle.none, .bold, .italic, .script, .doublestruck, .underline,
 	.strikethrough, .fraktur, .bolditalic, .sansserif, .sansserifitalic, .monospace, .boldscript,
 	.boldfraktur, .sansserifbold, .sansserifbolditalic, .openface, .smallcaps]
@@ -636,6 +638,7 @@ fn action(mut c vtk.Ctl, mut app vtk.App) {
 		38 { doc.view.markdown_align(.justify) }
 		39 { insert_table(mut doc, mut app) }
 		41 { choose_font(mut doc, mut app) }
+		42 { app.msgbox_for(doc.window, 'About ${app_name}', '${app_name} version ${app_version}') }
 		else {}
 	}
 	sync_view_menu(mut doc)
@@ -803,6 +806,8 @@ fn new_document(mut app vtk.App, path string) {
 		item.data = 35 + i
 		doc.align_items << item
 	}
+	mut help := doc.window.add_menu('Help')
+	menu_item(mut help, doc, 'About', 42)
 	sync_view_menu(mut doc)
 	sync_wrap_menu(mut doc)
 	sync_page_menu(mut doc)
