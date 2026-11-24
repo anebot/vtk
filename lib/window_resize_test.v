@@ -1,5 +1,7 @@
 module vtk
 
+import math
+
 fn resize_test_window(mut app App, name string, r Rect) &Ctl {
 	mut w := app.window(name, r.w, r.h)
 	w.x = r.x
@@ -171,8 +173,8 @@ fn test_terminal_resize_keeps_floating_windows_centered_without_resizing() {
 					app.redraw()
 					current := app.work_area()
 					assert w.w == 20 && w.h == 10
-					assert abs((w.x - current.x) * 2 - (current.w - w.w)) <= 1
-					assert abs((w.y - current.y) * 2 - (current.h - w.h)) <= 1
+					assert math.abs((w.x - current.x) * 2 - (current.w - w.w)) <= 1
+					assert math.abs((w.y - current.y) * 2 - (current.h - w.h)) <= 1
 				}
 				assert w.rect() == original
 			}

@@ -1,5 +1,6 @@
 module vtk
 
+import math { max, min }
 import time
 
 pub fn label(text string) &Ctl { return &Ctl{ kind: .label, text: text } }

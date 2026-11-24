@@ -1,5 +1,6 @@
 module vtk
 
+import math
 import time
 
 pub enum Kind {
@@ -518,8 +519,9 @@ pub fn new_app() &App {
 	return &App{}
 }
 
+// clamp constrains n to [low, high], treating high < low as a single-value range at low.
 pub fn clamp(n int, low int, high int) int {
-	return max(low, min(n, max(low, high)))
+	return math.clip(n, low, math.max(low, high))
 }
 
 pub fn (mut app App) after(ms int, call fn (mut App)) int {
@@ -527,12 +529,12 @@ pub fn (mut app App) after(ms int, call fn (mut App)) int {
 }
 
 pub fn (mut app App) every(ms int, call fn (mut App)) int {
-	return app.add_hook(max(1, ms), max(1, ms), call)
+	return app.add_hook(math.max(1, ms), math.max(1, ms), call)
 }
 
 fn (mut app App) add_hook(ms int, interval int, call fn (mut App)) int {
 	app.next_hook++
-	app.hooks << Hook{app.next_hook, time.ticks() + max(0, ms), interval, call}
+	app.hooks << Hook{app.next_hook, time.ticks() + math.max(0, ms), interval, call}
 	return app.next_hook
 }
 
@@ -576,9 +578,3 @@ fn (mut app App) tick() {
 		for spinner in app.spinners { app.invalidate_area(app.spinner_rect(spinner)) }
 	}
 }
-
-pub fn min(a int, b int) int { return if a < b { a } else { b } }
-
-pub fn max(a int, b int) int { return if a > b { a } else { b } }
-
-pub fn abs(a int) int { return if a < 0 { -a } else { a } }

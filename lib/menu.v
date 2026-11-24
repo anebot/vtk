@@ -1,5 +1,7 @@
 module vtk
 
+import math { max, min }
+
 pub fn context_menu() &Ctl { return new_ctl(.menu) }
 
 // set_menu attaches a context menu so its items inherit the control's app.

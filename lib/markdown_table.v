@@ -1,5 +1,7 @@
 module vtk
 
+import math { max, min }
+
 // Table cells retain their original byte spans. Borders and padding are display
 // glyphs only, so selecting or copying a table still returns its Markdown source.
 struct MarkdownCell {

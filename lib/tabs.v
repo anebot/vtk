@@ -1,5 +1,7 @@
 module vtk
 
+import math { max }
+
 fn (mut app App) draw_tabs(mut c Ctl, fg int, bg int) {
 	padding_clip := app.screen.set_clip(c.content_rect())
 	defer { app.screen.restore_clip(padding_clip) }

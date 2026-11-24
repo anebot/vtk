@@ -2,9 +2,11 @@
 module paint
 
 import json2
+import math
 import os
 import strconv
 import vtk
+import vtk.app.programs.common
 
 const palette_colors = [0x000000, 0xffffff, 0x808080, 0xc0c0c0, 0xe53935, 0xff8c00, 0xffd114, 0x79c942,
 	0x008f48, 0x00c8c8, 0x59adff, 0x2850c8, 0x843dcc, 0xee60a8, 0x8b5028, 0xffc99b]
@@ -90,13 +92,11 @@ fn pencil_cell(shape PencilShape, size int, x int, y int) bool {
 	return match shape {
 		.round { x * x + y * y <= r * r }
 		.square { true }
-		.diamond { abs(x) + abs(y) <= r }
+		.diamond { math.abs(x) + math.abs(y) <= r }
 		.horizontal { y == 0 }
 		.vertical { x == 0 }
 	}
 }
-
-fn abs(n int) int { return if n < 0 { -n } else { n } }
 
 fn erase_cell(mut screen vtk.Screen, bounds vtk.Rect, grid bool, x int, y int) {
 	glyph := if grid && y % 3 == 0 {
@@ -129,7 +129,7 @@ fn stamp(mut screen vtk.Screen, bounds vtk.Rect, grid bool, stroke Stroke, x int
 // Interpolate mouse samples so fast drags do not leave holes in a stroke.
 fn paint_segment(mut screen vtk.Screen, bounds vtk.Rect, grid bool, stroke Stroke, from Point, to Point) {
 	mut x, mut y := from.x, from.y
-	dx, dy := abs(to.x - x), -abs(to.y - y)
+	dx, dy := math.abs(to.x - x), -math.abs(to.y - y)
 	sx, sy := if x < to.x { 1 } else { -1 }, if y < to.y { 1 } else { -1 }
 	mut err := dx + dy
 	for {
@@ -309,9 +309,7 @@ fn save(mut drawing Drawing, save_as bool, mut app vtk.App) bool {
 		path = app.prompt_for(drawing.window, 'Save drawing', 'File path (.vtkdraw):', initial) or { return false }
 	}
 	if path.trim_space() == '' { return false }
-	if path != drawing.path && os.exists(path) {
-		if !app.confirm_for(drawing.window, 'Replace file', 'Replace ${path}?') { return false }
-	}
+	if path != drawing.path && !common.confirm_replace(mut app, drawing.window, path) { return false }
 	os.write_file(path, encode_drawing(drawing.strokes)) or {
 		app.msgbox_for(drawing.window, 'Cannot save drawing', err.msg())
 		return false
@@ -327,9 +325,11 @@ fn save(mut drawing Drawing, save_as bool, mut app vtk.App) bool {
 fn may_discard(mut drawing Drawing, mut app vtk.App) bool {
 	drawing.active = false
 	if drawing.strokes == drawing.saved { return true }
-	choice := app.choice_for(drawing.window, 'Unsaved drawing', ['Save', 'Discard', 'Cancel'], 3)
-	if choice == 0 { return save(mut drawing, false, mut app) }
-	return choice == 1
+	return match common.ask_unsaved(mut app, drawing.window, 'Unsaved drawing') {
+		.save { save(mut drawing, false, mut app) }
+		.discard { true }
+		.cancel { false }
+	}
 }
 
 fn closing(mut w vtk.Ctl, mut app vtk.App) bool {
@@ -606,11 +606,7 @@ pub fn launch(mut app vtk.App) {
 pub fn run() {
 	mut app := vtk.new_app()
 	mut drawing := new_drawing(mut app)
-	app.init() or {
-		eprintln(err)
-		return
-	}
-	defer { app.fini() }
-	if os.args.len > 1 { open_drawing(mut drawing, os.args[1], mut app) }
-	app.run() or { eprintln(err) }
+	common.run(mut app, fn [mut drawing] (mut app vtk.App) {
+		if os.args.len > 1 { open_drawing(mut drawing, os.args[1], mut app) }
+	})
 }

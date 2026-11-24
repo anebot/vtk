@@ -178,7 +178,7 @@ pub fn (mut c Ctl) table_refresh() {
 	c.table.anchor_row, c.table.anchor_column = -1, -1
 	if c.value >= c.row_count { c.value = -1 }
 	if c.table.sort_direction != .none && c.table.sort_column >= 0 && c.table.sort_column < c.kids.len {
-		c.table.rows = []int{len: max(0, c.row_count), init: index}
+		c.table.rows = []int{len: math.max(0, c.row_count), init: index}
 		c.table_sort_rows()
 	}
 	c.invalidate()
@@ -211,7 +211,7 @@ fn (mut c Ctl) table_sort_rows() {
 	mut width := 1
 	for width < c.table.rows.len {
 		for start := 0; start < c.table.rows.len; start += width * 2 {
-			middle, end := min(start + width, c.table.rows.len), min(start + width * 2, c.table.rows.len)
+			middle, end := math.min(start + width, c.table.rows.len), math.min(start + width * 2, c.table.rows.len)
 			mut a, mut b := start, middle
 			for target in start .. end {
 				if a < middle && (b >= end || c.table_compare_rows(c.table.rows[a], c.table.rows[b]) <= 0) {
@@ -229,7 +229,7 @@ pub fn (mut c Ctl) table_sort(column int, direction TableSortDirection) bool {
 	c.table_sync()
 	c.table.sort_column, c.table.sort_direction = column, direction
 	c.table.rows = []int{}
-	if direction != .none { c.table.rows = []int{len: max(0, c.row_count), init: index}; c.table_sort_rows() }
+	if direction != .none { c.table.rows = []int{len: math.max(0, c.row_count), init: index}; c.table_sort_rows() }
 	c.table.anchor_row, c.table.anchor_column = -1, -1
 	c.scroll_hold = false
 	c.invalidate()
@@ -258,10 +258,10 @@ pub fn (c &Ctl) table_selection() TableRange {
 	ax := if c.table.multi_select && c.table.anchor_column >= 0 && c.table.anchor_column < c.kids.len { c.table_view_column(c.table.anchor_column) } else { x }
 	ay := if c.table.multi_select && c.table.anchor_row >= 0 && c.table.anchor_row < c.row_count { c.table_view_row(c.table.anchor_row) } else { y }
 	return TableRange{
-		x: if c.table.selection == .rows { 0 } else { min(ax, x) }
-		x2: if c.table.selection == .rows { c.kids.len - 1 } else { max(ax, x) }
-		y: if c.table.selection == .columns { 0 } else { min(ay, y) }
-		y2: if c.table.selection == .columns { c.row_count - 1 } else { max(ay, y) }
+		x: if c.table.selection == .rows { 0 } else { math.min(ax, x) }
+		x2: if c.table.selection == .rows { c.kids.len - 1 } else { math.max(ax, x) }
+		y: if c.table.selection == .columns { 0 } else { math.min(ay, y) }
+		y2: if c.table.selection == .columns { c.row_count - 1 } else { math.max(ay, y) }
 	}
 }
 
@@ -282,7 +282,7 @@ pub fn (mut c Ctl) table_move_row(from int, to int) bool {
 	if c.kind != .table || c.destroyed || from < 0 || to < 0 || from >= c.row_count || to >= c.row_count { return false }
 	c.table_sync()
 	if from == to { return true }
-	if c.table.rows.len != c.row_count { c.table.rows = []int{len: max(0, c.row_count), init: index} }
+	if c.table.rows.len != c.row_count { c.table.rows = []int{len: math.max(0, c.row_count), init: index} }
 	row := c.table.rows[from]
 	c.table.rows.delete(from)
 	c.table.rows.insert(to, row)
@@ -296,8 +296,8 @@ pub fn (mut c Ctl) table_move_row(from int, to int) bool {
 pub fn (mut c Ctl) table_set_column_width(column int, width int) bool {
 	if c.kind != .table || c.destroyed || column < 0 || column >= c.kids.len || width < 1 { return false }
 	options := c.table_options(column)
-	limit := if options.max_width > 0 { max(options.min_width, options.max_width) } else { 10000 }
-	c.table.widths[column] = clamp(width, max(1, options.min_width), limit)
+	limit := if options.max_width > 0 { math.max(options.min_width, options.max_width) } else { 10000 }
+	c.table.widths[column] = clamp(width, math.max(1, options.min_width), limit)
 	c.invalidate()
 	if mut app := c.root().app { if callback := c.table.column_resized { callback(mut c, mut app) } }
 	return true
@@ -306,8 +306,8 @@ pub fn (mut c Ctl) table_set_column_width(column int, width int) bool {
 pub fn (mut c Ctl) table_autofit(column int, limit int) bool {
 	if c.kind != .table || column < 0 || column >= c.kids.len { return false }
 	mut width := text_width(c.kids[column].text) + 3
-	for row in 0 .. max(0, c.row_count) { width = max(width, text_width(c.table_cell(row, column)) + 1) }
-	return c.table_set_column_width(column, min(width, max(1, limit)))
+	for row in 0 .. math.max(0, c.row_count) { width = math.max(width, text_width(c.table_cell(row, column)) + 1) }
+	return c.table_set_column_width(column, math.min(width, math.max(1, limit)))
 }
 
 pub fn (c &Ctl) table_edit_text(row int, column int) string {

@@ -3,23 +3,11 @@
 // drag and drop between its own windows and from the host terminal.
 module files
 
-import arrays
+import math
 import os
 import time
 import vtk
-
-enum View {
-	list
-	icons
-	columns
-}
-
-enum SortBy {
-	name
-	size
-	kind
-	date
-}
+import vtk.app.programs.common
 
 struct SortEntry {
 	label string
@@ -30,45 +18,6 @@ const sort_entries = [SortEntry{'Name', .name}, SortEntry{'Size', .size}, SortEn
 	SortEntry{'Modified', .date}]
 
 const title_prefix = 'Files - '
-const header_rows = 2
-const tile_width = 14
-const tile_height = 4
-const column_min = 20
-const scan_limit = 5000
-const glyph_dir = `▣`
-const glyph_file = `□`
-const glyph_text = `═`
-const glyph_image = `■`
-const glyph_sound = `•`
-const glyph_movie = `►`
-const glyph_pack = `▒`
-const glyph_binary = `█`
-
-struct Entry {
-	name     string
-	path     string
-	dir      bool
-	link     bool
-	size     i64
-	modified i64
-	ext      string
-}
-
-// Drag carries the payload between Files windows while the button is held.
-struct Drag {
-mut:
-	active     bool
-	origin     int = -1
-	paths      []string
-	x          int
-	y          int
-	copy       bool
-	target     int = -1
-	target_dir string
-	target_col int = -1
-	target_row int = -1
-	valid      bool
-}
 
 // Shared state is heap allocated once and referenced by every Files window, so
 // any window can read the drag state without module globals.
@@ -78,14 +27,6 @@ mut:
 	panes []&Pane
 	next  int
 	drag  Drag
-}
-
-struct Column {
-	path        string
-	scan_capped bool
-mut:
-	entries []Entry
-	cursor  int = -1
 }
 
 @[heap]
@@ -131,26 +72,6 @@ mut:
 	typed_at    i64
 }
 
-fn cmp_text(a string, b string) int {
-	return if a < b {
-		-1
-	} else if a > b {
-		1
-	} else {
-		0
-	}
-}
-
-fn cmp_nums(a i64, b i64) int {
-	return if a < b {
-		-1
-	} else if a > b {
-		1
-	} else {
-		0
-	}
-}
-
 // pane_from resolves the window or control that owns a Pane.
 fn pane_from(c &vtk.Ctl) ?&Pane {
 	return c.context[Pane]()
@@ -161,259 +82,9 @@ fn files_window(w &vtk.Ctl) bool {
 	return w.kind == .window && pane_from(w) != none
 }
 
-fn theme_of(p &Pane) vtk.Theme {
-	return p.shared.app.theme
-}
-
-fn focused(c &vtk.Ctl, p &Pane) bool {
-	if f := p.shared.app.focused_ctl() { return f == c }
-	return false
-}
-
-fn ellipsis(s &vtk.Screen) string {
-	return if s.ascii { '~' } else { '…' }
-}
-
-fn clip_text(text string, width int, tail string) string {
-	if width <= 0 { return '' }
-	if vtk.text_width(text) <= width { return text }
-	mut out := ''
-	mut used := 0
-	for r in text.runes() {
-		w := vtk.rune_width(r)
-		if used + w > width - 1 { break }
-		out += r.str()
-		used += w
-	}
-	return out + tail
-}
-
-fn size_text(size i64) string {
-	if size < 0 { return '' }
-	if size < 1000 { return '${size}B' }
-	mut value := f64(size)
-	mut unit := 0
-	units := ['k', 'M', 'G', 'T']
-	for value >= 999.95 && unit < 3 {
-		value /= 1000.0
-		unit++
-	}
-	scaled := int(value * 10.0 + 0.5)
-	if scaled < 100 {
-		return '${scaled / 10}.${scaled % 10}${units[unit]}'
-	}
-	return '${scaled / 10}${units[unit]}'
-}
-
-fn kind_name(e &Entry) string {
-	if e.dir { return 'Folder' }
-	return match e.ext {
-		'.txt', '.md', '.markdown', '.v', '.c', '.h', '.json', '.toml', '.ini', '.cfg', '.yaml',
-		'.yml',
-		'.sh', '.py', '.js', '.ts', '.go', '.rs', '.css', '.html' {
-			'Text'
-		}
-		'.png', '.jpg', '.jpeg', '.gif', '.bmp', '.svg', '.webp', '.ico' {
-			'Image'
-		}
-		'.mp3', '.wav', '.flac', '.ogg', '.m4a', '.aiff' {
-			'Audio'
-		}
-		'.mp4', '.mkv', '.mov', '.avi', '.webm' {
-			'Video'
-		}
-		'.zip', '.tar', '.gz', '.bz2', '.xz', '.7z', '.rar' {
-			'Archive'
-		}
-		'.pdf' {
-			'PDF'
-		}
-		else {
-			if e.ext != '' { e.ext[1..].to_upper() } else { 'File' }
-		}
-	}
-}
-
-fn entry_glyph(e &Entry) rune {
-	if e.dir { return glyph_dir }
-	return match e.ext {
-		'.txt', '.md', '.markdown', '.v', '.c', '.h', '.json', '.toml', '.ini', '.cfg', '.yaml',
-		'.yml',
-		'.sh', '.py', '.js', '.ts', '.go', '.rs', '.css', '.html' {
-			glyph_text
-		}
-		'.png', '.jpg', '.jpeg', '.gif', '.bmp', '.svg', '.webp', '.ico' {
-			glyph_image
-		}
-		'.mp3', '.wav', '.flac', '.ogg', '.m4a', '.aiff' {
-			glyph_sound
-		}
-		'.mp4', '.mkv', '.mov', '.avi', '.webm' {
-			glyph_movie
-		}
-		'.zip', '.tar', '.gz', '.bz2', '.xz', '.7z', '.rar' {
-			glyph_pack
-		}
-		'.o', '.a', '.so', '.dylib', '.exe', '.bin' {
-			glyph_binary
-		}
-		else {
-			glyph_file
-		}
-	}
-}
-
-fn entry_color(e &Entry, t vtk.Theme) int {
-	if e.dir { return t.accent }
-	if e.link { return vtk.cyan }
-	return match e.ext {
-		'.png', '.jpg', '.jpeg', '.gif', '.bmp', '.svg', '.webp', '.ico' {
-			vtk.magenta
-		}
-		'.zip', '.tar', '.gz', '.bz2', '.xz', '.7z', '.rar' {
-			vtk.yellow
-		}
-		'.o', '.a', '.so', '.dylib', '.exe', '.bin', '.sh' {
-			vtk.green
-		}
-		else {
-			t.fg
-		}
-	}
-}
-
-// ---------------------------------------------------------------------------
-// File system
-// ---------------------------------------------------------------------------
-
-fn read_entries(dir string, hidden bool) !([]Entry, bool) {
-	names := os.ls(dir)!
-	limit := vtk.min(names.len, scan_limit)
-	mut entries := []Entry{cap: limit}
-	for name in names[..limit] {
-		if name.starts_with('.') && !hidden { continue }
-		path := os.join_path(dir, name)
-		st := os.stat(path) or { continue }
-		is_dir := os.is_dir(path)
-		entries << Entry{
-			name:     name
-			path:     path
-			dir:      is_dir
-			link:     os.is_link(path)
-			size:     i64(st.size)
-			modified: st.mtime
-			ext:      if is_dir { '' } else { os.file_ext(name).to_lower() }
-		}
-	}
-	return entries, names.len > scan_limit
-}
-
-fn compare_entries(a Entry, b Entry, by SortBy, desc bool) int {
-	if a.dir != b.dir { return if a.dir { -1 } else { 1 } }
-	mut order := match by {
-		.name { cmp_text(a.name.to_lower(), b.name.to_lower()) }
-		.size { cmp_nums(a.size, b.size) }
-		.kind {
-			cmp_text(kind_name(&a) + ' ' + a.name.to_lower(), kind_name(&b) + ' ' + b.name.to_lower())
-		}
-		.date { cmp_nums(a.modified, b.modified) }
-	}
-	if order == 0 { order = cmp_text(a.name.to_lower(), b.name.to_lower()) }
-	return if desc { -order } else { order }
-}
-
-fn sort_entries(mut entries []Entry, by SortBy, desc bool) {
-	arrays.stable_sort(mut entries, fn [by, desc] (a Entry, b Entry) bool {
-		return compare_entries(a, b, by, desc) < 0
-	})
-}
-
-fn unique_target(source string, dest string) string {
-	name := os.base(source)
-	path := os.join_path(dest, name)
-	if !os.exists(path) { return path }
-	ext := if os.is_dir(source) { '' } else { os.file_ext(name) }
-	stem := if ext != '' && ext.len < name.len { name[..name.len - ext.len] } else { name }
-	for i in 2 .. 1000 {
-		candidate := os.join_path(dest, '${stem} (${i})${ext}')
-		if !os.exists(candidate) { return candidate }
-	}
-	return os.join_path(dest, '${stem} (${time.now().unix()})${ext}')
-}
-
-fn drop_allowed(paths []string, dir string, copy bool) bool {
-	if dir == '' { return false }
-	for path in paths {
-		if dir == path || dir.starts_with(path + os.path_separator) { return false }
-		if !copy && os.dir(path) == dir { return false }
-	}
-	return true
-}
-
-fn open_path(path string) {
-	os.open_uri(path) or {}
-}
-
-// paste_paths turns pasted text (plain paths, quoted paths or file:// URLs)
-// into existing absolute paths. Terminals that accept host file drops paste
-// the dropped file list here.
-fn paste_paths(text string) []string {
-	mut paths := []string{}
-	for raw in text.split_any('\r\n') {
-		mut item := raw.trim_space()
-		if item == '' { continue }
-		if item.starts_with("'") && item.ends_with("'") && item.len > 1 {
-			item = item[1..item.len - 1]
-		} else if item.starts_with('"') && item.ends_with('"') && item.len > 1 {
-			item = item[1..item.len - 1]
-		}
-		item = item.replace('\\ ', ' ')
-		if item.starts_with('file://') {
-			item = decode_uri(item.all_after('file://').trim_left('/'))
-			item = os.path_separator + item
-		}
-		if os.exists(item) { paths << os.real_path(item) }
-	}
-	return paths
-}
-
-fn decode_uri(text string) string {
-	if !text.contains_u8(`%`) { return text }
-	mut out := []u8{cap: text.len}
-	mut i := 0
-	for i < text.len {
-		if text[i] == `%` && i + 2 < text.len && text[i + 1].is_hex_digit()
-			&& text[i + 2].is_hex_digit() {
-			value := text[i + 1..i + 3].parse_uint(16, 8) or { 0 }
-			// NUL cannot appear in a file path.
-			if value > 0 {
-				out << u8(value)
-				i += 3
-				continue
-			}
-		}
-		out << text[i]
-		i++
-	}
-	return out.bytestr()
-}
-
 // ---------------------------------------------------------------------------
 // Pane state
 // ---------------------------------------------------------------------------
-
-fn (mut p Pane) index_of(path string) int {
-	for i, e in p.entries {
-		if e.path == path { return i }
-	}
-	return -1
-}
-
-fn (mut p Pane) sort_listing() {
-	sort_entries(mut p.entries, p.sort, p.descending)
-	p.cursor = p.index_of(p.cursor_path)
-	p.anchor = p.index_of(p.anchor_path)
-}
 
 fn (mut p Pane) refresh() {
 	p.issue = ''
@@ -467,57 +138,6 @@ fn (mut p Pane) navigate(path string, remember bool) {
 	p.refresh()
 }
 
-fn (mut p Pane) build_columns() {
-	mut paths := [p.path]
-	mut at := p.path
-	for paths.len < 6 {
-		parent := os.dir(at)
-		if parent == at || parent == '' { break }
-		paths.insert(0, parent)
-		at = parent
-	}
-	mut cols := []Column{cap: paths.len}
-	for path in paths[..paths.len - 1] {
-		entries, capped := read_entries(path, p.show_hidden) or { []Entry{}, false }
-		cols << Column{ path: path, entries: entries, scan_capped: capped }
-	}
-	// The last column displays the pane's current listing.
-	cols << Column{ path: p.path }
-	p.cols = cols
-	p.sort_columns()
-}
-
-fn (mut p Pane) sort_columns() {
-	for i in 0 .. p.cols.len - 1 {
-		child := os.base(p.cols[i + 1].path)
-		mut col := &p.cols[i]
-		sort_entries(mut col.entries, p.sort, p.descending)
-		col.cursor = -1
-		for j, entry in col.entries {
-			if entry.name == child {
-				col.cursor = j
-				break
-			}
-		}
-	}
-}
-
-fn (p &Pane) column_entries(column int) []Entry {
-	return if column == p.cols.len - 1 { p.entries } else { p.cols[column].entries }
-}
-
-fn (mut p Pane) list_rows() int {
-	return vtk.max(1, p.canvas.rect().h - header_rows)
-}
-
-fn (mut p Pane) icon_cols() int {
-	return vtk.max(1, p.canvas.rect().w / tile_width)
-}
-
-fn (mut p Pane) icon_rows() int {
-	return vtk.max(1, p.canvas.rect().h / tile_height)
-}
-
 fn (mut p Pane) ensure_visible() {
 	if p.entries.len == 0 {
 		p.top = 0
@@ -526,27 +146,27 @@ fn (mut p Pane) ensure_visible() {
 	if p.view == .icons {
 		cols := p.icon_cols()
 		rows := p.icon_rows()
-		row := vtk.max(0, p.cursor) / cols
+		row := math.max(0, p.cursor) / cols
 		first := p.top / cols
 		if row < first { p.top = row * cols }
 		if row >= first + rows { p.top = (row - rows + 1) * cols }
-		p.top = vtk.clamp(p.top, 0, vtk.max(0, p.entries.len - 1))
+		p.top = vtk.clamp(p.top, 0, math.max(0, p.entries.len - 1))
 		return
 	}
 	rows := p.list_rows()
-	cursor := vtk.max(0, p.cursor)
+	cursor := math.max(0, p.cursor)
 	if cursor < p.top { p.top = cursor }
 	if cursor >= p.top + rows { p.top = cursor - rows + 1 }
-	p.top = vtk.clamp(p.top, 0, vtk.max(0, p.entries.len - rows))
+	p.top = vtk.clamp(p.top, 0, math.max(0, p.entries.len - rows))
 }
 
 fn (mut p Pane) scroll(delta int) {
 	if p.entries.len == 0 { return }
 	if p.view == .icons {
 		step := delta * p.icon_cols()
-		p.top = vtk.clamp(p.top + step, 0, vtk.max(0, p.entries.len - 1))
+		p.top = vtk.clamp(p.top + step, 0, math.max(0, p.entries.len - 1))
 	} else {
-		p.top = vtk.clamp(p.top + delta, 0, vtk.max(0, p.entries.len - p.list_rows()))
+		p.top = vtk.clamp(p.top + delta, 0, math.max(0, p.entries.len - p.list_rows()))
 	}
 	p.canvas.invalidate_paint()
 }
@@ -661,507 +281,6 @@ fn (mut p Pane) move_cursor(delta int, extend bool) {
 }
 
 // ---------------------------------------------------------------------------
-// Painting
-// ---------------------------------------------------------------------------
-
-struct ListColumns {
-mut:
-	name_x int = 3
-	name_w int
-	size_x int
-	size_w int
-	kind_x int
-	kind_w int
-	date_x int
-	date_w int
-}
-
-fn list_columns(width int) ListColumns {
-	mut c := ListColumns{}
-	right := width - 2
-	if width >= 56 { c.date_w = 11 }
-	if width >= 38 { c.kind_w = 10 }
-	if width >= 26 { c.size_w = 8 }
-	c.date_x = right - c.date_w
-	c.kind_x = c.date_x - c.kind_w - 1
-	c.size_x = c.kind_x - c.size_w - 1
-	c.name_w = vtk.max(4, c.size_x - c.name_x - 1)
-	return c
-}
-
-fn paint_pane(mut c vtk.Ctl, mut s vtk.Screen) {
-	mut p := pane_from(c) or { return }
-	t := theme_of(p)
-	r := c.rect()
-	s.fill(r, ` `, t.fg, t.bg)
-	if p.issue != '' {
-		s.text(r.x + 1, r.y, clip_text(p.issue, vtk.max(1, r.w - 2), ellipsis(s)), vtk.red, t.bg, 0)
-		return
-	}
-	match p.view {
-		.list { p.paint_list(mut s, r, t) }
-		.icons { p.paint_icons(mut s, r, t) }
-		.columns { p.paint_columns(mut s, r, t) }
-	}
-	if p.marquee {
-		band := vtk.Rect{r.x + p.mq_x, r.y + p.mq_y, vtk.max(2, p.mq_x2 - p.mq_x + 1), vtk.max(2, p.mq_y2 - p.mq_y + 1)}
-		s.frame(band, false, t.accent, t.bg)
-	}
-}
-
-fn (p &Pane) row_style(e Entry, index int, selected bool, has_focus bool, t vtk.Theme) (int, int, int) {
-	drag := p.shared.drag
-	drop := drag.active && drag.target == p.id && drag.target_col == -1 && drag.target_row == index
-	sel := selected
-	mut fg := if e.dir { t.accent } else { t.fg }
-	mut bg := t.bg
-	mut attr := if e.dir { vtk.bold } else { 0 }
-	if sel {
-		bg = if has_focus { t.focus_bg } else { t.sel_bg }
-		fg = if has_focus { t.focus_fg } else { t.sel_fg }
-	}
-	if drag.active && drag.paths.any(it == e.path) {
-		fg = t.dim
-		attr |= vtk.italic
-	}
-	if drop {
-		bg = t.sel_bg
-		fg = t.sel_fg
-		attr |= vtk.bold | vtk.reverse
-	}
-	return fg, bg, attr
-}
-
-fn (p &Pane) paint_list(mut s vtk.Screen, r vtk.Rect, t vtk.Theme) {
-	if r.h < 3 { return }
-	cols := list_columns(r.w)
-	has_focus := focused(p.canvas, p)
-	arrow := if p.descending { '▾' } else { '▴' }
-	head_bg := t.bg
-	head_fg := t.dim
-	for i in 0 .. p.list_rows() + header_rows {
-		y := r.y + i
-		if y >= r.y + r.h { break }
-		if i == 0 {
-			s.fill(vtk.Rect{r.x, y, r.w, 1}, ` `, head_fg, head_bg)
-			name_attr := if p.sort == .name { vtk.bold | vtk.underline } else { vtk.bold }
-			s.text(r.x + cols.name_x, y, 'Name', head_fg, head_bg, name_attr)
-			if p.sort == .name {
-				s.text(r.x + cols.name_x + 5, y, arrow, head_fg, head_bg, 0)
-			}
-			if cols.size_w > 0 {
-				label := 'Size'
-				s.text(r.x + cols.size_x + cols.size_w - vtk.text_width(label), y, label, head_fg,
-					head_bg, if p.sort == .size { vtk.bold | vtk.underline } else { vtk.bold })
-			}
-			if cols.kind_w > 0 {
-				s.text(r.x + cols.kind_x, y, 'Type', head_fg, head_bg, if p.sort == .kind {
-					vtk.bold | vtk.underline
-				} else {
-					vtk.bold
-				})
-			}
-			if cols.date_w > 0 {
-				s.text(r.x + cols.date_x, y, 'Modified', head_fg, head_bg, if p.sort == .date {
-					vtk.bold | vtk.underline
-				} else {
-					vtk.bold
-				})
-			}
-			continue
-		}
-		if i == 1 {
-			s.fill(vtk.Rect{r.x, y, r.w, 1}, `─`, t.dim, t.bg)
-			continue
-		}
-		index := p.top + i - header_rows
-		if index < 0 || index >= p.entries.len { break }
-		e := p.entries[index]
-		sel := p.selected[e.path]
-		fg, bg, attr := p.row_style(e, index, sel, has_focus, t)
-		s.fill(vtk.Rect{r.x, y, r.w, 1}, ` `, fg, bg)
-		if index == p.cursor {
-			s.text(r.x, y, '▸', if sel { fg } else { t.accent }, bg, 0)
-		}
-		s.put(r.x + 1, y, entry_glyph(&e), if sel { fg } else { entry_color(&e, t) }, bg, 0)
-		s.text(r.x + cols.name_x, y, clip_text(e.name, cols.name_w, ellipsis(s)), fg, bg, attr)
-		if cols.size_w > 0 && !e.dir {
-			label := size_text(e.size)
-			s.text(r.x + cols.size_x + cols.size_w - vtk.text_width(label), y, label, fg, bg, 0)
-		}
-		if cols.kind_w > 0 {
-			s.text(r.x + cols.kind_x, y, clip_text(kind_name(&e), cols.kind_w - 1, ellipsis(s)), fg,
-				bg, 0)
-		}
-		if cols.date_w > 0 && e.modified > 0 {
-			stamp := time.unix(e.modified).ymmdd()
-			s.text(r.x + cols.date_x, y, stamp, fg, bg, 0)
-		}
-	}
-	p.paint_scrollbar(mut s, r, t, p.list_rows(), p.entries.len, p.top)
-}
-
-fn (p &Pane) paint_icons(mut s vtk.Screen, r vtk.Rect, t vtk.Theme) {
-	cols := p.icon_cols()
-	rows := p.icon_rows()
-	has_focus := focused(p.canvas, p)
-	start := (p.top / cols) * cols
-	for slot in 0 .. rows * cols {
-		index := start + slot
-		if index >= p.entries.len { break }
-		x := r.x + (slot % cols) * tile_width
-		y := r.y + (slot / cols) * tile_height
-		if y + tile_height > r.y + r.h { break }
-		e := p.entries[index]
-		sel := p.selected[e.path]
-		fg, bg, attr := p.row_style(e, index, sel, has_focus, t)
-		p.paint_tile(mut s, vtk.Rect{x, y, tile_width, tile_height}, e, fg, bg, attr, index == p.cursor, sel)
-	}
-	visible := rows * cols
-	p.paint_scrollbar(mut s, r, t, visible, p.entries.len, start)
-}
-
-fn (p &Pane) paint_tile(mut s vtk.Screen, tile vtk.Rect, e Entry, fg int, bg int, attr int, cursor bool, sel bool) {
-	s.fill(tile, ` `, fg, bg)
-	fw := vtk.min(tile.w - 2, 9)
-	fx := tile.x + (tile.w - fw) / 2
-	fy := tile.y
-	top_l := if cursor { `╔` } else { `╭` }
-	top_r := if cursor { `╗` } else { `╮` }
-	low_l := if cursor { `╚` } else { `╰` }
-	low_r := if cursor { `╝` } else { `╯` }
-	line := if cursor { `═` } else { `─` }
-	edge := if cursor { `║` } else { `│` }
-	s.put(fx, fy, top_l, fg, bg, attr)
-	s.fill(vtk.Rect{fx + 1, fy, fw - 2, 1}, line, fg, bg)
-	s.put(fx + fw - 1, fy, top_r, fg, bg, attr)
-	s.put(fx, fy + 1, edge, fg, bg, attr)
-	s.put(fx + fw - 1, fy + 1, edge, fg, bg, attr)
-	icon := entry_glyph(&e)
-	s.put(fx + fw / 2, fy + 1, icon, if sel { fg } else { entry_color(&e, theme_of(p)) }, bg, attr)
-	s.put(fx, fy + 2, low_l, fg, bg, attr)
-	s.fill(vtk.Rect{fx + 1, fy + 2, fw - 2, 1}, line, fg, bg)
-	s.put(fx + fw - 1, fy + 2, low_r, fg, bg, attr)
-	name := clip_text(e.name, tile.w - 1, ellipsis(s))
-	name_x := tile.x + vtk.max(0, (tile.w - vtk.text_width(name)) / 2)
-	s.text(name_x, fy + 3, name, fg, bg, attr)
-}
-
-fn (p &Pane) column_layout() (int, int) {
-	width := p.canvas.rect().w
-	if p.cols.len == 0 { return 0, vtk.max(1, width) }
-	fit := vtk.max(1, width / column_min)
-	first := vtk.max(0, p.cols.len - fit)
-	shown := p.cols.len - first
-	return first, vtk.max(1, width / vtk.max(1, shown))
-}
-
-fn (p &Pane) paint_columns(mut s vtk.Screen, r vtk.Rect, t vtk.Theme) {
-	if p.cols.len == 0 { return }
-	first, cw := p.column_layout()
-	has_focus := focused(p.canvas, p)
-	arrow := if p.descending { '▾' } else { '▴' }
-	for i := first; i < p.cols.len; i++ {
-		col := p.cols[i]
-		entries := p.column_entries(i)
-		x := r.x + (i - first) * cw
-		last := i == p.cols.len - 1
-		w := if last { r.x + r.w - x } else { cw - 1 }
-		if w < 4 { continue }
-		cursor := if last { p.cursor } else { col.cursor }
-		rows := vtk.max(1, r.h - 1)
-		top := if last { p.top } else { vtk.max(0, cursor - rows + 1) }
-		s.fill(vtk.Rect{x, r.y, w, 1}, ` `, t.accent, t.bg)
-		s.text(x, r.y, clip_text(' ${os.base(col.path)} ' + arrow, w, ellipsis(s)), t.accent,
-			t.bg, vtk.bold)
-		for row in 0 .. rows {
-			index := top + row
-			if index >= entries.len { break }
-			e := entries[index]
-			y := r.y + 1 + row
-			sel := if last { p.selected[e.path] } else { index == col.cursor }
-			drag := p.shared.drag
-			drop := drag.active && drag.target == p.id && drag.target_col == i && drag.target_row == index
-			fg := if sel || drop {
-				if has_focus || drop { t.focus_fg } else { t.sel_fg }
-			} else if e.dir {
-				t.accent
-			} else {
-				t.fg
-			}
-			bg := if drop {
-				t.sel_bg
-			} else if sel && !last {
-				t.sel_bg
-			} else if sel {
-				if has_focus { t.focus_bg } else { t.sel_bg }
-			} else {
-				t.bg
-			}
-			attr := if e.dir { vtk.bold } else { 0 }
-			s.fill(vtk.Rect{x, y, w, 1}, ` `, fg, bg)
-			s.put(x, y, entry_glyph(&e), if sel || drop { fg } else { entry_color(&e, t) }, bg, 0)
-			if index == cursor { s.text(x + 1, y, '▸', fg, bg, 0) }
-			s.text(x + 2, y, clip_text(e.name, w - 3, ellipsis(s)), fg, bg, attr)
-		}
-		if !last {
-			s.fill(vtk.Rect{x + w, r.y, 1, r.h}, `│`, t.dim, t.bg)
-		}
-	}
-}
-
-fn (p &Pane) paint_scrollbar(mut s vtk.Screen, r vtk.Rect, t vtk.Theme, visible int, total int, top int) {
-	if total <= visible || r.w < 3 || r.h < 3 { return }
-	height := r.h
-	thumb := vtk.max(1, height * visible / vtk.max(1, total))
-	at := if total > visible { top * (height - thumb) / vtk.max(1, total - visible) } else { 0 }
-	s.fill(vtk.Rect{r.x + r.w - 1, r.y, 1, height}, `░`, t.dim, t.bg)
-	s.fill(vtk.Rect{r.x + r.w - 1, r.y + at, 1, thumb}, `█`, t.frame, t.bg)
-}
-
-// ---------------------------------------------------------------------------
-// Overlay: the floating drag ghost
-// ---------------------------------------------------------------------------
-
-fn drag_label(drag Drag, ascii bool) string {
-	noun := if drag.paths.len == 1 { '1 item' } else { '${drag.paths.len} items' }
-	arrow := if ascii { '>' } else { '→' }
-	if drag.target < 0 || drag.target_dir == '' {
-		return '${noun} · drop on a folder'
-	}
-	if !drag.valid {
-		return '${noun} · cannot drop here'
-	}
-	verb := if drag.copy { 'Copy' } else { 'Move' }
-	return '${verb} ${noun} ${arrow} ${os.base(drag.target_dir)}'
-}
-
-fn ghost_rect(x int, y int, width int, height int) vtk.Rect {
-	w := vtk.clamp(width, 8, vtk.max(8, width))
-	return vtk.Rect{vtk.clamp(x + 2, 0, vtk.max(0, width - 12)), vtk.clamp(y - 1, 1, vtk.max(1, height - 5)), w, 3}
-}
-
-fn draw_overlay(mut app vtk.App, mut s vtk.Screen) {
-	mut shared := ?&Shared(none)
-	for w in app.window_list() {
-		if !files_window(w) { continue }
-		if p := pane_from(w) {
-			shared = p.shared
-			break
-		}
-	}
-	sh := shared or { return }
-	drag := sh.drag
-	if !drag.active { return }
-	t := app.theme
-	width, height := app.size()
-	label := drag_label(drag, s.ascii)
-	w := vtk.min(vtk.max(14, vtk.text_width(label) + 8), vtk.max(8, width - 4))
-	mut card := ghost_rect(drag.x, drag.y, width, height)
-	card.w = w
-	card.x = vtk.clamp(card.x, 0, vtk.max(0, width - w - 1))
-	mut back := vtk.Rect{card.x + 1, card.y - 1, card.w, card.h}
-	if back.y < 0 { back.y = 0 }
-	frame := if drag.target_dir != '' && drag.valid { t.accent } else { vtk.red }
-	s.fill(vtk.Rect{card.x + 2, card.y + 1, card.w, card.h}, ` `, vtk.black, vtk.black)
-	s.fill(back, ` `, t.menu_fg, t.menu_bg)
-	s.frame(back, false, t.dim, t.menu_bg)
-	s.fill(card, ` `, t.menu_fg, t.menu_bg)
-	s.frame(card, true, frame, t.menu_bg)
-	s.text(card.x + 2, card.y + 1, if drag.copy {
-		'+'
-	} else if s.ascii {
-		'>'
-	} else {
-		'▸'
-	},
-		frame, t.menu_bg, vtk.bold)
-	s.text(card.x + 4, card.y + 1, clip_text(label, card.w - 5, ellipsis(&s)), t.menu_fg,
-		t.menu_bg, vtk.bold)
-}
-
-// ---------------------------------------------------------------------------
-// Drag and drop
-// ---------------------------------------------------------------------------
-
-// files_owned reports whether a control lives in a Files window.
-fn files_owned(c &vtk.Ctl) bool {
-	if c.kind == .window { return files_window(c) }
-	parent := c.parent_ctl() or { return false }
-	return files_owned(parent)
-}
-
-fn pane_at_ctl(c &vtk.Ctl) ?&Pane {
-	if !files_owned(c) { return none }
-	if c.kind == .canvas {
-		if p := pane_from(c) { return p }
-	}
-	parent := c.parent_ctl() or { return none }
-	return pane_at_ctl(parent)
-}
-
-fn pane_under(mut app vtk.App, x int, y int) ?&Pane {
-	windows := app.window_list()
-	for i := windows.len - 1; i >= 0; i-- {
-		w := windows[i]
-		if w.is_closed() || w.is_minimized() || !w.rect().contains(x, y) { continue }
-		if c := w.hit(x, y) { return pane_at_ctl(c) }
-	}
-	return none
-}
-
-fn hit_entry(p &Pane, x int, y int) (int, int) {
-	if x < 0 || y < 0 { return -1, -1 }
-	match p.view {
-		.list {
-			if y < header_rows { return -1, -1 }
-			index := p.top + y - header_rows
-			if index >= p.entries.len { return -1, -1 }
-			return -1, index
-		}
-		.icons {
-			cols := p.icon_cols()
-			start := (p.top / cols) * cols
-			index := start + (y / tile_height) * cols + x / tile_width
-			if index >= p.entries.len { return -1, -1 }
-			return -1, index
-		}
-		.columns {
-			first, cw := p.column_layout()
-			column := first + x / cw
-			if column >= p.cols.len { return -1, -1 }
-			if y < 1 { return -1, -1 }
-			col := p.cols[column]
-			rows := vtk.max(1, p.canvas.rect().h - 1)
-			top := if column == p.cols.len - 1 { p.top } else { vtk.max(0, col.cursor - rows + 1) }
-			index := top + y - 1
-			if index >= p.column_entries(column).len { return -1, -1 }
-			return column, index
-		}
-	}
-}
-
-fn entry_at(p &Pane, column int, row int) ?Entry {
-	if column >= p.cols.len { return none }
-	entries := if column < 0 { p.entries } else { p.column_entries(column) }
-	if row < 0 || row >= entries.len { return none }
-	return entries[row]
-}
-
-fn update_drag(mut app vtk.App, mut p Pane, e vtk.Event) {
-	mut sh := p.shared
-	sh.drag.x = e.x
-	sh.drag.y = e.y
-	sh.drag.copy = e.ctrl
-	app.invalidate_area(vtk.Rect{e.x - 2, e.y - 4, 70, 10})
-	mut pane_id := -1
-	mut dir := ''
-	mut column := -1
-	mut row := -1
-	if over := pane_under(mut app, e.x, e.y) {
-		pane_id = over.id
-		area := over.canvas.rect()
-		col, index := hit_entry(over, e.x - area.x, e.y - area.y)
-		if found := entry_at(over, col, index) {
-			if found.dir {
-				dir = found.path
-				column = col
-				row = index
-			} else {
-				dir = if col >= 0 && col < over.cols.len { over.cols[col].path } else { over.path }
-			}
-		} else {
-			dir = if col >= 0 && col < over.cols.len { over.cols[col].path } else { over.path }
-		}
-	}
-	old_pane := sh.drag.target
-	sh.drag.target = pane_id
-	sh.drag.target_dir = dir
-	sh.drag.target_col = column
-	sh.drag.target_row = row
-	sh.drag.valid = drop_allowed(sh.drag.paths, dir, sh.drag.copy)
-	for other in sh.panes {
-		if other.id == old_pane || other.id == pane_id { other.canvas.invalidate_paint() }
-	}
-	app.invalidate_area(vtk.Rect{e.x - 2, e.y - 4, 70, 10})
-}
-
-fn begin_drag(mut app vtk.App, mut p Pane, e vtk.Event) {
-	mut paths := []string{}
-	for entry in p.chosen() { paths << entry.path }
-	if paths.len == 0 { return }
-	p.pressing = false
-	p.shared.drag = Drag{
-		active: true
-		origin: p.id
-		paths:  paths
-		x:      e.x
-		y:      e.y
-	}
-	update_drag(mut app, mut p, e)
-	app.invalidate()
-}
-
-fn cancel_drag(mut app vtk.App, mut p Pane) {
-	mut sh := p.shared
-	if !sh.drag.active { return }
-	old := sh.drag
-	sh.drag = Drag{}
-	for other in sh.panes {
-		if other.id == old.origin || other.id == old.target { other.canvas.invalidate_paint() }
-	}
-	app.invalidate_area(vtk.Rect{old.x - 2, old.y - 4, 70, 10})
-}
-
-fn finish_drag(mut app vtk.App, mut p Pane, e vtk.Event) {
-	update_drag(mut app, mut p, e)
-	drag := p.shared.drag
-	for other in p.shared.panes {
-		if other.id == drag.origin || other.id == drag.target { other.canvas.invalidate_paint() }
-	}
-	app.invalidate_area(vtk.Rect{drag.x - 2, drag.y - 4, 70, 10})
-	if drag.target < 0 || !drag.valid {
-		p.shared.drag = Drag{}
-		return
-	}
-	transfer(mut app, mut p, drag.paths, drag.target_dir, drag.copy)
-	p.shared.drag = Drag{}
-}
-
-fn transfer(mut app vtk.App, mut p Pane, paths []string, dest string, copy bool) {
-	sh := p.shared
-	mut moved := 0
-	mut failures := []string{}
-	for path in paths {
-		target := unique_target(path, dest)
-		if copy {
-			os.cp_all(path, target, false) or {
-				failures << '${os.base(path)}: ${err.msg()}'
-				continue
-			}
-		} else {
-			os.mv(path, target, overwrite: false) or {
-				failures << '${os.base(path)}: ${err.msg()}'
-				continue
-			}
-		}
-		moved++
-	}
-	for other in sh.panes {
-		if other.path == dest || paths.any(os.dir(it) == other.path) { other.refresh() }
-	}
-	if failures.len > 0 {
-		app.notify(failures[0], 4000)
-	}
-	if moved > 0 {
-		verb := if copy { 'Copied' } else { 'Moved' }
-		noun := if moved == 1 { '1 item' } else { '${moved} items' }
-		app.notify('${verb} ${noun} to ${os.base(dest)}', 2500)
-	}
-	p.update_status()
-}
-
-// ---------------------------------------------------------------------------
 // Mouse
 // ---------------------------------------------------------------------------
 
@@ -1230,54 +349,6 @@ fn (mut p Pane) press(x int, y int, e vtk.Event, mut app vtk.App) {
 		p.cursor_path = entry.path
 	}
 	p.ensure_visible()
-	p.update_status()
-	p.canvas.invalidate_paint()
-}
-
-fn (mut p Pane) drag_motion(x int, y int, e vtk.Event, mut app vtk.App) {
-	dx := e.x - p.press_x
-	dy := e.y - p.press_y
-	if p.press_empty {
-		if dx * dx + dy * dy < 4 { return }
-		p.marquee = true
-		p.marquee_select(x, y)
-		return
-	}
-	if !p.marquee && dx * dx + dy * dy >= 4 {
-		begin_drag(mut app, mut p, e)
-	}
-}
-
-fn (mut p Pane) marquee_select(x int, y int) {
-	area := p.canvas.rect()
-	lo_x := vtk.min(p.press_x - area.x, x)
-	lo_y := vtk.min(p.press_y - area.y, y)
-	hi_x := vtk.max(p.press_x - area.x, x)
-	hi_y := vtk.max(p.press_y - area.y, y)
-	p.mq_x, p.mq_y, p.mq_x2, p.mq_y2 = lo_x, lo_y, hi_x, hi_y
-	p.selected = map[string]bool{}
-	match p.view {
-		.icons {
-			cols := p.icon_cols()
-			start := (p.top / cols) * cols
-			for index, entry in p.entries {
-				slot := index - start
-				if slot < 0 { continue }
-				tx := (slot % cols) * tile_width
-				ty := (slot / cols) * tile_height
-				if tx + tile_width > lo_x && tx <= hi_x && ty + tile_height > lo_y && ty <= hi_y {
-					p.selected[entry.path] = true
-				}
-			}
-		}
-		.list {
-			for index, entry in p.entries {
-				row_y := index - p.top + header_rows
-				if row_y >= lo_y && row_y <= hi_y { p.selected[entry.path] = true }
-			}
-		}
-		.columns {}
-	}
 	p.update_status()
 	p.canvas.invalidate_paint()
 }
@@ -1391,14 +462,6 @@ fn (mut p Pane) new_folder(mut app vtk.App) {
 	}
 	p.cursor_path = path
 	p.refresh()
-}
-
-// import_text copies paths pasted or dropped from the host into the pane.
-fn (mut p Pane) import_text(mut app vtk.App, text string) bool {
-	paths := paste_paths(text)
-	if paths.len == 0 { return false }
-	transfer(mut app, mut p, paths, p.path, true)
-	return true
 }
 
 // ---------------------------------------------------------------------------
@@ -1741,7 +804,7 @@ fn window_destroyed(mut c vtk.Ctl, mut _ vtk.App) {
 
 fn next_id(sh &Shared) int {
 	mut highest := -1
-	for p in sh.panes { highest = vtk.max(highest, p.id) }
+	for p in sh.panes { highest = math.max(highest, p.id) }
 	return highest + 1
 }
 
@@ -1865,26 +928,20 @@ pub fn run() {
 	app.ctrl_c = .callback
 	app.ctrl_c_handler = copy_focused_selection
 	app.native_clipboard = true
-	mut rest := os.args[1..].filter(!it.starts_with('--'))
-	start := if rest.len > 0 { rest[0] } else { os.home_dir() }
+	args := os.args[1..].filter(!it.starts_with('--'))
+	start := if args.len > 0 { args[0] } else { os.home_dir() }
 	snapshot := '--snapshot' in os.args
-	if snapshot {
-		app.dispatch(vtk.Event{ kind: .resize, width: 100, height: 30 })
-	} else {
-		app.init() or {
-			eprintln(err)
-			return
+	launch_cli := fn [start, snapshot] (mut app vtk.App) {
+		mut pane := new_files_window(mut app, shared_for(mut app), start)
+		if '--icons' in os.args { set_view(mut pane, .icons) }
+		if '--columns' in os.args { set_view(mut pane, .columns) }
+		if !snapshot {
+			app.notify('Ctrl-N opens another Files window. Drag with the mouse; Ctrl copies, Shift moves. Pasting file paths imports them.', 7000)
 		}
 	}
-	defer { app.fini() }
-	mut pane := new_files_window(mut app, shared_for(mut app), start)
-	if '--icons' in os.args { set_view(mut pane, .icons) }
-	if '--columns' in os.args { set_view(mut pane, .columns) }
 	if snapshot {
-		app.redraw()
-		println(app.snapshot())
+		common.snapshot(mut app, 100, 30, launch_cli)
 		return
 	}
-	app.notify('Ctrl-N opens another Files window. Drag with the mouse; Ctrl copies, Shift moves. Pasting file paths imports them.', 7000)
-	app.run() or { eprintln(err) }
+	common.run(mut app, launch_cli)
 }

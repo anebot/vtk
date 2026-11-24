@@ -1,5 +1,7 @@
 module vtk
 
+import math { max, min }
+
 // Keep the last user-arranged geometry separately from the applied geometry.
 // Reusing it avoids rounding drift and restores windows after a tiny terminal.
 struct WindowLayout {

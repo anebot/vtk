@@ -1,6 +1,7 @@
 module vtk
 
 import encoding.utf8
+import math { max, min }
 
 pub enum TextWrapMode {
 	none

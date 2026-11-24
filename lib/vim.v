@@ -1,5 +1,7 @@
 module vtk
 
+import math { max, min }
+
 pub enum VimMode {
 	normal
 	insert

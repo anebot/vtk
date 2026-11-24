@@ -26,6 +26,7 @@ fn test_transition_preferences() {
 	assert parse_prefs('transition = 0') == SlideTransition.none
 	assert parse_prefs('# Slides preferences\n\ntransition = 1') == SlideTransition.slide
 	assert parse_prefs('transition = 2') == SlideTransition.fade
+	assert parse_prefs('transition = 1\ntransition = 2') == SlideTransition.slide
 	for value in ['', '3', '-1', '99', '2fade', '4294967298'] {
 		assert parse_prefs('transition = ${value}') == SlideTransition.none
 	}

@@ -1,5 +1,7 @@
 module vtk
 
+import math { max, min }
+
 fn (r Rect) intersection(q Rect) Rect {
 	x, y := max(r.x, q.x), max(r.y, q.y)
 	return Rect{x, y, max(0, min(r.x + r.w, q.x + q.w) - x), max(0, min(r.y + r.h, q.y + q.h) - y)}

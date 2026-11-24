@@ -1,5 +1,6 @@
 module vtk
 
+import math { min }
 import time
 
 fn (c &Ctl) sources_changed() {

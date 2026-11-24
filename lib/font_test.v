@@ -1,17 +1,9 @@
 module vtk
 
-fn test_font_styles_lists_every_style() {
-	mut seen := map[string]bool{}
-	for style in font_styles {
-		assert !seen[style.str()]
-		seen[style.str()] = true
-		// Every listed style must survive a convert round trip through a name.
-		assert font_style_from_name(style.str()) or { panic('missing name') } == style
-	}
-	assert font_styles.len == 18
-}
-
 fn test_font_styles_and_names() {
+	$for member in FontStyle.values {
+		assert font_style_from_name(member.name) or { panic('missing name') } == member.value
+	}
 	assert font_style_from_name('SaNsSeRiBbOlD') or { panic('alias') } == FontStyle.sansserifbold
 	assert font_style_from_name('missing') == none
 	assert font_convert('Abz 09 é🙂', .bold) == '𝐀𝐛𝐳 𝟎𝟗 é🙂'
@@ -27,10 +19,10 @@ fn test_font_styles_and_names() {
 
 fn test_font_translation() {
 	original := 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789 é🙂'
-	for style in [FontStyle.bold, .italic, .script, .doublestruck, .underline, .strikethrough, .fraktur, .bolditalic, .sansserif, .sansserifitalic, .monospace, .boldscript, .boldfraktur, .sansserifbold, .sansserifbolditalic, .openface, .smallcaps] {
-		styled := font_convert(original, style)
-		assert font_translate(styled, style, .none) == original
-		assert font_translate(styled, style, .bold) == font_convert(original, .bold)
+	$for member in FontStyle.values {
+		styled := font_convert(original, member.value)
+		assert font_translate(styled, member.value, .none) == original
+		assert font_translate(styled, member.value, .bold) == font_convert(original, .bold)
 	}
 }
 

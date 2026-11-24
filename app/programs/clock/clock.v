@@ -5,6 +5,7 @@ import math
 import os
 import time
 import vtk
+import vtk.app.programs.common
 
 const app_name = 'VtkClock'
 const app_version = '0.1.0'
@@ -274,23 +275,10 @@ pub fn open_or_raise(mut app vtk.App) {
 
 pub fn run() {
 	mut app := vtk.new_app()
-	app.ctrl_c = .quit
-	snapshot := '--snapshot' in os.args
-	if snapshot {
+	if '--snapshot' in os.args {
 		app.desktop = false
-		app.dispatch(vtk.Event{ kind: .resize, width: 64, height: 24 })
-	} else {
-		app.init() or {
-			eprintln(err)
-			return
-		}
-	}
-	defer { app.fini() }
-	launch(mut app)
-	if snapshot {
-		app.redraw()
-		println(app.snapshot())
+		common.snapshot(mut app, 64, 24, launch)
 		return
 	}
-	app.run() or { eprintln(err) }
+	common.run(mut app, launch)
 }

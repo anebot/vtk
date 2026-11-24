@@ -1,6 +1,7 @@
 module vtk
 
 import encoding.utf8
+import math
 import vtk.render
 
 pub type Cell = render.Cell
@@ -25,7 +26,7 @@ mut:
 }
 
 pub fn (mut s Screen) resize(width int, height int) {
-	w, h := max(1, width), max(1, height)
+	w, h := math.max(1, width), math.max(1, height)
 	if s.width == w && s.height == h && s.cells.len > 0 { return }
 	s.width = w
 	s.height = h
@@ -50,8 +51,8 @@ pub fn (mut s Screen) set_cursor(x int, y int, shape CursorShape) bool {
 
 pub fn (mut s Screen) set_clip(r Rect) Rect {
 	old := s.clip
-	x, y := max(old.x, r.x), max(old.y, r.y)
-	s.clip = Rect{x, y, max(0, min(old.x + old.w, r.x + r.w) - x), max(0, min(old.y + old.h, r.y + r.h) - y)}
+	x, y := math.max(old.x, r.x), math.max(old.y, r.y)
+	s.clip = Rect{x, y, math.max(0, math.min(old.x + old.w, r.x + r.w) - x), math.max(0, math.min(old.y + old.h, r.y + r.h) - y)}
 	return old
 }
 
@@ -185,7 +186,7 @@ pub fn (mut s Screen) text(x int, y int, text string, fg int, bg int, attr int) 
 			if r == `\n` || r == `\r` { break }
 			s.put(at, y, r, fg, bg, attr)
 			at++
-			i += max(1, n)
+			i += math.max(1, n)
 		}
 		return
 	}
@@ -202,7 +203,7 @@ fn (mut s Screen) aligned_text(x int, y int, width int, text string, align TextA
 	if width <= 0 { return }
 	line := text.all_before('\n').all_before('\r')
 	columns := if align == .left { 0 } else if s.ascii { line.runes().len } else { text_width(line) }
-	spare := max(0, width - columns)
+	spare := math.max(0, width - columns)
 	offset := match align {
 		.left { 0 }
 		.center { spare / 2 }
@@ -219,7 +220,7 @@ pub fn (mut s Screen) fill(r Rect, glyph rune, fg int, bg int) {
 	text := display_rune(if s.ascii { ascii_glyph(glyph) } else { glyph })
 	width := if s.ascii { 1 } else { rune_width(glyph) }
 	start, end := area.x, area.x + area.w
-	for y in max(s.paint_y, area.y) .. min(s.paint_end, area.y + area.h) {
+	for y in math.max(s.paint_y, area.y) .. math.min(s.paint_end, area.y + area.h) {
 		if width != 1 {
 			for x in start .. end { s.put_grapheme(x, y, text, width, fg, bg, 0) }
 			continue
@@ -255,7 +256,7 @@ pub fn (mut s Screen) frame(r Rect, double bool, fg int, bg int) {
 
 pub fn (mut s Screen) line(x1 int, y1 int, x2 int, y2 int, glyph rune, fg int, bg int) {
 	mut x, mut y := x1, y1
-	dx, dy := abs(x2 - x1), -abs(y2 - y1)
+	dx, dy := math.abs(x2 - x1), -math.abs(y2 - y1)
 	sx, sy := if x1 < x2 { 1 } else { -1 }, if y1 < y2 { 1 } else { -1 }
 	mut err := dx + dy
 	for {
@@ -298,8 +299,8 @@ fn (mut s Screen) present(options RenderOptions) string {
 
 fn (mut s Screen) mark(x int, end int, y int) {
 	old := s.damage[y]
-	s.damage[y] = render.Span{if old.end > 0 { min(x, old.start) } else { x }, max(end, old.end)}
-	s.damage_first, s.damage_end = min(y, s.damage_first), max(y + 1, s.damage_end)
+	s.damage[y] = render.Span{if old.end > 0 { math.min(x, old.start) } else { x }, math.max(end, old.end)}
+	s.damage_first, s.damage_end = math.min(y, s.damage_first), math.max(y + 1, s.damage_end)
 }
 
 pub fn (s &Screen) snapshot() string { return render.snapshot(s.cells, s.width) }
@@ -310,10 +311,10 @@ fn boundary(text string, offset int) int {
 	return at
 }
 
-fn prev_char(text string, offset int) int { return boundary(text, max(0, offset - 1)) }
+fn prev_char(text string, offset int) int { return boundary(text, math.max(0, offset - 1)) }
 
 fn next_char(text string, offset int) int {
 	if offset >= text.len { return text.len }
-	_, n := utf8.decode_rune_at(text, max(0, offset))
-	return min(text.len, offset + max(1, n))
+	_, n := utf8.decode_rune_at(text, math.max(0, offset))
+	return math.min(text.len, offset + math.max(1, n))
 }

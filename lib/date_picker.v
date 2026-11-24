@@ -1,5 +1,6 @@
 module vtk
 
+import math { max }
 import time
 
 // date_picker selects a Gregorian date. Time of day and timezone are ignored;

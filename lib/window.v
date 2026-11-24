@@ -1,5 +1,7 @@
 module vtk
 
+import math { max, min }
+
 const minimum_window_width = 16
 const minimum_window_height = 3
 

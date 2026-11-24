@@ -111,7 +111,7 @@ fn chart_number(value f64) string {
 
 fn (c &Chart) category_count() int {
 	mut count := c.labels.len
-	for series in c.series { count = max(count, series.values.len) }
+	for series in c.series { count = math.max(count, series.values.len) }
 	return count
 }
 
@@ -163,23 +163,23 @@ fn (mut app App) draw_chart(c &Ctl, inherited_fg int, inherited_bg int) {
 	count := plot_data.category_count()
 	mut gutter := 1
 	if plot_data.kind == .bars {
-		for i in 0 .. count { gutter = max(gutter, text_width(plot_data.category_label(i))) }
+		for i in 0 .. count { gutter = math.max(gutter, text_width(plot_data.category_label(i))) }
 	} else {
 		for i in 0 .. clamp(plot_data.y_axis.ticks, 2, 20) {
-			gutter = max(gutter, text_width(chart_number(range.tick(f64(i) / (clamp(plot_data.y_axis.ticks, 2, 20) - 1)))))
+			gutter = math.max(gutter, text_width(chart_number(range.tick(f64(i) / (clamp(plot_data.y_axis.ticks, 2, 20) - 1)))))
 		}
 	}
-	gutter = min(gutter, c.w / 3)
+	gutter = math.min(gutter, c.w / 3)
 	plot := Rect{c.x + gutter + 1, top, c.w - gutter - 1, bottom - top - 2}
 	if plot.w < 2 || plot.h < 2 { return }
 	s.fill(Rect{plot.x - 1, plot.y, 1, plot.h + 1}, `│`, axis_color, bg)
 	s.fill(Rect{plot.x - 1, plot.y + plot.h, plot.w + 1, 1}, `─`, axis_color, bg)
 	s.put(plot.x - 1, plot.y + plot.h, `└`, axis_color, bg, 0)
 	axis := plot_data.numeric_axis()
-	mut ticks := min(clamp(axis.ticks, 2, 20), plot.h)
+	mut ticks := math.min(clamp(axis.ticks, 2, 20), plot.h)
 	if plot_data.kind == .bars {
-		label_width := max(text_width(chart_number(range.minimum)), text_width(chart_number(range.maximum)))
-		ticks = min(clamp(axis.ticks, 2, 20), max(2, plot.w / (label_width + 2)))
+		label_width := math.max(text_width(chart_number(range.minimum)), text_width(chart_number(range.maximum)))
+		ticks = math.min(clamp(axis.ticks, 2, 20), math.max(2, plot.w / (label_width + 2)))
 	}
 	for i in 0 .. ticks {
 		fraction := f64(i) / (ticks - 1)
@@ -228,11 +228,11 @@ fn (mut app App) draw_chart(c &Ctl, inherited_fg int, inherited_bg int) {
 			if plot_data.kind == .bars {
 				base := plot.x + int(math.round(zero * (plot.w - 1)))
 				x := plot.x + int(math.round(fraction * (plot.w - 1)))
-				s.fill(Rect{min(base, x) + int(x > base), plot.y + a, abs(x - base), b - a}, `█`, color, bg)
+				s.fill(Rect{math.min(base, x) + int(x > base), plot.y + a, math.abs(x - base), b - a}, `█`, color, bg)
 			} else {
 				base := plot.y + plot.h - 1 - int(math.round(zero * (plot.h - 1)))
 				y := plot.y + plot.h - 1 - int(math.round(fraction * (plot.h - 1)))
-				s.fill(Rect{plot.x + a, min(base, y) + int(y > base), b - a, abs(y - base)}, `█`, color, bg)
+				s.fill(Rect{plot.x + a, math.min(base, y) + int(y > base), b - a, math.abs(y - base)}, `█`, color, bg)
 			}
 		}
 	}
@@ -245,7 +245,7 @@ fn (mut app App) draw_chart(c &Ctl, inherited_fg int, inherited_bg int) {
 		} else {
 			start, end := i * plot.w / count, (i + 1) * plot.w / count
 			tick_text := plot_data.category_label(i)
-			x := max(plot.x, plot.x + (start + end - 1 - text_width(tick_text)) / 2)
+			x := math.max(plot.x, plot.x + (start + end - 1 - text_width(tick_text)) / 2)
 			if end > start && x >= label_end {
 				s.aligned_text(x, plot.y + plot.h + 1, plot.x + plot.w - x, tick_text, .left, fg, bg, 0)
 				label_end = x + text_width(tick_text) + 1

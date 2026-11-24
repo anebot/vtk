@@ -1,6 +1,7 @@
 module vtk
 
 import encoding.utf8
+import math { max }
 import time
 
 // Special keys are above the Unicode range so typing Ć cannot mean Up.

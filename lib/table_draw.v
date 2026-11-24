@@ -1,5 +1,7 @@
 module vtk
 
+import math { max, min }
+
 fn (c &Ctl) table_gutter() int {
 	return if c.table.row_numbers || c.table.reorderable_rows { max(3, max(0, c.row_count).str().len + 2) } else { 0 }
 }

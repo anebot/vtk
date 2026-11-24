@@ -1,5 +1,7 @@
 module vtk
 
+import math { max }
+
 // Insets are terminal cells: columns horizontally and rows vertically.
 pub struct Insets {
 pub mut:

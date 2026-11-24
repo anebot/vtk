@@ -1,5 +1,7 @@
 module paint
 
+import io.util
+import os
 import vtk
 
 fn test_paint_windows_follow_desktop_cascade() {
@@ -9,6 +11,23 @@ fn test_paint_windows_follow_desktop_cascade() {
 	first := new_drawing(mut app)
 	second := new_drawing(mut app)
 	assert second.window.rect().y > first.window.rect().y
+}
+
+fn test_save_preserves_trailing_space_in_drawing_path() ! {
+	$if !windows {
+		directory := util.temp_dir(pattern: 'vtk-paint-save-')!
+		defer { os.rmdir_all(directory) or {} }
+		path := os.join_path(directory, 'drawing.vtkdraw ')
+		os.write_file(path, 'original')!
+		mut app := vtk.new_app()
+		defer { app.fini() }
+		mut drawing := new_drawing(mut app)
+		drawing.path = path
+		assert save(mut drawing, false, mut app)
+		assert drawing.path == path
+		assert os.read_file(path)! == encode_drawing(drawing.strokes)
+		assert !os.exists(path.trim_space())
+	}
 }
 
 fn test_undo_redo_preserve_points_and_new_stroke_discards_redo() {

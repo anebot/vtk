@@ -1,6 +1,7 @@
 module vtk
 
 import encoding.utf8
+import math
 import os
 
 // Terminal is an incremental xterm subset, independent of the PTY transport.
@@ -76,11 +77,11 @@ pub fn (mut app App) terminal_window(options TerminalOptions) !&Ctl {
 }
 
 pub fn (mut t Terminal) resize(cols int, rows int) {
-	w, h := max(2, cols), max(1, rows)
+	w, h := math.max(2, cols), math.max(1, rows)
 	if w == t.cols && h == t.rows { return }
 	mut cells := []Cell{len: w * h}
-	for y in 0 .. min(h, t.rows) {
-		for x in 0 .. min(w, t.cols) { cells[y * w + x] = t.cells[y * t.cols + x] }
+	for y in 0 .. math.min(h, t.rows) {
+		for x in 0 .. math.min(w, t.cols) { cells[y * w + x] = t.cells[y * t.cols + x] }
 	}
 	t.cols = w
 	t.rows = h
@@ -113,7 +114,7 @@ fn (mut t Terminal) clear_range(row int, from int, to int) {
 fn (mut t Terminal) scroll_region(lines int) {
 	if lines == 0 { return }
 	t.damage_rows(t.top, t.bottom + 1)
-	n := min(abs(lines), t.bottom - t.top + 1)
+	n := math.min(math.abs(lines), t.bottom - t.top + 1)
 	if lines > 0 {
 		for y in t.top .. t.bottom + 1 - n {
 			for x in 0 .. t.cols { t.cells[y * t.cols + x] = t.cells[(y + n) * t.cols + x] }
@@ -128,14 +129,14 @@ fn (mut t Terminal) scroll_region(lines int) {
 }
 
 fn (mut t Terminal) newline() {
-	if t.cy == t.bottom { t.scroll_region(1) } else { t.cy = min(t.rows - 1, t.cy + 1) }
+	if t.cy == t.bottom { t.scroll_region(1) } else { t.cy = math.min(t.rows - 1, t.cy + 1) }
 }
 
 fn (mut t Terminal) put(r rune) {
 	// ACP/PTY output can split a selector, modifier or ZWJ sequence between
 	// reads. Upgrade the previous cell in place instead of advancing again.
 	if r >= 0x80 && t.cx > 0 {
-		mut at := t.cy * t.cols + min(t.cols - 1, t.cx - 1)
+		mut at := t.cy * t.cols + math.min(t.cols - 1, t.cx - 1)
 		if t.cells[at].continuation && at % t.cols > 0 { at-- }
 		previous := t.cells[at]
 		joined := previous.glyph + r.str()
@@ -143,7 +144,7 @@ fn (mut t Terminal) put(r rune) {
 			width := grapheme_width(joined)
 			old_width := if at % t.cols + 1 < t.cols && t.cells[at + 1].continuation { 2 } else { 1 }
 			column := at % t.cols
-			t.clear_range(t.cy, column, column + max(width, old_width))
+			t.clear_range(t.cy, column, column + math.max(width, old_width))
 			if column + width > t.cols {
 				t.cx = 0
 				t.newline()
@@ -159,7 +160,7 @@ fn (mut t Terminal) put(r rune) {
 	w := rune_width(r)
 	if w == 0 {
 		if t.cx > 0 {
-			mut at := t.cy * t.cols + min(t.cols - 1, t.cx - 1)
+			mut at := t.cy * t.cols + math.min(t.cols - 1, t.cx - 1)
 			if t.cells[at].continuation && at > 0 { at-- }
 			t.cells[at].glyph += r.str()
 			t.damage_rows(t.cy, t.cy + 1)
@@ -180,8 +181,8 @@ fn (mut t Terminal) put(r rune) {
 }
 
 fn (mut t Terminal) damage_rows(top int, end int) {
-	t.damage_top = if t.damage_end > 0 { min(t.damage_top, top) } else { top }
-	t.damage_end = max(t.damage_end, end)
+	t.damage_top = if t.damage_end > 0 { math.min(t.damage_top, top) } else { top }
+	t.damage_end = math.max(t.damage_end, end)
 }
 
 pub fn (mut t Terminal) feed(bytes string) {
@@ -205,8 +206,8 @@ pub fn (mut t Terminal) feed(bytes string) {
 					match byte {
 						10, 11, 12 { t.newline() }
 						13 { t.cx = 0 }
-						8 { t.cx = max(0, t.cx - 1) }
-						9 { t.cx = min(t.cols - 1, (t.cx / 8 + 1) * 8) }
+						8 { t.cx = math.max(0, t.cx - 1) }
+						9 { t.cx = math.min(t.cols - 1, (t.cx / 8 + 1) * 8) }
 						else {}
 					}
 					continue
@@ -243,7 +244,7 @@ pub fn (mut t Terminal) feed(bytes string) {
 						t.newline()
 					}
 					`M` {
-						if t.cy == t.top { t.scroll_region(-1) } else { t.cy = max(0, t.cy - 1) }
+						if t.cy == t.top { t.scroll_region(-1) } else { t.cy = math.max(0, t.cy - 1) }
 					}
 					`c` {
 						t.mouse_mode = 0
@@ -291,16 +292,16 @@ fn (mut t Terminal) csi(final u8) {
 	for part in seq.split(';') { p << part.int() }
 	n := param(p, 0, 1)
 	match final {
-		`A` { t.cy = max(0, t.cy - n) }
-		`B` { t.cy = min(t.rows - 1, t.cy + n) }
-		`C` { t.cx = min(t.cols - 1, t.cx + n) }
-		`D` { t.cx = max(0, t.cx - n) }
+		`A` { t.cy = math.max(0, t.cy - n) }
+		`B` { t.cy = math.min(t.rows - 1, t.cy + n) }
+		`C` { t.cx = math.min(t.cols - 1, t.cx + n) }
+		`D` { t.cx = math.max(0, t.cx - n) }
 		`E` {
-			t.cy = min(t.rows - 1, t.cy + n)
+			t.cy = math.min(t.rows - 1, t.cy + n)
 			t.cx = 0
 		}
 		`F` {
-			t.cy = max(0, t.cy - n)
+			t.cy = math.max(0, t.cy - n)
 			t.cx = 0
 		}
 		`G`, 96 { t.cx = clamp(n - 1, 0, t.cols - 1) }
@@ -329,7 +330,7 @@ fn (mut t Terminal) csi(final u8) {
 				t.clear_range(t.cy, t.cx, t.cols)
 			}
 		}
-		`X` { t.clear_range(t.cy, t.cx, min(t.cols, t.cx + n)) }
+		`X` { t.clear_range(t.cy, t.cx, math.min(t.cols, t.cx + n)) }
 		`m` { t.sgr(p) }
 		`r` {
 			top, bottom := clamp(n - 1, 0, t.rows - 1), clamp(param(p, 1, t.rows) - 1, 0, t.rows - 1)
@@ -359,7 +360,7 @@ fn (mut t Terminal) csi(final u8) {
 			}
 		}
 		`P`, `@` {
-			count := min(n, max(0, t.cols - t.cx))
+			count := math.min(n, math.max(0, t.cols - t.cx))
 			if final == `P` {
 				for x in t.cx .. t.cols - count {
 					t.cells[t.cy * t.cols + x] = t.cells[t.cy * t.cols + x + count]
@@ -558,7 +559,7 @@ fn (mut app App) pump_terminal(mut c Ctl) {
 	x, y, hidden := t.cx, t.cy, t.cursor_hidden
 	mut budget := 65536
 	for budget > 0 {
-		bytes := t.pty.read(min(16384, budget))
+		bytes := t.pty.read(math.min(16384, budget))
 		if bytes == '' { break }
 		t.feed(bytes)
 		budget -= bytes.len
@@ -592,10 +593,10 @@ fn (mut app App) close_terminals(mut c Ctl) {
 fn (mut app App) draw_terminal(mut c Ctl) {
 	mut term := c.term or { return }
 	term.resize(c.w, c.h)
-	first := max(0, max(app.screen.clip.y, app.screen.paint_y) - c.y)
-	end := min(min(c.h, term.rows), min(app.screen.clip.y + app.screen.clip.h, app.screen.paint_end) - c.y)
+	first := math.max(0, math.max(app.screen.clip.y, app.screen.paint_y) - c.y)
+	end := math.min(math.min(c.h, term.rows), math.min(app.screen.clip.y + app.screen.clip.h, app.screen.paint_end) - c.y)
 	for y in first .. end {
-		for x in 0 .. min(c.w, term.cols) {
+		for x in 0 .. math.min(c.w, term.cols) {
 			cell := term.cells[y * term.cols + x]
 			if !cell.continuation {
 				wide := x + 1 < term.cols && term.cells[y * term.cols + x + 1].continuation
@@ -611,7 +612,7 @@ fn (mut app App) draw_terminal(mut c Ctl) {
 
 fn (mut app App) update_terminal_cursor(c &Ctl) {
 	term := c.term or { return }
-	x, y := c.x + min(c.w - 1, term.cx), c.y + term.cy
+	x, y := c.x + math.min(c.w - 1, term.cx), c.y + term.cy
 	app.screen.cursor_x = -1
 	if c.disabled || term.exited || term.cursor_hidden || app.popups.len > 0
 		|| !same_ctl(c.owner_window(), app.top_window()) || !app.visible_paint_rect(c).contains(x, y) { return }

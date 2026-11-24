@@ -1,5 +1,7 @@
 module vtk
 
+import math { max }
+
 // Paragraph alignment mirrors htk's Pandoc fenced divs, so the same sources
 // render here and in HTML-aware Markdown readers.
 pub enum MarkdownAlign {

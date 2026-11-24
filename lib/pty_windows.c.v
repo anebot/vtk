@@ -1,5 +1,6 @@
 module vtk
 
+import math { max, min }
 import os
 
 #flag windows -D_WIN32_WINNT=0x0A00

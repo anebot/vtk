@@ -1,5 +1,7 @@
 module vtk
 
+import math { min }
+
 // A small, language-independent lexer. State lives only for one code block;
 // highlighting walks existing glyphs without allocating token arrays.
 struct CodeHighlighter {

@@ -3,6 +3,7 @@ module word
 
 import os
 import vtk
+import vtk.app.programs.common
 
 enum Cmd {
 	new_document
@@ -46,14 +47,6 @@ enum Cmd {
 	insert_table
 	choose_font
 	about
-}
-
-enum FindCmd {
-	prev
-	next
-	replace
-	replace_all
-	close
 }
 
 struct MenuEntry {
@@ -170,11 +163,9 @@ fn load_prefs() Prefs {
 	for line in text.split_into_lines() {
 		trim := line.trim_space()
 		if trim == '' || trim.starts_with('#') { continue }
-		parts := trim.split_nth('=', 2)
-		if parts.len != 2 { continue }
-		name := parts[0].trim_space()
-		value := parts[1].trim_space()
-		match name {
+		name, raw_value := trim.split_once('=') or { continue }
+		value := raw_value.trim_space()
+		match name.trim_space() {
 			'outline_hidden' { prefs.outline_hidden = value == '1' }
 			'toolbar_hidden' { prefs.toolbar_hidden = value == '1' }
 			'mode' { prefs.mode = markdown_mode_from_int(value.int()) }
@@ -186,7 +177,10 @@ fn load_prefs() Prefs {
 			'line_numbers' { prefs.line_numbers = value == '1' }
 			'ruler_top' { prefs.ruler_top = value == '1' }
 			'ruler_left' { prefs.ruler_left = value == '1' }
-			'page_width' { prefs.page_width = if value.int() > 0 { value.int() } else { 0 } }
+			'page_width' {
+				width := value.int()
+				prefs.page_width = if width > 0 { width } else { 0 }
+			}
 			else {}
 		}
 	}
@@ -219,9 +213,6 @@ const align_entries = [MenuEntry{'Left', .align_left}, MenuEntry{'Center', .alig
 	MenuEntry{'Right', .align_right}, MenuEntry{'Justify', .align_justify}]
 const app_name = 'VtkWord'
 const app_version = '0.1.0'
-const font_styles = [vtk.FontStyle.none, .bold, .italic, .script, .doublestruck, .underline,
-	.strikethrough, .fraktur, .bolditalic, .sansserif, .sansserifitalic, .monospace, .boldscript,
-	.boldfraktur, .sansserifbold, .sansserifbolditalic, .openface, .smallcaps]
 
 fn ticked(name string, on bool) string {
 	return if on { '✓ ${name}' } else { '  ${name}' }
@@ -274,9 +265,7 @@ fn save(mut doc Document, save_as bool, mut app vtk.App) bool {
 		path = app.prompt_for(doc.window, 'Save Markdown', 'File path:', path) or { return false }
 	}
 	if path == '' { return false }
-	if path != doc.path && os.exists(path) {
-		if !app.confirm_for(doc.window, 'Replace file', 'Replace ${path}?') { return false }
-	}
+	if path != doc.path && !common.confirm_replace(mut app, doc.window, path) { return false }
 	doc.view.end_edit_group()
 	vtk.save_atomic(path, doc.view.text) or {
 		app.notify(err.msg(), 3000)
@@ -292,9 +281,11 @@ fn save(mut doc Document, save_as bool, mut app vtk.App) bool {
 fn closing(mut w vtk.Ctl, mut app vtk.App) bool {
 	mut doc := w.context[Document]() or { return true }
 	if doc.view.text == doc.saved { return true }
-	choice := app.choice_for(w, 'Unsaved changes', ['Save', 'Discard', 'Cancel'], 3)
-	if choice == 0 { return save(mut doc, false, mut app) }
-	return choice == 1
+	return match common.ask_unsaved(mut app, w, 'Unsaved changes') {
+		.save { save(mut doc, false, mut app) }
+		.discard { true }
+		.cancel { false }
+	}
 }
 
 fn wrap(mut doc Document, prefix string, suffix string) {
@@ -339,214 +330,12 @@ fn table_prompt_cancel(mut c vtk.Ctl, mut app vtk.App) {
 	app.close(mut prompt.window)
 }
 
-@[heap]
-struct FindState {
-mut:
-	doc     &Document @[required]
-	window  &vtk.Ctl @[required]
-	query   &vtk.Ctl @[required]
-	replace &vtk.Ctl @[required]
-}
-
-fn find_hit(text string, query string, from int, forward bool) int {
-	start := vtk.clamp(from, 0, text.len)
-	if forward {
-		at := text[start..].index(query) or { -1 }
-		if at >= 0 { return start + at }
-		if start > 0 { return text[..start].index(query) or { -1 } }
-	} else {
-		if start > 0 {
-			at := text[..start].last_index(query) or { -1 }
-			if at >= 0 { return at }
-		}
-		if start < text.len {
-			at := text[start..].last_index(query) or { -1 }
-			if at >= 0 { return start + at }
-		}
-	}
-	return -1
-}
-
-fn find_step(mut state FindState, forward bool, quiet bool, mut app vtk.App) {
-	query := state.query.text
-	if query == '' {
-		app.notify('Enter text to find', 1500)
-		app.set_focus(state.query)
-		return
-	}
-	mut doc := state.doc
-	mut view := doc.view
-	a, b := view.selection()
-	hit := find_hit(view.text, query, if forward { b } else { a }, forward)
-	if hit < 0 {
-		if !quiet { app.notify('Text not found', 1500) }
-		return
-	}
-	view.anchor = hit
-	view.cursor = hit + query.len
-	view.scroll_hold = false
-	view.invalidate()
-	if refresh_status(mut doc) { app.invalidate() }
-}
-
-fn find_replace(mut state FindState, mut app vtk.App) {
-	query := state.query.text
-	if query == '' {
-		app.notify('Enter text to find', 1500)
-		app.set_focus(state.query)
-		return
-	}
-	mut doc := state.doc
-	mut view := doc.view
-	if view.readonly {
-		app.notify('Read only', 1500)
-		return
-	}
-	a, b := view.selection()
-	mut at := a
-	if b - a != query.len || view.text[a..b] != query {
-		at = find_hit(view.text, query, b, true)
-		if at < 0 {
-			app.notify('Text not found', 1500)
-			return
-		}
-	}
-	view.replace_range(at, at + query.len, state.replace.text)
-	find_step(mut state, true, true, mut app)
-}
-
-fn find_replace_all(mut state FindState, mut app vtk.App) {
-	query := state.query.text
-	replacement := state.replace.text
-	if query == '' {
-		app.notify('Enter text to find', 1500)
-		app.set_focus(state.query)
-		return
-	}
-	mut doc := state.doc
-	mut view := doc.view
-	if view.readonly {
-		app.notify('Read only', 1500)
-		return
-	}
-	if query == replacement {
-		app.notify('Replacement is the same', 1500)
-		return
-	}
-	text := view.text
-	mut out := ''
-	mut at := 0
-	mut count := 0
-	for {
-		hit := text[at..].index(query) or { break }
-		out += text[at..at + hit] + replacement
-		at += hit + query.len
-		count++
-	}
-	if count == 0 {
-		app.notify('Text not found', 1500)
-		return
-	}
-	out += text[at..]
-	first := text.index(query) or { 0 }
-	view.replace_range(0, text.len, out)
-	view.anchor = first
-	view.cursor = first + replacement.len
-	view.scroll_hold = false
-	view.invalidate()
-	if refresh_status(mut doc) { app.invalidate() }
-	app.notify('${count} replacement${if count == 1 { '' } else { 's' }}', 1500)
-}
-
-fn find_submit(mut c vtk.Ctl, mut app vtk.App) {
-	mut state := c.context[FindState]() or { return }
-	find_step(mut state, true, false, mut app)
-}
-
-fn find_replace_submit(mut c vtk.Ctl, mut app vtk.App) {
-	mut state := c.context[FindState]() or { return }
-	find_replace(mut state, mut app)
-}
-
-fn find_action(mut c vtk.Ctl, mut app vtk.App) {
-	mut state := c.context[FindState]() or { return }
-	cmd := FindCmd.from(c.data) or { return }
-	match cmd {
-		.prev { find_step(mut state, false, false, mut app) }
-		.next { find_step(mut state, true, false, mut app) }
-		.replace { find_replace(mut state, mut app) }
-		.replace_all { find_replace_all(mut state, mut app) }
-		.close { app.close(mut state.window) }
-	}
-}
-
-fn find_dialog(mut doc Document, mut app vtk.App, focus_replace bool) {
-	a, b := doc.view.selection()
-	initial := if b > a && !doc.view.text[a..b].contains('\n') { doc.view.text[a..b] } else { '' }
-	mut query := vtk.entry(initial, 0)
-	query.min_w = 30
-	query.expand = false
-	query.submit = find_submit
-	mut replace := vtk.entry('', 0)
-	replace.min_w = 30
-	replace.expand = false
-	replace.submit = find_replace_submit
-	mut query_label := vtk.label('Find:')
-	query_label.col, query_label.row = 0, 0
-	query.col, query.row = 1, 0
-	mut replace_label := vtk.label('Replace:')
-	replace_label.col, replace_label.row = 0, 1
-	replace.col, replace.row = 1, 1
-	mut fields := vtk.grid()
-	fields.add(mut query_label)
-	fields.add(mut query)
-	fields.add(mut replace_label)
-	fields.add(mut replace)
-	mut nav := vtk.button_bar()
-	mut actions := vtk.button_bar()
-	mut buttons := [vtk.button(' < Prev '), vtk.button(' Next > '), vtk.button(' Replace '),
-		vtk.button(' Replace all '), vtk.button(' Close ')]
-	find_cmds := [FindCmd.prev, .next, .replace, .replace_all, .close]
-	for i, mut button in buttons {
-		button.data = i64(int(find_cmds[i]))
-		button.changed = find_action
-		if i < 2 { nav.add(mut button) } else { actions.add(mut button) }
-	}
-	mut body := vtk.box(true)
-	body.add(mut fields)
-	body.add(mut nav)
-	body.add(mut actions)
-	mut w := app.dialog('Find / Replace', mut body)
-	state := &FindState{ doc: doc, window: w, query: query, replace: replace }
-	query.set_context(state)
-	replace.set_context(state)
-	for mut button in buttons { button.set_context(state) }
-	if initial != '' {
-		query.anchor = 0
-		query.cursor = initial.len
-	}
-	_, height := app.size()
-	rect := w.rect()
-	app.move(mut w, rect.x, if height > rect.h { height - rect.h - 1 } else { 0 })
-	app.set_focus(if focus_replace { replace } else { query })
-	app.modal_for(mut w, doc.window)
-	app.destroy_ctl(mut w)
-}
-
 fn choose_font(mut doc Document, mut app vtk.App) {
 	if doc.view.readonly {
 		app.notify('Read only', 1500)
 		return
 	}
-	// Each style name previews the font it applies.
-	mut names := []string{cap: font_styles.len}
-	for style in font_styles {
-		name := style.str()
-		names << vtk.font_convert(name, style)
-	}
-	at := app.choice_for(doc.window, 'Unicode text style', names, 2)
-	if at < 0 { return }
-	style := font_styles[at]
+	style := common.pick_font_style(mut app, doc.window) or { return }
 	// Underline and strikethrough stay as portable Markdown tags.
 	if style == .underline {
 		wrap(mut doc, '<u>', '</u>')
@@ -922,12 +711,8 @@ pub fn run() {
 	mut app := vtk.new_app()
 	app.ctrl_c = .copy
 	app.native_clipboard = true
-	app.init() or {
-		eprintln(err)
-		return
-	}
-	defer { app.fini() }
-	app.register('Word', standalone_launch)
-	new_document(mut app, if os.args.len > 1 { os.args[1] } else { '' }, true)
-	app.run() or { eprintln(err) }
+	common.run(mut app, fn (mut app vtk.App) {
+		app.register('Word', standalone_launch)
+		new_document(mut app, if os.args.len > 1 { os.args[1] } else { '' }, true)
+	})
 }

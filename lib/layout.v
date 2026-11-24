@@ -1,5 +1,7 @@
 module vtk
 
+import math { max, min }
+
 pub fn box(vertical bool) &Ctl { return &Ctl{ kind: .box, vertical: vertical } }
 
 pub fn grid() &Ctl { return new_ctl(.grid) }

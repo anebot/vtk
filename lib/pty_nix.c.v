@@ -1,5 +1,6 @@
 module vtk
 
+import math { max }
 import os
 
 #include <stdlib.h>

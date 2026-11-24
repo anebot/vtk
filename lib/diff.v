@@ -1,5 +1,7 @@
 module vtk
 
+import math { max }
+
 fn diff_range_count(range string) int {
 	return if range.contains(',') { max(0, range.all_after(',').int()) } else { 1 }
 }

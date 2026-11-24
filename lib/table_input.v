@@ -1,5 +1,7 @@
 module vtk
 
+import math { max, min }
+
 enum TableDrag { none range header resize row }
 
 fn (mut c Ctl) table_select_to(x int, y int, extend bool) {

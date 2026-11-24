@@ -1,5 +1,7 @@
 module vtk
 
+import math { max, min }
+
 // Match the visible panes used by layout without allocating a child array on
 // every mouse report. Standalone separators have no panes to resize.
 fn (c &Ctl) split_panes() ?(&Ctl, &Ctl) {

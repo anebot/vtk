@@ -1,5 +1,7 @@
 module vtk
 
+import math
+
 fn test_markdown_code_is_subtle_in_dark_and_light_themes() {
 	for preset in [Preset.modern, .dark, .light, .wineight, .borland] {
 		mut app := new_app()
@@ -17,7 +19,7 @@ fn test_markdown_code_is_subtle_in_dark_and_light_themes() {
 		background := color_as_rgb(app.theme.bg)
 		shade := color_as_rgb(code.bg)
 		for shift in [0, 8, 16] {
-			assert abs(((shade >> shift) & 255) - ((background >> shift) & 255)) <= 16
+			assert math.abs(((shade >> shift) & 255) - ((background >> shift) & 255)) <= 16
 		}
 		assert shade != foreground
 		assert app.screen.cells[3 * 60].bg == code.bg

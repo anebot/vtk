@@ -1,5 +1,6 @@
 module vtk
 
+import math
 import os
 
 fn (app &App) can_own_dialog(owner ?&Ctl) bool {
@@ -23,9 +24,9 @@ fn dialog_button(text string, accepted bool) &Ctl {
 pub fn (mut app App) dialog(title string, mut body Ctl) &Ctl {
 	body.measure()
 	area := app.work_area()
-	mut w := app.window(title, min(app.width, max(24, body.pw + 4)), min(area.h, max(6, body.ph + 4)))
-	w.x = max(0, (app.width - w.w) / 2)
-	w.y = area.y + max(0, (area.h - w.h) / 2)
+	mut w := app.window(title, math.min(app.width, math.max(24, body.pw + 4)), math.min(area.h, math.max(6, body.ph + 4)))
+	w.x = math.max(0, (app.width - w.w) / 2)
+	w.y = area.y + math.max(0, (area.h - w.h) / 2)
 	w.dismissable = true
 	w.controls = window_close
 	w.dialog_result = -1
@@ -225,7 +226,7 @@ pub fn (mut app App) history_for(owner ?&Ctl, mut editor Ctl) {
 	}
 	at := app.list_choice_for(owner, 'History - restore through selected change', labels, 0)
 	if at < 0 { return }
-	for _ in 0 .. abs(steps[at]) {
+	for _ in 0 .. math.abs(steps[at]) {
 		if steps[at] < 0 { editor.undo() } else { editor.redo() }
 	}
 }
@@ -233,7 +234,7 @@ pub fn (mut app App) history_for(owner ?&Ctl, mut editor Ctl) {
 fn history_label(change Change) string {
 	text := if change.after == '' { 'delete ' + change.before } else { change.after }
 	mut out := ''
-	for r in text.runes()[..min(64, text.runes().len)] {
+	for r in text.runes()[..math.min(64, text.runes().len)] {
 		out += if r < 32 || r == 127 { ' ' } else { r.str() }
 	}
 	return out
