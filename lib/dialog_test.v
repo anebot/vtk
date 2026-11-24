@@ -6,6 +6,24 @@ fn file_pick_click(mut app App, list &Ctl, row int) {
 	app.dispatch(Event{ kind: .mouse, x: list.x, y: list.y + row, button: .left, pressed: true })
 }
 
+fn test_about_box_reports_name_version_and_author() {
+	mut app := new_app()
+	app.desktop = false
+	mut window := app.window('About test', 40, 10)
+	app.after(0, fn (mut app App) {
+		app.redraw()
+		text := app.snapshot()
+		assert text.contains('About VtkDemo')
+		assert text.contains('VtkDemo version 1.2.3')
+		assert text.contains('Author: pancake')
+		mut dialog := app.top_window_ptr()
+		app.close(mut dialog)
+	})
+	app.about_for(window, 'VtkDemo', '1.2.3')
+	assert app.windows.len == 1
+	app.destroy_ctl(mut window)
+}
+
 fn test_file_picker_opens_row_that_is_already_selected() {
 	directory := os.join_path(os.temp_dir(), 'vtk-file-picker-${os.getpid()}')
 	os.mkdir_all(os.join_path(directory, 'sub')) or { panic(err) }

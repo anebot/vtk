@@ -87,6 +87,12 @@ pub fn (mut app App) msgbox(title string, text string) {
 	app.msgbox_for(app.top_window(), title, text)
 }
 
+// about_for shows the shared About box so every VTK application reports the
+// same product name, version and author.
+pub fn (mut app App) about_for(owner ?&Ctl, name string, version string) {
+	app.msgbox_for(owner, 'About ${name}', '${name} version ${version}\nAuthor: pancake')
+}
+
 pub fn (mut app App) confirm_for(owner ?&Ctl, title string, text string) bool {
 	if !app.can_own_dialog(owner) { return false }
 	mut body := dialog_body(text)

@@ -11,6 +11,8 @@ import image
 import image.jpeg
 import image.png
 
+const app_name = 'VtkSlides'
+const app_version = '0.1.0'
 const slide_separator = '<!-- slide -->'
 const slide_separator_written = '\n\n<!-- slide -->\n\n'
 const notes_open = '<!-- vtk:speaker-notes -->'
@@ -56,6 +58,7 @@ enum Action {
 	undo
 	redo
 	help
+	about
 }
 
 struct Slide {
@@ -2074,6 +2077,7 @@ fn (mut deck Deck) action(action Action, mut app vtk.App) {
 			deck.editor.redo()
 			app.invalidate()
 		}
+		.about { app.about_for(deck.window, app_name, app_version) }
 		.help {
 			app.msgbox_for(deck.window, 'VTK Slides',
 				'Edit slides as Markdown. **bold**, *italic*, `code`, lists, tables and images are rendered in previews and presentations.\n\nShape blocks:\n```slide\nrect 10 10 40 30 #59adff\nline 10 80 90 80 #ffd114\ncircle 75 25 10 #79c942\n```\n\nCoordinates are percentages of the slide. Shapes accept #rrggbb or named colors.\n\nChart blocks:\n```chart columns|Revenue\n|Q1|Q2|Q3|Q4\nRevenue|12|18|15|24\nPlan|10|14|18|20\n```\n\nImages are Markdown image links: ![caption](image.png). PNG and JPEG are decoded.\n\nDecks save as Markdown separated by <!-- slide -->. Speaker notes live below the slide editor and are saved in hidden HTML comments, so they never appear in previews or presentations. F5 presents, F9 toggles the sidebar, Ctrl-E shows source, Ctrl-Shift-N toggles notes.')
@@ -2218,6 +2222,8 @@ fn new_deck(mut app vtk.App, path string) &Deck {
 	menu_item(mut slide_menu, deck, 'Present from start', .present_start)
 	mut help := deck.window.add_menu('Help')
 	menu_item(mut help, deck, 'Markdown and shapes', .help)
+	help.menu_separator()
+	menu_item(mut help, deck, 'About', .about)
 	deck.rebuild_thumbnails(mut app)
 	deck.select(0, mut app)
 	app.maximize(mut deck.window)

@@ -3,7 +3,10 @@ module spread
 import os
 import vtk
 
-enum Action { new_sheet open save save_as import_csv export_csv quit edit apply copy paste undo redo ascending descending reset color clear_color chart help }
+const app_name = 'VtkSheets'
+const app_version = '0.1.0'
+
+enum Action { new_sheet open save save_as import_csv export_csv quit edit apply copy paste undo redo ascending descending reset color clear_color chart help about }
 
 @[heap]
 struct BookView {
@@ -209,6 +212,10 @@ fn (mut view BookView) save(as_new bool, mut app vtk.App) {
 }
 
 fn (mut view BookView) action(action Action, mut app vtk.App) {
+	if action == .about {
+		app.about_for(view.window, app_name, app_version)
+		return
+	}
 	mut current := view.current() or { return }
 	mut grid := current.grid
 	match action {
@@ -319,6 +326,9 @@ fn create_view(mut app vtk.App, book Book) &BookView {
 			item.user, item.data = view, i64(action)
 		}
 	}
+	mut help := window.add_menu('Help')
+	mut about := help.menu_item('About', book_action)
+	about.user, about.data = view, i64(Action.about)
 	for title, action in {'Undo': Action.undo, 'Redo': .redo, 'Sort ↑': .ascending, 'Sort ↓': .descending, 'Edit': .edit, 'Color': .color, 'Chart': .chart, 'Help': .help} {
 		mut button := vtk.button(title)
 		button.user, button.changed, button.data = view, book_action, i64(action)
