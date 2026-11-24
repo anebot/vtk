@@ -1,8 +1,10 @@
 V ?= v
 BUILD_DIR ?= build
-EXAMPLES = htk word vim draw widgets terminal spreadsheet
-BINARIES = $(addprefix $(BUILD_DIR)/,$(EXAMPLES))
+EXAMPLES = htk vim widgets terminal
+APPS = calc clock desktop files paint slides word
+BINARIES = $(addprefix $(BUILD_DIR)/,$(EXAMPLES) $(APPS) spreadsheet)
 SOURCES = $(wildcard lib/*.v lib/*.h render/*.v) v.mod
+APP_SOURCES = $(wildcard app/programs/*/*.v app/spread/*.v)
 VML_SOURCES = vml/main.v vml/parser.v vml/generator.v vml/vtk.vmlt
 VML_EXAMPLES = hello preferences markdown widgets
 VML_UIS = $(addsuffix /ui.v,$(addprefix vml/examples/,$(VML_EXAMPLES)))
@@ -14,7 +16,13 @@ $(BUILD_DIR)/%: examples/%.v $(SOURCES)
 	mkdir -p $(BUILD_DIR)
 	$(V) -o $@ $<
 
-$(BUILD_DIR)/spreadsheet: $(wildcard examples/spread/*.v)
+$(BUILD_DIR)/%: app/%.v $(SOURCES) $(APP_SOURCES)
+	mkdir -p $(BUILD_DIR)
+	$(V) -o $@ $<
+
+$(BUILD_DIR)/spreadsheet: app/spread.v $(SOURCES) $(APP_SOURCES)
+	mkdir -p $(BUILD_DIR)
+	$(V) -o $@ $<
 
 $(BUILD_DIR)/vmlc: $(VML_SOURCES)
 	mkdir -p $(BUILD_DIR)
@@ -33,6 +41,7 @@ test: $(VML_UIS)
 
 check-windows: $(VML_UIS)
 	@set -e; for example in $(EXAMPLES); do $(V) -os windows -check examples/$$example.v; done
+	@set -e; for app in $(APPS) spread; do $(V) -os windows -check app/$$app.v; done
 	$(V) -os windows -check vml
 	@set -e; for example in $(VML_EXAMPLES); do $(V) -os windows -check vml/examples/$$example; done
 

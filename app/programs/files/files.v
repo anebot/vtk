@@ -387,13 +387,7 @@ fn drop_allowed(paths []string, dir string, copy bool) bool {
 }
 
 fn open_path(path string) {
-	$if windows {
-		os.system('start "" ' + os.quoted_path(path))
-	} $else $if macos {
-		os.system('open ' + os.quoted_path(path) + ' >/dev/null 2>&1 &')
-	} $else {
-		os.system('xdg-open ' + os.quoted_path(path) + ' >/dev/null 2>&1 &')
-	}
+	os.open_uri(path) or {}
 }
 
 // paste_paths turns pasted text (plain paths, quoted paths or file:// URLs)
@@ -1359,7 +1353,7 @@ fn (mut p Pane) open(mut app vtk.App, e Entry) {
 		p.navigate(e.path, true)
 		return
 	}
-	open_path(e.path)
+	spawn open_path(e.path)
 	app.notify('Opening ${e.name}', 1500)
 }
 

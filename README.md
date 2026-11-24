@@ -21,21 +21,20 @@ From a checkout's root directory:
 ```sh
 make
 make test
-./build/draw
+./build/desktop
 ```
 
-`make` builds all seven native examples, the VML compiler, and four VML examples
-in `build/`.
-You can also run the original examples directly:
+`make` builds the applications, standalone examples, VML compiler, and four
+VML examples in `build/`. You can also run the applications and examples directly.
 
 ```sh
 v run examples/htk.v
-v run examples/word.v README.md
+v run app/word.v README.md
 v run examples/vim.v README.md
-v run examples/draw.v
+v run app/paint.v
 v run examples/widgets.v
 v run examples/terminal.v
-v run examples/spread.v
+v run app/spread.v
 v test .
 ```
 
